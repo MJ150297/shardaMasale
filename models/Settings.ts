@@ -80,6 +80,7 @@ export interface PosSettings {
 
 export interface ISettings {
   owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   business: BusinessProfileSettings;
   localization: LocalizationSettings;
   inventory: InventorySettings;
@@ -144,7 +145,12 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
+      index: true,
+    },
+    shopId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shop",
+      default: null,
       index: true,
     },
     business: {

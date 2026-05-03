@@ -1,6 +1,7 @@
 import mongoose, { type ConnectOptions, type Mongoose } from "mongoose";
 
 import { getEnv } from "@/lib/utils";
+import { getServerAuthSession } from "@/lib/auth";
 
 type MongooseCache = {
   conn: Mongoose | null;
@@ -21,6 +22,41 @@ globalThis.mongooseCache = globalCache;
 mongoose.set("strictQuery", true);
 mongoose.set("bufferCommands", true);
 mongoose.set("maxTimeMS", 10000);
+
+// Global Shop Scoping Middleware
+mongoose.plugin((schema) => {
+  // Add shopId filter to all find queries
+  schema.pre('find', async function() {
+    const session = await getServerAuthSession();
+    if (session?.user && session.user.role !== 'superOwner' && session.user.activeShopId) {
+      this.where({ shopId: session.user.activeShopId });
+    }
+  });
+
+  schema.pre('findOne', async function() {
+    const session = await getServerAuthSession();
+    if (session?.user && session.user.role !== 'superOwner' && session.user.activeShopId) {
+      this.where({ shopId: session.user.activeShopId });
+    }
+  });
+
+  schema.pre('countDocuments', async function() {
+    const session = await getServerAuthSession();
+    if (session?.user && session.user.role !== 'superOwner' && session.user.activeShopId) {
+      this.where({ shopId: session.user.activeShopId });
+    }
+  });
+
+  // Automatically set shopId on save for new documents
+  schema.pre('save', async function() {
+    if (this.isNew && (this as any).shopId === undefined || (this as any).shopId === null) {
+      const session = await getServerAuthSession();
+      if (session?.user && session.user.activeShopId) {
+        (this as any).shopId = session.user.activeShopId;
+      }
+    }
+  });
+});
 
 function getConnectionOptions(): ConnectOptions {
   const dbName = process.env.MONGODB_DB?.trim();

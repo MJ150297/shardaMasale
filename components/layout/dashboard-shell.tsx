@@ -1,22 +1,27 @@
 "use client";
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import ThemeToggle from '@/components/ui/theme-toggle';
+import { NotificationBell } from '@/components/layout/notification-bell';
 
 import {
   LayoutDashboard,
   Package,
   Users,
   Receipt,
+  FileText,
   BarChart3,
   Settings,
   Code,
   LogOut,
   ChevronDown,
   Home,
-  Bell
+  Bell,
+  Store,
+  Check
 } from 'lucide-react';
 
 import {
@@ -62,6 +67,33 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  // Super Owner Navigation
+  {
+    title: 'Super Dashboard',
+    url: '/super',
+    icon: LayoutDashboard,
+    roles: ['superOwner'],
+  },
+  {
+    title: 'Shops',
+    url: '/super/shops',
+    icon: Store,
+    roles: ['superOwner'],
+  },
+  {
+    title: 'Owners',
+    url: '/super/owners',
+    icon: Users,
+    roles: ['superOwner'],
+  },
+  {
+    title: 'System Settings',
+    url: '/super/settings',
+    icon: Settings,
+    roles: ['superOwner'],
+  },
+
+  // Business User Navigation
   {
     title: 'Dashboard',
     url: '/dashboard',
@@ -84,6 +116,12 @@ const navItems: NavItem[] = [
     title: 'Transactions',
     url: '/dashboard/transactions',
     icon: Receipt,
+    roles: ['owner', 'admin', 'manager', 'cashier', 'staff'],
+  },
+  {
+    title: 'Invoices',
+    url: '/dashboard/invoices',
+    icon: FileText,
     roles: ['owner', 'admin', 'manager', 'cashier', 'staff'],
   },
   {
@@ -121,6 +159,19 @@ interface DashboardShellProps {
 
 export default function DashboardShell({ children, user }: DashboardShellProps) {
   const pathname = usePathname();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+
+    try {
+      await signOut({
+        callbackUrl: '/signin',
+      });
+    } catch {
+      setIsSigningOut(false);
+    }
+  };
 
   const userInitials = user.name
     .split(' ')
@@ -245,9 +296,13 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-red-600 dark:text-red-400">
+                    <DropdownMenuItem 
+                      className="text-red-600 dark:text-red-400"
+                      onClick={handleSignOut}
+                      disabled={isSigningOut}
+                    >
                       <LogOut className="mr-2 size-4" />
-                      Sign out
+                      {isSigningOut ? 'Signing out...' : 'Sign out'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -268,12 +323,42 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
               <div>
                 <h1 className="text-lg font-semibold dark:text-white">Dashboard</h1>
               </div>
-              <div className="flex items-center gap-2">
-                <ThemeToggle />
-                <Button variant="ghost" size="icon">
-                  <Bell className="size-4" />
-                </Button>
-              </div>
+               <div className="flex items-center gap-2">
+                 <DropdownMenu>
+                   <DropdownMenuTrigger asChild>
+                     <Button variant="secondary" size="sm" className="h-8 gap-1">
+                       <Store className="size-3.5" />
+                       <span className="truncate max-w-[120px]">My Shop</span>
+                       <ChevronDown className="size-3.5 ml-1 opacity-50" />
+                     </Button>
+                   </DropdownMenuTrigger>
+                   <DropdownMenuContent align="end" className="w-56">
+                     <DropdownMenuLabel>Select Shop</DropdownMenuLabel>
+                     <DropdownMenuSeparator />
+                     <DropdownMenuItem>
+                       <div className="flex items-center gap-2">
+                         <Check className="size-3.5 opacity-100" />
+                         Main Shop
+                       </div>
+                     </DropdownMenuItem>
+                     <DropdownMenuItem>
+                       <div className="flex items-center gap-2">
+                         <div className="size-3.5" />
+                         Second Location
+                       </div>
+                     </DropdownMenuItem>
+                     <DropdownMenuSeparator />
+                     <DropdownMenuItem asChild>
+                       <Link href="/super/shops">
+                         <Store className="mr-2 size-3.5" />
+                         Manage Shops
+                       </Link>
+                     </DropdownMenuItem>
+                   </DropdownMenuContent>
+                 </DropdownMenu>
+                  <ThemeToggle />
+                  <NotificationBell />
+               </div>
             </div>
           </header>
 

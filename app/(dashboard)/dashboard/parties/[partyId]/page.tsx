@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import PartyClientWrapper from './party-client';
 import {
   Mail,
   Phone,
@@ -21,9 +22,6 @@ import {
   FileText,
   CreditCard,
   Clock,
-  Edit,
-  Trash2,
-  Send,
 } from 'lucide-react';
 
 interface PartyPageProps {
@@ -58,40 +56,27 @@ export default async function PartyPage({ params }: PartyPageProps) {
     both: 'Customer & Supplier',
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{party.displayName}</h1>
-            <Badge className={partyStatusColors[party.status]}>
-              {party.status}
-            </Badge>
-            <Badge variant="secondary">
-              {partyTypeLabels[party.partyType]}
-            </Badge>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {/* @ts-ignore */}
-            Created {format(new Date(party.createdAt), 'dd MMM yyyy')}
-          </p>
-        </div>
+  const serializableParty = JSON.parse(JSON.stringify({
+    _id: party._id.toString(),
+    displayName: party.displayName,
+    email: party.email,
+    phoneNumber: party.phoneNumber,
+    alternatePhoneNumber: party.alternatePhoneNumber,
+    gstin: party.gstin,
+    pan: party.pan,
+    partyType: party.partyType,
+    status: party.status,
+    creditLimit: party.creditLimit,
+    currentBalance: party.currentBalance,
+    openingBalance: party.openingBalance,
+    tags: party.tags,
+    notes: party.notes,
+    // @ts-ignore - createdAt exists from timestamps
+    createdAt: party.createdAt.toISOString(),
+  }));
 
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Edit className="w-4 h-4 mr-2" />
-            Edit
-          </Button>
-          <Button variant="outline" size="sm">
-            <Send className="w-4 h-4 mr-2" />
-            Send Invite
-          </Button>
-          <Button variant="destructive" size="sm">
-            <Trash2 className="w-4 h-4 mr-2" />
-            Delete
-          </Button>
-        </div>
-      </div>
+  return (
+    <PartyClientWrapper party={serializableParty}>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -280,6 +265,6 @@ export default async function PartyPage({ params }: PartyPageProps) {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </PartyClientWrapper>
   );
 }

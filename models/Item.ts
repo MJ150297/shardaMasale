@@ -32,10 +32,13 @@ export interface ItemStock {
 
 export interface IItem {
   owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   name: string;
   slug: string;
   sku?: string | null;
   barcode?: string | null;
+  batchNumber?: string | null;
+  expiryDate?: Date | null;
   itemType: ItemType;
   status: ItemStatus;
   description?: string | null;
@@ -44,10 +47,14 @@ export interface IItem {
   unitOfMeasure: string;
   hsnCode?: string | null;
   sacCode?: string | null;
-  taxRate: number;
+  purchaseTaxRate?: number;
+  saleTaxRate?: number;
+  taxRate?: number;
   pricing: ItemPricing;
   stock: ItemStock;
   trackInventory: boolean;
+  trackBatch: boolean;
+  trackExpiry: boolean;
   tags: string[];
   metadata: Record<string, unknown>;
 }
@@ -125,6 +132,12 @@ const itemSchema = new Schema<IItem, ItemModel>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
+    },
+    shopId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shop",
+      default: null,
       index: true,
     },
     name: {
@@ -206,6 +219,18 @@ const itemSchema = new Schema<IItem, ItemModel>(
     },
     taxRate: {
       type: Number,
+      default: undefined,
+      min: 0,
+      max: 100,
+    },
+    purchaseTaxRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    saleTaxRate: {
+      type: Number,
       default: 0,
       min: 0,
       max: 100,
@@ -234,6 +259,25 @@ const itemSchema = new Schema<IItem, ItemModel>(
     trackInventory: {
       type: Boolean,
       default: true,
+    },
+    trackBatch: {
+      type: Boolean,
+      default: false,
+    },
+    trackExpiry: {
+      type: Boolean,
+      default: false,
+    },
+    batchNumber: {
+      type: String,
+      default: null,
+      trim: true,
+      uppercase: true,
+      maxlength: 80,
+    },
+    expiryDate: {
+      type: Date,
+      default: null,
     },
     tags: {
       type: [String],
@@ -321,7 +365,15 @@ itemSchema.pre("validate", function preValidate() {
     this.stock.reservedQuantity = 0;
   }
 
-  this.taxRate = roundCurrency(this.taxRate);
+  const legacyTaxRate = this.taxRate;
+  const purchaseTaxRate =
+    this.purchaseTaxRate ?? legacyTaxRate ?? this.saleTaxRate ?? 0;
+  const saleTaxRate =
+    this.saleTaxRate ?? legacyTaxRate ?? this.purchaseTaxRate ?? 0;
+
+  this.purchaseTaxRate = roundCurrency(purchaseTaxRate);
+  this.saleTaxRate = roundCurrency(saleTaxRate);
+  this.taxRate = this.saleTaxRate;
   this.pricing.costPrice = roundCurrency(this.pricing.costPrice);
   this.pricing.purchasePrice = roundCurrency(this.pricing.purchasePrice);
   this.pricing.sellingPrice = roundCurrency(this.pricing.sellingPrice);

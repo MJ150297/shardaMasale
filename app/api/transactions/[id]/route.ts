@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
+import { AppError } from '@/lib/utils';
+import {
+  applyConfirmedTransactionInventory,
+  releaseDraftSaleInventory,
+  reverseConfirmedTransactionInventory,
+} from '@/lib/transaction-inventory';
 import Transaction from '@/models/Transaction';
 
 const updateTransactionSchema = z.object({
@@ -35,6 +42,34 @@ const updateTransactionSchema = z.object({
   status: z.enum(["draft", "confirmed", "cancelled"]).optional(),
 });
 
+function derivePaymentStatus({
+  status,
+  grandTotal,
+  paidAmount,
+}: {
+  status: "draft" | "confirmed" | "cancelled";
+  grandTotal: number;
+  paidAmount: number;
+}) {
+  if (status === "cancelled") {
+    return "void";
+  }
+
+  if (grandTotal === 0) {
+    return paidAmount > 0 ? "paid" : "not-applicable";
+  }
+
+  if (paidAmount <= 0) {
+    return "unpaid";
+  }
+
+  if (paidAmount < grandTotal) {
+    return "partial";
+  }
+
+  return "paid";
+}
+
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireBusinessUser();
@@ -44,7 +79,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const transaction = await Transaction.findOne({
       _id: id,
       owner: user.id,
-    }).populate('party', 'name phone email').lean();
+    }).populate('party', 'displayName phoneNumber email').lean();
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
@@ -60,6 +95,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const user = await requireBusinessUser();
     await connectToDatabase();
@@ -67,53 +105,179 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     const body = await request.json();
     const validated = updateTransactionSchema.parse(body);
-
-    const transaction = await Transaction.findOneAndUpdate(
-      { _id: id, owner: user.id },
-      {
-        ...validated,
-        updatedBy: user.id,
-      },
-      { new: true, runValidators: true }
+    const hasNonStatusUpdates = Object.entries(validated).some(
+      ([key, value]) => key !== 'status' && value !== undefined,
     );
 
-    if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    if (hasNonStatusUpdates) {
+      throw new AppError(
+        'Transaction editing is not implemented yet. You can confirm, cancel, or delete drafts for now.',
+        400,
+      );
     }
 
+    const transaction = await Transaction.findOne({
+      _id: id,
+      owner: user.id,
+    }).session(session);
+
+    if (!transaction) {
+      throw new AppError('Transaction not found', 404);
+    }
+
+    const nextStatus = validated.status ?? transaction.status;
+
+    if (nextStatus === transaction.status) {
+      await session.commitTransaction();
+
+      return NextResponse.json({
+        data: transaction,
+        message: 'No status change applied',
+      });
+    }
+
+    if (transaction.status === 'cancelled') {
+      throw new AppError('Cancelled transactions cannot be modified', 400);
+    }
+
+    if (transaction.status === 'draft' && nextStatus === 'confirmed') {
+      if (transaction.type === 'sale') {
+        await releaseDraftSaleInventory(
+          {
+            ownerId: user.id,
+            userId: user.id,
+            shopId: user.activeShopId ?? null,
+          },
+          transaction.lineItems,
+          session,
+        );
+      }
+
+      await applyConfirmedTransactionInventory(
+        {
+          ownerId: user.id,
+          userId: user.id,
+          shopId: user.activeShopId ?? null,
+          session,
+          transactionId: transaction._id.toString(),
+          transactionNumber: transaction.transactionNumber,
+        },
+        transaction.type,
+        transaction.lineItems,
+      );
+    } else if (transaction.status === 'draft' && nextStatus === 'cancelled') {
+      if (transaction.type === 'sale') {
+        await releaseDraftSaleInventory(
+          {
+            ownerId: user.id,
+            userId: user.id,
+            shopId: user.activeShopId ?? null,
+          },
+          transaction.lineItems,
+          session,
+        );
+      }
+    } else if (transaction.status === 'confirmed' && nextStatus === 'cancelled') {
+      await reverseConfirmedTransactionInventory(
+        {
+          ownerId: user.id,
+          userId: user.id,
+          shopId: user.activeShopId ?? null,
+          session,
+          transactionId: transaction._id.toString(),
+          transactionNumber: transaction.transactionNumber,
+        },
+        transaction.type,
+        transaction.lineItems,
+      );
+    } else {
+      throw new AppError(
+        `Unsupported status transition from ${transaction.status} to ${nextStatus}`,
+        400,
+      );
+    }
+
+    const updatedTransaction = await Transaction.findOneAndUpdate(
+      { _id: id, owner: user.id },
+      {
+        status: nextStatus,
+        paymentStatus: derivePaymentStatus({
+          status: nextStatus,
+          grandTotal: transaction.summary.grandTotal,
+          paidAmount: transaction.summary.paidAmount,
+        }),
+        updatedBy: user.id,
+      },
+      { new: true, runValidators: true, session }
+    );
+
+    await session.commitTransaction();
+
     return NextResponse.json({
-      data: transaction,
-      message: 'Transaction updated successfully',
+      data: updatedTransaction,
+      message: 'Transaction status updated successfully',
     });
   } catch (error: any) {
+    await session.abortTransaction();
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', details: error.issues }, { status: 400 });
     }
-    const status = error.status || 500;
+    const status = error.status || error.statusCode || 500;
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+  } finally {
+    session.endSession();
   }
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const user = await requireBusinessUser();
     await connectToDatabase();
     const { id } = await context.params;
 
-    const transaction = await Transaction.findOneAndDelete({
+    const transaction = await Transaction.findOne({
       _id: id,
       owner: user.id,
-    });
+    }).session(session);
 
     if (!transaction) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+      throw new AppError('Transaction not found', 404);
     }
+
+    if (transaction.status !== 'draft') {
+      throw new AppError('Only draft transactions can be deleted. Cancel confirmed transactions instead.', 400);
+    }
+
+    if (transaction.type === 'sale') {
+      await releaseDraftSaleInventory(
+        {
+          ownerId: user.id,
+          userId: user.id,
+          shopId: user.activeShopId ?? null,
+        },
+        transaction.lineItems,
+        session,
+      );
+    }
+
+    await Transaction.findOneAndDelete({
+      _id: id,
+      owner: user.id,
+    }).session(session);
+
+    await session.commitTransaction();
 
     return NextResponse.json({
       message: 'Transaction deleted successfully',
     });
   } catch (error: any) {
-    const status = error.status || 500;
+    await session.abortTransaction();
+    const status = error.status || error.statusCode || 500;
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+  } finally {
+    session.endSession();
   }
 }

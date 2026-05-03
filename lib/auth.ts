@@ -1,4 +1,5 @@
 import "server-only";
+import mongoose from "mongoose";
 
 import { cache } from "react";
 import type { Session } from "next-auth";
@@ -12,6 +13,7 @@ import connectToDatabase from "@/lib/db";
 import { AppError, normalizeEmail } from "@/lib/utils";
 import User, { type SafeUser, type UserRole, type UserStatus } from "@/models/User";
 import Settings from "@/models/Settings";
+import Shop from "@/models/Shop";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -31,6 +33,7 @@ export type AppSessionUser = SafeUser & {
   status: UserStatus;
   timezone: string;
   currency: string;
+  activeShopId?: string | null;
 };
 
 export type AppSession = Omit<Session, "user"> & {
@@ -54,6 +57,7 @@ export type AuthenticatedToken = JWT & {
   timezone?: string;
   currency?: string;
   belongsTo?: string | null;
+  activeShopId?: string | null;
 };
 
 function getLockoutExpiresAt(referenceTimeMs: number): Date {
@@ -196,6 +200,15 @@ export const authOptions: NextAuthOptions = {
         nextToken.timezone = authenticatedUser.timezone;
         nextToken.currency = authenticatedUser.currency;
         nextToken.belongsTo = authenticatedUser.belongsTo ?? null;
+        
+        // Load user shops and set default active shop
+        if (nextToken.role && nextToken.role !== 'customer' && nextToken.role !== 'superOwner') {
+          const shops = await Shop.find({ ownerId: nextToken.sub, isActive: true }).select('_id name').lean();
+          
+          if (shops.length > 0) {
+            nextToken.activeShopId = shops[0]._id.toString();
+          }
+        }
       }
 
       return nextToken;
@@ -212,6 +225,7 @@ export const authOptions: NextAuthOptions = {
         timezone: (token as AuthenticatedToken).timezone ?? "Asia/Kolkata",
         currency: (token as AuthenticatedToken).currency ?? "INR",
         belongsTo: (token as AuthenticatedToken).belongsTo ?? null,
+        activeShopId: (token as AuthenticatedToken).activeShopId ?? null,
       };
 
       return nextSession;
@@ -248,6 +262,16 @@ export const requireCustomer = cache(async (): Promise<AppSessionUser> => {
   const user = await requireUser();
 
   if (user.role !== "customer") {
+    notFound();
+  }
+
+  return user;
+});
+
+export const requireSuperOwner = cache(async (): Promise<AppSessionUser> => {
+  const user = await requireUser();
+
+  if (user.role !== "superOwner") {
     notFound();
   }
 

@@ -38,6 +38,7 @@ export interface PartyContactPerson {
 
 export interface IParty {
   owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   displayName: string;
   legalName?: string | null;
   partyType: PartyType;
@@ -146,6 +147,12 @@ const partySchema = new Schema<IParty, PartyModel>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
+    },
+    shopId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shop",
+      default: null,
       index: true,
     },
     displayName: {

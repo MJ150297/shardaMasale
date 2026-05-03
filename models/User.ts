@@ -1,4 +1,4 @@
-import mongoose, { type HydratedDocument, type Model, Schema } from "mongoose";
+import mongoose, { type HydratedDocument, type Model, Schema, Types } from "mongoose";
 
 import {
   hashPassword,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/utils";
 
 export const USER_ROLES = [
+  "superOwner",
   "owner",
   "admin",
   "manager",
@@ -44,6 +45,14 @@ export interface IUser {
   loginAttempts: number;
   lastFailedLoginAt?: Date | null;
   belongsTo?: string | null;
+  createdBySuperOwner?: string | null;
+  allowedShops?: Types.ObjectId[];
+  subscription?: {
+    plan: string;
+    status: "active" | "trial" | "expired" | "suspended";
+    expiryDate?: Date | null;
+    trialEndsAt?: Date | null;
+  };
   metadata: Record<string, unknown>;
 }
 
@@ -161,6 +170,37 @@ const userSchema = new Schema<IUser, UserModel, UserMethods>(
       ref: "User",
       default: null,
       index: true,
+    },
+    createdBySuperOwner: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    allowedShops: {
+      type: [Schema.Types.ObjectId],
+      ref: "Shop",
+      default: [],
+      index: true,
+    },
+    subscription: {
+      plan: {
+        type: String,
+        default: "free",
+      },
+      status: {
+        type: String,
+        enum: ["active", "trial", "expired", "suspended"],
+        default: "trial",
+      },
+      expiryDate: {
+        type: Date,
+        default: null,
+      },
+      trialEndsAt: {
+        type: Date,
+        default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial by default
+      },
     },
     metadata: {
       type: Schema.Types.Mixed,

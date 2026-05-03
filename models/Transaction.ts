@@ -5,7 +5,7 @@ import {
   mongooseDocumentTransform,
   roundCurrency,
 } from "@/lib/utils";
-import StockMovement from "./StockMovement";
+import "./Party";
 
 export const TRANSACTION_TYPES = [
   "sale",
@@ -74,6 +74,7 @@ export interface TransactionPaymentDetails {
 
 export interface ITransaction {
   owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   transactionNumber: string;
   type: TransactionType;
   status: TransactionStatus;
@@ -239,6 +240,12 @@ const transactionSchema = new Schema<ITransaction, TransactionModel>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
+    },
+    shopId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shop",
+      default: null,
       index: true,
     },
     transactionNumber: {
@@ -445,19 +452,19 @@ transactionSchema.pre("validate", function preValidate() {
 });
 
 // ========== IMMUTABILITY ENFORCEMENT ==========
-transactionSchema.pre("save" as any, async function (this: any, next: any) {
+transactionSchema.pre("save" as any, async function (this: any) {
   if (!this.isNew) {
     const original = this.$original();
     if (original && original.status !== "draft") {
       // Block any modifications once transaction is no longer draft
       if (JSON.stringify(this.lineItems) !== JSON.stringify(original.lineItems)) {
-        return next(new Error("Cannot modify line items once transaction is confirmed or cancelled"));
+        throw new Error("Cannot modify line items once transaction is confirmed or cancelled");
       }
       
       const protectedFields = ["type", "transactionDate", "party", "status"];
       for (const field of protectedFields) {
         if (this[field] !== original[field]) {
-          return next(new Error(`Cannot modify ${field} once transaction is confirmed or cancelled`));
+          throw new Error(`Cannot modify ${field} once transaction is confirmed or cancelled`);
         }
       }
     }
@@ -479,108 +486,16 @@ transactionSchema.pre("save" as any, async function (this: any, next: any) {
         if (item && item.trackInventory && !item.stock.allowNegativeStock) {
           const availableStock = item.stock.currentQuantity - item.stock.reservedQuantity;
           if (availableStock < lineItem.quantity) {
-            return next(new Error(`Insufficient stock for item ${lineItem.itemName}: ${availableStock} available, ${lineItem.quantity} required`));
+            throw new Error(`Insufficient stock for item ${lineItem.itemName}: ${availableStock} available, ${lineItem.quantity} required`);
           }
         }
       }
     }
   }
-  
-  next();
 });
 
-// ========== STOCK MOVEMENT GENERATION ==========
-transactionSchema.post("save" as any, async function (doc) {
-  // Only create stock movements when transaction becomes confirmed
-  if (doc.status !== "confirmed") return;
-  
-  // Check if stock movements were already created for this transaction
-  const existingMovements = await StockMovement.countDocuments({
-    referenceId: doc._id,
-    referenceType: "PURCHASE"
-  });
-  
-  if (existingMovements > 0) return;
-  
-  const movementTypeMap: Record<string, string> = {
-    "purchase": "IN",
-    "sale": "OUT",
-    "purchase-return": "RETURN_OUT",
-    "sale-return": "RETURN_IN"
-  };
-  
-  const movementType = movementTypeMap[doc.type];
-  if (!movementType) return;
-  
-  // Create stock movement for each line item
-  const stockMovements = [];
-  
-  for (const lineItem of doc.lineItems) {
-    if (!lineItem.item) continue;
-    
-    stockMovements.push({
-      owner: doc.owner,
-      item: lineItem.item,
-      type: movementType,
-      quantity: lineItem.quantity,
-      referenceType: doc.type === "purchase" || doc.type === "sale" ? doc.type.toUpperCase() : "TRANSACTION",
-      referenceId: doc._id,
-      previousQuantity: 0,
-      newQuantity: 0,
-      createdBy: doc.createdBy || doc.owner,
-      metadata: {}
-    });
-  }
-  
-  if (stockMovements.length > 0) {
-    await StockMovement.insertMany(stockMovements);
-  }
-});
-
-// ========== STOCK REVERSAL ON CANCEL ==========
-transactionSchema.post("save" as any, async function (doc: any) {
-  // Reverse stock movements when transaction is cancelled
-  if (doc.status !== "cancelled") return;
-  
-  // Check if we already created reversal movements
-  const existingReversals = await StockMovement.countDocuments({
-    referenceId: doc._id,
-    referenceType: "TRANSACTION_REVERSAL"
-  });
-  
-  if (existingReversals > 0) return;
-  
-  // Find original movements
-  const originalMovements = await StockMovement.find({
-    referenceId: doc._id
-  });
-  
-  // Create reversal movements
-  const reversalMovements = [];
-  
-  for (const movement of originalMovements) {
-    const reverseType = movement.type === "IN" ? "OUT" : 
-                       movement.type === "OUT" ? "IN" :
-                       movement.type === "RETURN_IN" ? "RETURN_OUT" : "RETURN_IN";
-    
-    reversalMovements.push({
-      owner: doc.owner,
-      item: movement.item,
-      type: reverseType,
-      quantity: movement.quantity,
-      referenceType: "TRANSACTION_REVERSAL",
-      referenceId: doc._id,
-      previousQuantity: 0,
-      newQuantity: 0,
-      createdBy: doc.updatedBy || doc.owner,
-      metadata: { originalMovementId: movement._id }
-    });
-  }
-  
-  if (reversalMovements.length > 0) {
-    await StockMovement.insertMany(reversalMovements);
-  }
-});
+// Inventory mutations are handled in the route handlers so reservation, stock
+// movement, and transaction updates all happen in one explicit DB transaction.
 
 const Transaction =
   (mongoose.models.Transaction as TransactionModel | undefined) ??

@@ -130,3 +130,103 @@ export async function GET(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const user = await requireBusinessUser();
+    await connectToDatabase();
+
+    const body = await request.json();
+    const { id, ...updateData } = body;
+
+    if (!id) {
+      throw new AppError('Party ID is required', 400);
+    }
+
+    const party = await Party.findOne({
+      _id: id,
+      owner: user.id,
+      isArchived: false,
+    });
+
+    if (!party) {
+      throw new AppError('Party not found', 404);
+    }
+
+    // Map frontend field names to database fields
+    if (updateData.name) {
+      updateData.displayName = updateData.name;
+      delete updateData.name;
+    }
+
+    // Validate and update
+    Object.assign(party, updateData);
+    await party.save();
+
+    return NextResponse.json(party);
+  } catch (error) {
+    console.error('Error updating party:', error);
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: error.issues },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof AppError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await requireBusinessUser();
+    await connectToDatabase();
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      throw new AppError('Party ID is required', 400);
+    }
+
+    const party = await Party.findOne({
+      _id: id,
+      owner: user.id,
+    });
+
+    if (!party) {
+      throw new AppError('Party not found', 404);
+    }
+
+    // Soft delete - mark as archived
+    party.isArchived = true;
+    await party.save();
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting party:', error);
+
+    if (error instanceof AppError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.statusCode }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

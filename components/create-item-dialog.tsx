@@ -42,7 +42,8 @@ const createItemSchema = z.object({
   barcode: z.string().optional(),
   hsnCode: z.string().optional(),
   sacCode: z.string().optional(),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
+  purchaseTaxRate: z.coerce.number().min(0).max(100).default(0),
+  saleTaxRate: z.coerce.number().min(0).max(100).default(0),
   pricing: z.object({
     costPrice: z.coerce.number().min(0).default(0),
     purchasePrice: z.coerce.number().min(0).default(0),
@@ -57,6 +58,10 @@ const createItemSchema = z.object({
     location: z.string().optional(),
   }),
   trackInventory: z.boolean().default(true),
+  trackBatch: z.boolean().default(false),
+  trackExpiry: z.boolean().default(false),
+  batchNumber: z.string().optional(),
+  expiryDate: z.union([z.date(), z.string()]).optional().transform(val => val ? new Date(val) : undefined),
   tags: z.array(z.string()).default([]),
   status: z.enum(['draft', 'active', 'discontinued', 'archived']).default('active'),
 });
@@ -94,7 +99,8 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
       barcode: '',
       hsnCode: '',
       sacCode: '',
-      taxRate: 0,
+      purchaseTaxRate: 0,
+      saleTaxRate: 0,
       pricing: {
         costPrice: 0,
         purchasePrice: 0,
@@ -109,6 +115,10 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
         location: '',
       },
       trackInventory: true,
+      trackBatch: false,
+      trackExpiry: false,
+      batchNumber: '',
+      expiryDate: undefined,
       tags: [],
       status: 'active',
     },
@@ -409,29 +419,6 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
                     />
                   )}
 
-                  <FormField
-                    control={form.control as any}
-                    name="taxRate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tax Rate (%)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            placeholder="0.00"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          GST or applicable tax rate
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
               </TabsContent>
 
@@ -537,6 +524,56 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
                       )}
                     />
                   )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control as any}
+                    name="purchaseTaxRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Purchase Tax (%)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            placeholder="0.00"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Default input tax rate for purchase transactions
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control as any}
+                    name="saleTaxRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sale Tax (%)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            placeholder="0.00"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Default output tax rate for sale transactions
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               </TabsContent>
 
@@ -656,21 +693,107 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
                             )}
                           />
 
-                          <FormField
-                            control={form.control as any}
-                            name="stock.location"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Storage Location</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="e.g., Shelf A1, Warehouse 2" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </>
+                           <FormField
+                             control={form.control as any}
+                             name="stock.location"
+                             render={({ field }) => (
+                               <FormItem>
+                                 <FormLabel>Storage Location</FormLabel>
+                                 <FormControl>
+                                   <Input placeholder="e.g., Shelf A1, Warehouse 2" {...field} />
+                                 </FormControl>
+                                 <FormMessage />
+                               </FormItem>
+                             )}
+                           />
+                         </div>
+
+                         <div className="border-t pt-4 mt-4">
+                           <h3 className="text-sm font-medium mb-4">Batch & Expiry Tracking</h3>
+                           
+                           <div className="grid grid-cols-2 gap-4">
+                             <FormField
+                               control={form.control as any}
+                               name="trackBatch"
+                               render={({ field }) => (
+                                 <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                   <FormControl>
+                                     <Checkbox
+                                       checked={field.value}
+                                       onCheckedChange={field.onChange}
+                                     />
+                                   </FormControl>
+                                   <div className="space-y-1 leading-none">
+                                     <FormLabel>Track Batches</FormLabel>
+                                     <FormDescription>
+                                       Enable batch number tracking for this product
+                                     </FormDescription>
+                                   </div>
+                                 </FormItem>
+                               )}
+                             />
+
+                             <FormField
+                               control={form.control as any}
+                               name="trackExpiry"
+                               render={({ field }) => (
+                                 <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                   <FormControl>
+                                     <Checkbox
+                                       checked={field.value}
+                                       onCheckedChange={field.onChange}
+                                     />
+                                   </FormControl>
+                                   <div className="space-y-1 leading-none">
+                                     <FormLabel>Track Expiry Dates</FormLabel>
+                                     <FormDescription>
+                                       Enable expiry date tracking for this product
+                                     </FormDescription>
+                                   </div>
+                                 </FormItem>
+                               )}
+                             />
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-4 mt-4">
+                             {form.watch('trackBatch') && (
+                               <FormField
+                                 control={form.control as any}
+                                 name="batchNumber"
+                                 render={({ field }) => (
+                                   <FormItem>
+                                     <FormLabel>Batch Number</FormLabel>
+                                     <FormControl>
+                                       <Input placeholder="e.g., BATCH-001" {...field} />
+                                     </FormControl>
+                                     <FormMessage />
+                                   </FormItem>
+                                 )}
+                               />
+                             )}
+
+                             {form.watch('trackExpiry') && (
+                               <FormField
+                                 control={form.control as any}
+                                 name="expiryDate"
+                                 render={({ field }) => (
+                                   <FormItem>
+                                     <FormLabel>Expiry Date</FormLabel>
+                                     <FormControl>
+                                       <Input 
+                                         type="date" 
+                                         {...field}
+                                         value={field.value ? new Date(field.value).toISOString().split('T')[0] : ''}
+                                       />
+                                     </FormControl>
+                                     <FormMessage />
+                                   </FormItem>
+                                 )}
+                               />
+                             )}
+                           </div>
+                         </div>
+                       </>
                     )}
                   </>
                 )}

@@ -9,9 +9,12 @@ export type StockMovementReferenceType = (typeof STOCK_MOVEMENT_REFERENCE_TYPES)
 
 export interface IStockMovement {
   owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   item: Types.ObjectId;
   type: StockMovementType;
   quantity: number;
+  batchNumber?: string | null;
+  expiryDate?: Date | null;
   referenceType: StockMovementReferenceType;
   referenceId?: Types.ObjectId;
   reason?: string | null;
@@ -24,8 +27,8 @@ export interface IStockMovement {
 type StockMovementModel = Model<IStockMovement>;
 
 // Helper to block any update operation (ensures true immutability)
-const blockUpdate = function (next: (err?: Error) => void) {
-  next(new Error("Stock movements cannot be modified after creation"));
+const blockUpdate = function () {
+  throw new Error("Stock movements cannot be modified after creation");
 };
 
 const stockMovementSchema = new Schema<IStockMovement, StockMovementModel>(
@@ -34,6 +37,12 @@ const stockMovementSchema = new Schema<IStockMovement, StockMovementModel>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
+    },
+    shopId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shop",
+      default: null,
       index: true,
     },
     item: {
@@ -102,6 +111,17 @@ const stockMovementSchema = new Schema<IStockMovement, StockMovementModel>(
       required: true,
       index: true,
     },
+    batchNumber: {
+      type: String,
+      default: null,
+      trim: true,
+      uppercase: true,
+      maxlength: 80,
+    },
+    expiryDate: {
+      type: Date,
+      default: null,
+    },
     metadata: {
       type: Map,
       of: Schema.Types.Mixed,
@@ -127,11 +147,10 @@ stockMovementSchema.index({ owner: 1, referenceType: 1, referenceId: 1 });
 
 // ========== IMMUTABILITY ENFORCEMENT ==========
 // 1. Block document updates via .save()
-stockMovementSchema.pre("save" as any, function (this: any, next: (err?: Error) => void) {
+stockMovementSchema.pre("save" as any, function (this: any) {
   if (!this.isNew) {
-    return next(new Error("Stock movements cannot be modified after creation"));
+    throw new Error("Stock movements cannot be modified after creation");
   }
-  next();
 });
 
 // 2. Block all update operations (direct queries)
@@ -142,14 +161,16 @@ stockMovementSchema.pre("replaceOne" as any, blockUpdate);
 // ==============================================
 
 // ========== ITEM STOCK SYNCHRONIZATION ==========
-stockMovementSchema.post("save" as any, async function (doc: any) {
-  // Update item current stock when new movement is created
-  await mongoose.model("Item").findByIdAndUpdate(doc.item, {
-    $inc: {
-      "stock.currentQuantity": doc.type === "IN" || doc.type === "RETURN_IN" ? doc.quantity : -doc.quantity
-    }
-  });
-});
+// DISABLED: This creates write conflict when running inside transactions
+// Stock updates are handled manually in the transaction API route
+// stockMovementSchema.post("save" as any, async function (doc: any) {
+//   // Update item current stock when new movement is created
+//   await mongoose.model("Item").findByIdAndUpdate(doc.item, {
+//     $inc: {
+//       "stock.currentQuantity": doc.type === "IN" || doc.type === "RETURN_IN" ? doc.quantity : -doc.quantity
+//     }
+//   });
+// });
 
 // Model initialisation (Next.js hot‑reloading safe)
 const StockMovement =

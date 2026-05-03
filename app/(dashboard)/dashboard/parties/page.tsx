@@ -14,13 +14,14 @@ export default async function PartiesPage() {
     .sort({ createdAt: -1 })
     .lean();
 
-  const serializedCustomers = parties.map(party => ({
+  const serializedParties = parties.map(party => ({
     _id: party._id.toString(),
     name: party.displayName,
     email: party.email,
     phoneNumber: party.phoneNumber,
     status: party.status,
+    partyType: party.partyType,
   }));
 
-  return <PartiesClient customers={serializedCustomers} />;
+  return <PartiesClient parties={serializedParties} />;
 }

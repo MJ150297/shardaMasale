@@ -3,10 +3,12 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
-import { AppError, roundCurrency, generateTransactionNumber } from '@/lib/utils';
+import { generateTransactionNumber } from '@/lib/utils';
+import {
+  applyConfirmedTransactionInventory,
+  reserveDraftSaleInventory,
+} from '@/lib/transaction-inventory';
 import Transaction from '@/models/Transaction';
-import Item from '@/models/Item';
-import StockMovement from '@/models/StockMovement';
 
 const createTransactionSchema = z.object({
   type: z.enum(["sale", "purchase", "sale-return", "purchase-return", "payment-in", "payment-out", "adjustment", "opening-balance"]),
@@ -27,6 +29,7 @@ const createTransactionSchema = z.object({
   })).default([]),
   summary: z.object({
     roundOff: z.coerce.number().default(0),
+    grandTotal: z.coerce.number().min(0).optional(),
     paidAmount: z.coerce.number().min(0).default(0),
   }).default(() => ({ roundOff: 0, paidAmount: 0 })),
   payment: z.object({
@@ -49,17 +52,25 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const type = searchParams.get('type');
     const status = searchParams.get('status');
+    const party = searchParams.get('party');
 
     const query: any = { owner: user.id };
     
+    if (user.activeShopId) {
+      query.shopId = user.activeShopId;
+    }
+    
     if (type) query.type = type;
     if (status) query.status = status;
+    if (party) query.party = party;
 
     const transactions = await Transaction.find(query)
       .sort({ transactionDate: -1, createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .populate('party', 'name phone')
+      .populate('party', 'displayName phoneNumber email')
+      .populate('lineItems.item', 'itemType')
+      .populate('invoiceId', 'invoiceNumber status')
       .lean();
 
     const total = await Transaction.countDocuments(query);
@@ -74,6 +85,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error: any) {
+    console.error('Error fetching transactions:', error);
     const status = error.status || 500;
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
   }
@@ -101,95 +113,31 @@ export async function POST(request: Request) {
       updatedBy: user.id,
     }], { session });
 
-    // Process stock updates for inventory affecting transaction types
-    const inventoryAffectingTypes = ["sale", "purchase", "sale-return", "purchase-return"];
-    
-    if (inventoryAffectingTypes.includes(validated.type) && validated.status === "confirmed") {
-      // Determine stock direction
-      let stockMultiplier = 0;
-      let movementType = "";
-      
-      switch(validated.type) {
-        case "sale":
-          stockMultiplier = -1;
-          movementType = "OUT";
-          break;
-        case "purchase":
-          stockMultiplier = 1;
-          movementType = "IN";
-          break;
-        case "sale-return":
-          stockMultiplier = 1;
-          movementType = "IN";
-          break;
-        case "purchase-return":
-          stockMultiplier = -1;
-          movementType = "OUT";
-          break;
-      }
+    if (validated.type === "sale" && validated.status === "draft") {
+      await reserveDraftSaleInventory(
+        {
+          ownerId: user.id,
+          userId: user.id,
+          shopId: user.activeShopId ?? null,
+        },
+        validated.lineItems,
+        session,
+      );
+    }
 
-      // Process each line item
-      for (const lineItem of validated.lineItems) {
-        if (!lineItem.item || lineItem.quantity <= 0) continue;
-
-        // Find item with current version
-        const item = await Item.findById(lineItem.item).session(session);
-        if (!item) {
-          throw new AppError(`Item not found: ${lineItem.itemName}`, 404);
-        }
-
-        if (item.itemType === "product" && item.trackInventory) {
-          const quantityChange = lineItem.quantity * stockMultiplier;
-          const newQuantity = item.stock.currentQuantity + quantityChange;
-
-          // Validate negative stock
-          if (newQuantity < 0 && !item.stock.allowNegativeStock) {
-            throw new AppError(`Insufficient stock for ${item.name}. Available: ${item.stock.currentQuantity}, Required: ${lineItem.quantity}`, 400);
-          }
-
-          // Create stock movement
-          await StockMovement.create([{
-            owner: user.id,
-            item: item._id,
-            type: movementType,
-            quantity: lineItem.quantity,
-            referenceType: "TRANSACTION",
-            referenceId: transaction._id,
-            previousQuantity: item.stock.currentQuantity,
-            newQuantity: newQuantity,
-            createdBy: user.id,
-            metadata: {
-              transactionType: validated.type,
-              transactionNumber: transactionNumber,
-              unitPrice: lineItem.unitPrice
-            }
-          }], { session });
-
-          // Atomic update item stock with optimistic concurrency check
-          const updatedItem = await Item.findOneAndUpdate(
-            {
-              _id: item._id,
-              __v: item.__v,
-              owner: user.id
-            },
-            {
-              $inc: {
-                "stock.currentQuantity": quantityChange,
-                __v: 1
-              }
-            },
-            {
-              new: true,
-              session,
-              runValidators: true
-            }
-          );
-
-          if (!updatedItem) {
-            throw new AppError(`Item ${item.name} was modified by another operation. Please try again.`, 409);
-          }
-        }
-      }
+    if (validated.status === "confirmed") {
+      await applyConfirmedTransactionInventory(
+        {
+          ownerId: user.id,
+          userId: user.id,
+          shopId: user.activeShopId ?? null,
+          session,
+          transactionId: transaction._id.toString(),
+          transactionNumber,
+        },
+        validated.type,
+        validated.lineItems,
+      );
     }
 
     await session.commitTransaction();
