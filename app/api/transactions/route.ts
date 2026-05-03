@@ -70,7 +70,6 @@ export async function GET(request: Request) {
       .limit(limit)
       .populate('party', 'displayName phoneNumber email')
       .populate('lineItems.item', 'itemType')
-      .populate('invoiceId', 'invoiceNumber status')
       .lean();
 
     const total = await Transaction.countDocuments(query);
