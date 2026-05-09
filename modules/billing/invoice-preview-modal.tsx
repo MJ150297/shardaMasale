@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Download, Printer } from 'lucide-react';
 import Invoice from '@/models/Invoice';
+import InvoiceShareSheet from '@/components/invoice-share-sheet';
 
 interface InvoicePreviewModalProps {
   open: boolean;
@@ -22,10 +23,20 @@ export default function InvoicePreviewModal({
 }: InvoicePreviewModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[90vh] overflow-hidden p-0">
-        <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
+      <DialogContent className="max-w-none! w-[90vw] max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogHeader className="p-4 border-b flex flex-row items-center justify-between shrink-0">
           <DialogTitle>Invoice Preview: {invoice?.invoiceNumber}</DialogTitle>
           <div className="flex gap-2">
+            <InvoiceShareSheet
+              invoice={{
+                id: invoice?.id || invoice?._id || invoice?.invoiceNumber,
+                invoiceNumber: invoice?.invoiceNumber,
+                grandTotal: invoice?.totalAmount || invoice?.transactionId?.summary?.grandTotal || 0,
+                dueDate: invoice?.dueDate,
+                party: invoice?.transactionId?.party || invoice?.party,
+              }}
+              variant="button"
+            />
             <Button size="sm" onClick={onDownload}>
               <Download className="h-4 w-4 mr-2" />
               Download
@@ -37,7 +48,7 @@ export default function InvoicePreviewModal({
           </div>
         </DialogHeader>
 
-        <div className="overflow-y-auto p-8 bg-gray-100">
+        <div className="overflow-y-auto p-8 bg-gray-100 flex-1">
           <div className="max-w-3xl mx-auto bg-white shadow-xl p-12 rounded-md" style={{ aspectRatio: '1 / 1.414' }}>
             
             {/* Header */}
@@ -103,6 +114,17 @@ export default function InvoicePreviewModal({
                 <span>Tax</span>
                 <span>₹{invoice?.transactionId?.summary?.taxTotal?.toFixed(2)}</span>
               </div>
+              {invoice?.transactionId?.additionalCharges?.length > 0 && (
+                <div className="border-t pt-2 mt-2">
+                  <p className="font-semibold text-xs text-gray-600 mb-1">Additional Charges</p>
+                  {invoice.transactionId.additionalCharges.map((charge: any, index: number) => (
+                    <div key={index} className="flex justify-between py-0.5 text-xs">
+                      <span>{charge.name}</span>
+                      <span>₹{Number(charge.amount).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex justify-between py-2 border-t-2 border-black font-bold text-base mt-2">
                 <span>Total</span>
                 <span>₹{invoice?.transactionId?.summary?.grandTotal?.toFixed(2)}</span>

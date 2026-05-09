@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,18 +9,25 @@ import {
   Trash2,
   Save,
   Send,
+  ChevronDown,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,6 +41,7 @@ import {
 } from '@/components/ui/form';
 import { toast } from 'sonner';
 import { roundCurrency, calculateLineTotal } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const lineItemSchema = z.object({
   item: z.string().optional().nullable(),
@@ -47,11 +55,17 @@ const lineItemSchema = z.object({
   taxRate: z.coerce.number().min(0).max(100).default(0),
 });
 
+const additionalChargeSchema = z.object({
+  name: z.string().min(1, "Charge name is required"),
+  amount: z.coerce.number().min(0, "Amount must be positive"),
+});
+
 const createInvoiceSchema = z.object({
   party: z.string().optional().nullable(),
   transactionDate: z.coerce.date().default(() => new Date()),
   dueDate: z.coerce.date(),
   lineItems: z.array(lineItemSchema).min(1, "At least one item is required"),
+  additionalCharges: z.array(additionalChargeSchema).default([]),
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
@@ -64,21 +78,41 @@ const createInvoiceSchema = z.object({
 type InvoiceFormValues = z.infer<typeof createInvoiceSchema>;
 
 interface Item {
-  id: string;
+  _id: string;
+  id?: string;
   name: string;
   sku: string;
   unit: string;
   price: number;
+  pricing?: {
+    sellingPrice?: number;
+    purchasePrice?: number;
+    costPrice?: number;
+  };
+  sellingPrice?: number;
+  purchasePrice?: number;
+  costPrice?: number;
+  saleTaxRate?: number;
+  purchaseTaxRate?: number;
+  taxRate?: number;
+  unitOfMeasure?: string;
+  stockQuantity?: number;
   stock: {
     currentQuantity: number;
   };
 }
 
 interface Party {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
+  _id: string;
+  id?: string;
+  name?: string;
+  displayName?: string;
+  fullName?: string;
+  partyName?: string;
+  phone?: string;
+  phoneNumber?: string;
+  mobile?: string;
+  email?: string;
 }
 
 interface CreateInvoiceProps {
@@ -90,22 +124,70 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   const [items, setItems] = useState<Item[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [renderKey, setRenderKey] = useState(0);
+  const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
+  const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
+  const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        console.log('🔍 Loading parties and items...');
+        
+        // Load Parties (Customers)
+        const partiesRes = await fetch('/api/parties');
+        console.log('✅ Parties response status:', partiesRes.status);
+        
+        if (partiesRes.ok) {
+          const partiesData = await partiesRes.json();
+          console.log('📋 Parties data received:', partiesData);
+          const allParties = partiesData.data ?? partiesData.parties ?? partiesData ?? [];
+          
+          // Filter only customers and both type parties (exclude suppliers)
+          const finalParties = allParties.filter((party: any) => {
+            return party.partyType === undefined || ['customer', 'both'].includes(party.partyType);
+          });
+          
+          console.log('✅ Setting parties:', finalParties.length, 'customer records');
+          setParties(finalParties);
+        } else {
+          const errorText = await partiesRes.text();
+          console.error('❌ Parties fetch failed:', partiesRes.status, errorText);
+          toast.error('Failed to load customers');
+        }
+
+        // Load Items
+        const itemsRes = await fetch('/api/items');
+        console.log('✅ Items response status:', itemsRes.status);
+        
+        if (itemsRes.ok) {
+          const itemsData = await itemsRes.json();
+          console.log('📦 Items data received:', itemsData);
+          const finalItems = itemsData.data ?? itemsData.items ?? itemsData ?? [];
+          console.log('✅ Setting items:', finalItems.length, 'records');
+          setItems(finalItems);
+        } else {
+          const errorText = await itemsRes.text();
+          console.error('❌ Items fetch failed:', itemsRes.status, errorText);
+          toast.error('Failed to load items');
+        }
+      } catch (error) {
+        console.error('💥 Failed to load form data:', error);
+        toast.error('Network error while loading form data');
+      }
+    }
+
+    loadData();
+  }, []);
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(createInvoiceSchema) as any,
     defaultValues: {
       transactionDate: new Date(),
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      lineItems: [
-        {
-          itemName: '',
-          unit: 'pcs',
-          quantity: 1,
-          unitPrice: 0,
-          discountAmount: 0,
-          taxRate: 0,
-        },
-      ],
+      lineItems: [],
+      additionalCharges: [],
       summary: {
         roundOff: 0,
         paidAmount: 0,
@@ -114,34 +196,93 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'lineItems',
+   const { fields, append, remove } = useFieldArray({
+     control: form.control,
+     name: 'lineItems',
+   });
+
+   const {
+     fields: chargeFields,
+     append: appendCharge,
+     remove: removeCharge,
+   } = useFieldArray({
+     control: form.control,
+     name: 'additionalCharges',
+   });
+
+   // Always watch base lineItems array to detect add/remove operations
+   form.watch('lineItems');
+   form.watch('additionalCharges');
+
+   const lineItemsCount = fields.length;
+
+  // Watch each individual line item field
+  useEffect(() => {
+    const paths: string[] = [];
+    for (let i = 0; i < lineItemsCount; i++) {
+      paths.push(`lineItems.${i}.item`);
+      paths.push(`lineItems.${i}.itemName`);
+      paths.push(`lineItems.${i}.sku`);
+      paths.push(`lineItems.${i}.unit`);
+      paths.push(`lineItems.${i}.quantity`);
+      paths.push(`lineItems.${i}.unitPrice`);
+      paths.push(`lineItems.${i}.discountAmount`);
+      paths.push(`lineItems.${i}.taxRate`);
+    }
+    for (let i = 0; i < chargeFields.length; i++) {
+      paths.push(`additionalCharges.${i}.name`);
+      paths.push(`additionalCharges.${i}.amount`);
+    }
+    paths.push('summary.roundOff');
+    paths.push('summary.paidAmount');
+    
+    // Watch all paths - increment render counter to force re-render
+    const subscription = form.watch(paths as any, () => {
+      setRenderKey(prev => prev + 1);
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
+      }
+    };
+  }, [form, lineItemsCount, chargeFields.length]);
+
+  // Calculate summary DIRECTLY in render - ONLY WORKING WAY for react-hook-form
+  const lineItems = form.watch('lineItems') || [];
+  const roundOff = roundCurrency(form.watch('summary.roundOff') || 0);
+  const paidAmount = roundCurrency(form.watch('summary.paidAmount') || 0);
+  const additionalCharges = form.watch('additionalCharges') || [];
+  
+  let subtotal = 0;
+  let discountTotal = 0;
+  let taxTotal = 0;
+
+  lineItems.forEach(item => {
+    const lineSubtotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+    subtotal += lineSubtotal;
+    discountTotal += Number(item.discountAmount || 0);
+    
+    const taxableAmount = lineSubtotal - Number(item.discountAmount || 0);
+    taxTotal += taxableAmount * (Number(item.taxRate || 0) / 100);
   });
 
-  const lineItems = form.watch('lineItems');
-  const roundOff = form.watch('summary.roundOff');
-  const paidAmount = form.watch('summary.paidAmount');
+  const additionalChargesTotal = roundCurrency(
+    additionalCharges.reduce((total, charge) => total + (Number(charge.amount) || 0), 0)
+  );
 
-  const calculations = useMemo(() => {
-    const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    const discountTotal = lineItems.reduce((sum, item) => sum + item.discountAmount, 0);
-    const taxTotal = lineItems.reduce((sum, item) => {
-      const taxable = (item.quantity * item.unitPrice) - item.discountAmount;
-      return sum + (taxable * (item.taxRate / 100));
-    }, 0);
-    
-    const grandTotal = subtotal - discountTotal + taxTotal + roundOff;
-    const dueAmount = Math.max(grandTotal - paidAmount, 0);
+  const grandTotal = roundCurrency(subtotal - discountTotal + taxTotal + roundOff + additionalChargesTotal);
+  const dueAmount = Math.max(roundCurrency(grandTotal - paidAmount), 0);
 
-    return {
-      subtotal: roundCurrency(subtotal),
-      discountTotal: roundCurrency(discountTotal),
-      taxTotal: roundCurrency(taxTotal),
-      grandTotal: roundCurrency(grandTotal),
-      dueAmount: roundCurrency(dueAmount),
-    };
-  }, [lineItems, roundOff, paidAmount]);
+  const calculations = {
+    subtotal: roundCurrency(subtotal),
+    discountTotal: roundCurrency(discountTotal),
+    taxTotal: roundCurrency(taxTotal),
+    additionalChargesTotal,
+    grandTotal: roundCurrency(grandTotal),
+    dueAmount: roundCurrency(dueAmount),
+  };
 
   const addLineItem = useCallback(() => {
     append({
@@ -153,6 +294,47 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
       taxRate: 0,
     });
   }, [append]);
+
+  const addAdditionalCharge = useCallback(() => {
+    appendCharge({ name: '', amount: 0 });
+    setAdditionalChargesExpanded(true);
+  }, [appendCharge]);
+
+  // Auto-expand if charges exist, auto-collapse if all removed
+  useEffect(() => {
+    if (chargeFields.length > 0) {
+      setAdditionalChargesExpanded(true);
+    }
+  }, [chargeFields.length]);
+
+  const updateItemPrices = async (data: InvoiceFormValues) => {
+    const updatePromises: Promise<any>[] = [];
+    
+    data.lineItems.forEach(item => {
+      const itemId = item.item;
+      if (itemId && priceUpdateItems[itemId]) {
+        const newPrice = Number(item.unitPrice) || 0;
+        updatePromises.push(
+          fetch('/api/items', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: itemId,
+              pricing: { sellingPrice: newPrice },
+            }),
+          })
+        );
+      }
+    });
+
+    if (updatePromises.length === 0) return;
+
+    const results = await Promise.allSettled(updatePromises);
+    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok));
+    if (failed.length > 0) {
+      toast.error(`${failed.length} item(s) price update failed`);
+    }
+  };
 
   const onSubmit = async (data: InvoiceFormValues, confirm: boolean = false) => {
     setIsSubmitting(true);
@@ -170,6 +352,12 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
 
       if (response.ok) {
         const result = await response.json();
+        
+        // Update item prices for checked items
+        if (confirm) {
+          await updateItemPrices(data);
+        }
+        
         toast.success('Invoice created successfully');
         form.reset();
         if (onSuccess) {
@@ -188,7 +376,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" key={renderKey}>
       <Card>
         <CardContent className="space-y-6">
           <Form {...(form as any)}>
@@ -201,22 +389,94 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                   control={form.control as any}
                   name="party"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="flex flex-col">
                       <FormLabel>Customer</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value || ''}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select customer" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {parties.map((party) => (
-                            <SelectItem key={party.id} value={party.id}>
-                              {party.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value
+                                ? (() => {
+                                    const party = parties.find(p => p._id === field.value);
+                                    return party ? (party.displayName || party.name || party.fullName || party.partyName || "Select customer") : "Select customer";
+                                  })()
+                                : "Select customer"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command shouldFilter={false}>
+                            <CommandInput 
+                              placeholder="Search customer by name or phone..." 
+                              className="h-9"
+                              value={partySearchQuery}
+                              onValueChange={setPartySearchQuery}
+                            />
+                            <CommandList className="max-h-72 overflow-y-auto">
+                              <CommandEmpty>No customer found.</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="none"
+                                  onSelect={() => {
+                                    field.onChange(null);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === null ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  None
+                                </CommandItem>
+                                {(() => {
+                                  const search = partySearchQuery.toLowerCase();
+
+                                  if (search === '') {
+                                    return parties;
+                                  }
+                                  
+                                  return parties.filter(party => {
+                                    const partyName = party.displayName || party.name || party.fullName || party.partyName || '';
+                                    const phone = party.phoneNumber || party.mobile || party.phone || '';
+
+                                    return partyName.toLowerCase().includes(search) || phone.toLowerCase().includes(search);
+                                  });
+                                })().map((party) => (
+                                  <CommandItem
+                                    value={party._id}
+                                    key={party._id}
+                                    onSelect={() => {
+                                      field.onChange(party._id);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        party._id === field.value ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="flex flex-col">
+                                    <span className="font-medium">{party.displayName || party.name || party.fullName || party.partyName}</span>
+                                    {(party.phoneNumber || party.mobile || party.phone) && (
+                                      <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
+                                    )}
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -284,21 +544,109 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                       </TableRow>
                     </TableHeader>
                     <TableBody>
+
+                      {fields.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                            No items added. Click Add Item to start.
+                          </TableCell>
+                        </TableRow>
+                      )}
                       {fields.map((field, index) => (
                         <TableRow key={field.id}>
                           <TableCell>
                             <FormField
                               control={form.control as any}
                               name={`lineItems.${index}.itemName`}
-                              render={({ field }) => (
+                              render={({ field: itemField }) => (
                                 <FormItem className="m-0">
-                                  <FormControl>
-                                    <Input
-                                      placeholder="Item name"
-                                      {...field}
-                                      className="border-0 shadow-none"
-                                    />
-                                  </FormControl>
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <FormControl>
+                                        <Button
+                                          variant="outline"
+                                          role="combobox"
+                                          className="w-full justify-between font-normal h-8 border-0 shadow-none"
+                                        >
+                                          {itemField.value || "Select item"}
+                                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                      </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-full p-0">
+                                      <Command shouldFilter={false}>
+                                        <CommandInput 
+                                          placeholder="Search item by name or sku..." 
+                                          className="h-9"
+                                        />
+                                        <CommandList>
+                                          <CommandEmpty>No item found.</CommandEmpty>
+                                          <CommandGroup>
+                                            {items.map((item) => (
+                                               <CommandItem
+                                                 value={item._id}
+                                                 key={item._id}
+                                                 onSelect={() => {
+                                                   function getItemSellingPrice(item: any) {
+                                                     return item.pricing?.sellingPrice ?? item.sellingPrice ?? item.price ?? 0;
+                                                   }
+                                                   
+                                                   function getItemCostPrice(item: any) {
+                                                     return item.pricing?.costPrice ?? item.costPrice ?? item.pricing?.purchasePrice ?? item.purchasePrice ?? 0;
+                                                   }
+                                                   
+                                                   function getItemUnit(item: any) {
+                                                     return item.unitOfMeasure ?? item.unit ?? 'pcs';
+                                                   }
+                                                   
+                                                   function getDefaultTaxRate(item: any) {
+                                                     return item.saleTaxRate ?? item.taxRate ?? item.purchaseTaxRate ?? 0;
+                                                   }
+
+                                                   const sellingPrice = getItemSellingPrice(item);
+                                                   form.setValue(`lineItems.${index}.item`, item._id);
+                                                   form.setValue(`lineItems.${index}.itemName`, item.name);
+                                                   form.setValue(`lineItems.${index}.sku`, item.sku);
+                                                   form.setValue(`lineItems.${index}.unit`, getItemUnit(item));
+                                                   form.setValue(`lineItems.${index}.unitPrice`, sellingPrice);
+                                                   form.setValue(`lineItems.${index}.taxRate`, getDefaultTaxRate(item));
+                                                   setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
+                                                   setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
+                                                 }}
+                                               >
+                                                <Check
+                                                  className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    form.watch(`lineItems.${index}.item`) === item._id ? "opacity-100" : "opacity-0"
+                                                  )}
+                                                />
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{item.name}</span>
+                                                  <div className="flex gap-3 text-xs text-muted-foreground">
+                                                    {item.sku && <span>SKU: {item.sku}</span>}
+                                                    <span>
+                                                      Sell: ₹{(() => {
+                                                        function getItemSellingPrice(item: any) {
+                                                          return item.pricing?.sellingPrice ?? item.sellingPrice ?? item.price ?? 0;
+                                                        }
+                                                        return getItemSellingPrice(item).toFixed(2);
+                                                      })()}
+                                                    </span>
+                                                    <span>Stock: {
+                                                      typeof item.stock === 'object' 
+                                                        ? item.stock?.currentQuantity || 0 
+                                                        : (item.stockQuantity || item.stock || 0)
+                                                    }</span>
+                                                  </div>
+                                                </div>
+                                              </CommandItem>
+                                            ))}
+                                          </CommandGroup>
+                                        </CommandList>
+                                      </Command>
+                                    </PopoverContent>
+                                  </Popover>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />
@@ -338,22 +686,46 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                             />
                           </TableCell>
                           <TableCell>
-                            <FormField
-                              control={form.control as any}
-                              name={`lineItems.${index}.unitPrice`}
-                              render={({ field }) => (
-                                <FormItem className="m-0">
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      {...field}
-                                      className="border-0 shadow-none text-right"
+                            <div className="flex flex-col items-end">
+                              <FormField
+                                control={form.control as any}
+                                name={`lineItems.${index}.unitPrice`}
+                                render={({ field }) => (
+                                  <FormItem className="m-0 w-full">
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        {...field}
+                                        className="border-0 shadow-none text-right"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              {(() => {
+                                const itemId = form.watch(`lineItems.${index}.item`);
+                                const currentPrice = Number(form.watch(`lineItems.${index}.unitPrice`) || 0);
+                                const originalPrice = itemId ? originalPrices[itemId] : undefined;
+                                const isDifferent = itemId && originalPrice !== undefined && Math.abs(currentPrice - originalPrice) > 0.001;
+                                return isDifferent ? (
+                                  <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer mt-0.5 whitespace-nowrap">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!(itemId && priceUpdateItems[itemId])}
+                                      onChange={(e) => {
+                                        if (itemId) {
+                                          setPriceUpdateItems(prev => ({ ...prev, [itemId]: e.target.checked }));
+                                          setRenderKey(k => k + 1);
+                                        }
+                                      }}
+                                      className="h-3 w-3"
                                     />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
+                                    Update item price
+                                  </label>
+                                ) : null;
+                              })()}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <FormField
@@ -467,6 +839,107 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                       <span>Tax</span>
                       <span>₹ {calculations.taxTotal.toFixed(2)}</span>
                     </div>
+
+                    {/* Additional Charges Section */}
+                    <div className="border rounded-md">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (chargeFields.length === 0) {
+                            setAdditionalChargesExpanded(!additionalChargesExpanded);
+                          }
+                        }}
+                        className="flex items-center justify-between w-full px-2 py-1.5 text-sm hover:bg-muted/50 rounded-md"
+                      >
+                        <span className="flex items-center gap-1">
+                          {additionalChargesExpanded || chargeFields.length > 0 ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                          <span className={cn(
+                            chargeFields.length > 0 ? "font-medium" : "text-muted-foreground"
+                          )}>
+                            {chargeFields.length > 0
+                              ? `Additional Charges (${chargeFields.length})`
+                              : "+ Additional charges"}
+                          </span>
+                        </span>
+                        {chargeFields.length > 0 && (
+                          <span className="font-medium">
+                            ₹ {calculations.additionalChargesTotal.toFixed(2)}
+                          </span>
+                        )}
+                      </button>
+
+                      {(additionalChargesExpanded || chargeFields.length > 0) && (
+                        <div className="px-2 pb-2 space-y-2">
+                          {chargeFields.length === 0 && (
+                            <p className="text-xs text-muted-foreground px-1">No additional charges added.</p>
+                          )}
+                          {chargeFields.map((field, index) => (
+                            <div key={field.id} className="flex items-center gap-1.5">
+                              <FormField
+                                control={form.control as any}
+                                name={`additionalCharges.${index}.name`}
+                                render={({ field: chargeNameField }) => (
+                                  <FormItem className="m-0 flex-1">
+                                    <FormControl>
+                                      <Input
+                                        placeholder="Charge name"
+                                        className="h-7 text-xs"
+                                        {...chargeNameField}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control as any}
+                                name={`additionalCharges.${index}.amount`}
+                                render={({ field: chargeAmountField }) => (
+                                  <FormItem className="m-0 w-20">
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        className="h-7 text-xs text-right"
+                                        {...chargeAmountField}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  removeCharge(index);
+                                  if (chargeFields.length === 1) {
+                                    setAdditionalChargesExpanded(false);
+                                  }
+                                }}
+                                className="h-7 w-7 text-destructive shrink-0"
+                                type="button"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={addAdditionalCharge}
+                            type="button"
+                            className="w-full h-7 text-xs"
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Add Charge
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex justify-between text-sm items-center">
                       <FormLabel>Round Off</FormLabel>
                       <FormField

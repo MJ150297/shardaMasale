@@ -1,18 +1,24 @@
 "use client";
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, createContext, useContext, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import ThemeToggle from '@/components/ui/theme-toggle';
 import { NotificationBell } from '@/components/layout/notification-bell';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 import {
   LayoutDashboard,
+  LayoutDashboard as LayoutDashboardOutline,
   Package,
+  Package as PackageOutline,
   Users,
+  Users as UsersOutline,
   Receipt,
+  Receipt as ReceiptOutline,
   FileText,
+  FileText as FileTextOutline,
   BarChart3,
   Settings,
   Code,
@@ -101,12 +107,6 @@ const navItems: NavItem[] = [
     roles: ['owner', 'admin', 'manager', 'staff'],
   },
   {
-    title: 'Items',
-    url: '/dashboard/items',
-    icon: Package,
-    roles: ['owner', 'admin', 'manager', 'cashier', 'staff'],
-  },
-  {
     title: 'Parties',
     url: '/dashboard/parties',
     icon: Users,
@@ -116,6 +116,12 @@ const navItems: NavItem[] = [
     title: 'Transactions',
     url: '/dashboard/transactions',
     icon: Receipt,
+    roles: ['owner', 'admin', 'manager', 'cashier', 'staff'],
+  },
+  {
+    title: 'Items',
+    url: '/dashboard/items',
+    icon: Package,
     roles: ['owner', 'admin', 'manager', 'cashier', 'staff'],
   },
   {
@@ -152,6 +158,20 @@ interface UserData {
   role: UserRole;
 }
 
+// Page Actions Context
+interface PageAction {
+  label: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+  variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'link';
+}
+
+const PageActionsContext = createContext<{
+  setActions: (actions: PageAction[]) => void;
+}>({ setActions: () => {} });
+
+export const usePageActions = () => useContext(PageActionsContext);
+
 interface DashboardShellProps {
   children: ReactNode;
   user: UserData;
@@ -160,6 +180,7 @@ interface DashboardShellProps {
 export default function DashboardShell({ children, user }: DashboardShellProps) {
   const pathname = usePathname();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -184,10 +205,32 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
     item.roles.includes(user.role)
   );
 
+  // Page Actions State
+  const [pageActions, setPageActions] = useState<PageAction[]>([]);
+  
+  // Clear actions on page change
+  useEffect(() => {
+    setPageActions([]);
+  }, [pathname]);
+
+  // Select primary navigation items for mobile footer (max 5)
+  const mobileNavItems = filteredNavItems.filter(item => 
+    ['/dashboard', '/dashboard/items', '/dashboard/parties', '/dashboard/transactions', '/dashboard/invoices'].includes(item.url)
+  ).slice(0, 5);
+
+  // Calculate bottom padding based on existence of actions
+  const mainBottomPadding = isMobile 
+    ? pageActions.length > 0 
+      ? 'pb-32' 
+      : 'pb-20' 
+    : '';
+
   return (
-    <TooltipProvider>
-      <SidebarProvider>
-        {/* Sidebar */}
+    <PageActionsContext.Provider value={{ setActions: setPageActions }}>
+      <TooltipProvider>
+        <SidebarProvider>
+        {/* Sidebar - Hidden on mobile */}
+        {!isMobile && (
         <Sidebar variant="inset" collapsible="icon" className="font-sans dark:bg-gray-900 dark:border-gray-800">
           
           <SidebarHeader className="border-b border-border dark:border-gray-800">
@@ -312,13 +355,14 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
 
           <SidebarRail />
         </Sidebar>
+        )}
 
         {/* Main Content */}
         <SidebarInset className="font-sans">
           
           {/* Header */}
           <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b dark:border-gray-800 dark:bg-gray-900/50">
-            <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
+            {!isMobile && <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />}
             <div className="flex flex-1 items-center justify-between">
               <div>
                 <h1 className="text-lg font-semibold dark:text-white">Dashboard</h1>
@@ -363,12 +407,95 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
           </header>
 
           {/* Page Content */}
-          <main className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6 dark:bg-gray-950">
+          <main className={`flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6 dark:bg-gray-950 ${mainBottomPadding}`}>
             {children}
           </main>
+
+          {/* Mobile Floating Action Buttons */}
+          {isMobile && pageActions.length > 0 && (
+            <div className="fixed bottom-16 left-0 right-0 z-40 px-3 py-2">
+              <div className={`flex gap-2 w-full ${pageActions.length === 1 ? '' : pageActions.length === 2 ? 'justify-between' : 'justify-between'}`}>
+                {pageActions.map((action, index) => {
+                  const ActionIcon = action.icon;
+                  return (
+                    <Button
+                      key={index}
+                      variant={action.variant || 'default'}
+                      className={`flex-1 h-12 shadow-lg active:scale-[0.97] transition-all`}
+                      onClick={action.onClick}
+                    >
+                      {ActionIcon && <ActionIcon className="size-4 mr-2" />}
+                      {action.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Bottom Navigation */}
+          {isMobile && (
+            <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background dark:bg-gray-900 dark:border-gray-800 pb-safe">
+              <div className="flex justify-around items-center h-16 px-2">
+                {mobileNavItems.map((item) => {
+                  const isActive = pathname === item.url;
+                  
+                  // Map to filled icon variants
+                  const getIcon = () => {
+                    switch(item.url) {
+                      case '/dashboard':
+                        return isActive ? LayoutDashboard : LayoutDashboardOutline;
+                      case '/dashboard/items':
+                        return isActive ? Package : PackageOutline;
+                      case '/dashboard/parties':
+                        return isActive ? Users : UsersOutline;
+                      case '/dashboard/transactions':
+                        return isActive ? Receipt : ReceiptOutline;
+                      case '/dashboard/invoices':
+                        return isActive ? FileText : FileTextOutline;
+                      default:
+                        return item.icon;
+                    }
+                  };
+                  
+                  const ActiveIcon = getIcon();
+                  
+                  return (
+                    <Link
+                      key={item.url}
+                      href={item.url}
+                      className={`flex flex-col items-center justify-center w-full h-full min-h-12 gap-0.5 text-xs
+                        transition-all duration-200 ease-out
+                        active:scale-[0.92]
+                        ${
+                          isActive
+                            ? 'text-primary scale-105'
+                            : 'text-muted-foreground hover:text-foreground hover:scale-[1.02]'
+                        }`}
+                      style={{
+                        transform: isActive ? 'translateY(-2px) scale(1.05)' : 'translateY(0) scale(1)',
+                        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+                      }}
+                    >
+                      <ActiveIcon 
+                        className={`size-5 transition-all duration-200 ${isActive ? 'drop-shadow-sm' : ''}`} 
+                        strokeWidth={isActive ? 2.5 : 2}
+                      />
+                      <span 
+                        className={`text-[10px] font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}
+                      >
+                        {item.title}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </nav>
+          )}
 
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+    </PageActionsContext.Provider>
   );
 }

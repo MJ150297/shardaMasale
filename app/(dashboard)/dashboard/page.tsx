@@ -67,10 +67,32 @@ export default async function DashboardPage() {
   .limit(10)
   .lean();
 
+  // Fetch recent transactions
+  const recentTransactions = await Transaction.find({
+    owner: user.id,
+    status: 'confirmed'
+  })
+  .sort({ createdAt: -1 })
+  .limit(4)
+  .populate('party', 'displayName')
+  .select('transactionNumber party summary.grandTotal paymentStatus createdAt type transactionDate')
+  .lean();
+
   // Convert ObjectId to string for client serialization
   const serializedLowStockItems = lowStockItems.map(item => ({
     ...item,
     _id: item._id.toString()
+  }));
+
+  const serializedRecentTransactions = recentTransactions.map((tx: any) => ({
+    id: tx.transactionNumber,
+    type: tx.type,
+    customer: tx.party?.displayName || 'Cash Sale',
+    amount: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
+    paymentStatus: tx.paymentStatus,
+    date: new Date(tx.transactionDate).toLocaleDateString('en-IN'),
+    dateIso: new Date(tx.transactionDate).toISOString(),
+    time: new Date(tx.createdAt).toLocaleString()
   }));
 
   return (
@@ -83,6 +105,7 @@ export default async function DashboardPage() {
         todayRevenue: revenueAmount
       }}
       lowStockItems={serializedLowStockItems}
+      recentTransactions={serializedRecentTransactions}
     />
   );
 }

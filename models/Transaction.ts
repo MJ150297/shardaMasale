@@ -6,6 +6,7 @@ import {
   roundCurrency,
 } from "@/lib/utils";
 import "./Party";
+import "./Invoice";
 
 export const TRANSACTION_TYPES = [
   "sale",
@@ -18,7 +19,11 @@ export const TRANSACTION_TYPES = [
   "opening-balance",
 ] as const;
 
-export const TRANSACTION_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+export const TRANSACTION_STATUSES = [
+  "draft",
+  "confirmed",
+  "cancelled",
+] as const;
 export const PAYMENT_STATUSES = [
   "unpaid",
   "partial",
@@ -72,6 +77,11 @@ export interface TransactionPaymentDetails {
   receivedAt?: Date | null;
 }
 
+export interface ITransactionAdditionalCharge {
+  name: string;
+  amount: number;
+}
+
 export interface ITransaction {
   owner: Types.ObjectId;
   shopId?: Types.ObjectId | null;
@@ -83,10 +93,12 @@ export interface ITransaction {
   transactionDate: Date;
   dueDate?: Date | null;
   lineItems: TransactionLineItem[];
+  additionalCharges: ITransactionAdditionalCharge[];
   summary: TransactionSummary;
   payment?: TransactionPaymentDetails | null;
   notes?: string | null;
   tags: string[];
+  invoiceId?: Types.ObjectId | null;
   createdBy?: Types.ObjectId | null;
   updatedBy?: Types.ObjectId | null;
   metadata: Record<string, unknown>;
@@ -292,6 +304,10 @@ const transactionSchema = new Schema<ITransaction, TransactionModel>(
       type: [lineItemSchema],
       default: [],
     },
+    additionalCharges: {
+      type: [{ name: { type: String, required: true, trim: true }, amount: { type: Number, required: true, min: 0 } }],
+      default: [],
+    },
     summary: {
       type: summarySchema,
       default: () => ({
@@ -317,6 +333,12 @@ const transactionSchema = new Schema<ITransaction, TransactionModel>(
     tags: {
       type: [String],
       default: [],
+    },
+    invoiceId: {
+      type: Schema.Types.ObjectId,
+      ref: "Invoice",
+      default: null,
+      index: true,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
@@ -419,14 +441,23 @@ transactionSchema.pre("validate", function preValidate() {
     ),
   );
   const discountTotal = roundCurrency(
-    this.lineItems.reduce((total, lineItem) => total + lineItem.discountAmount, 0),
+    this.lineItems.reduce(
+      (total, lineItem) => total + lineItem.discountAmount,
+      0,
+    ),
   );
   const taxTotal = roundCurrency(
     this.lineItems.reduce((total, lineItem) => total + lineItem.taxAmount, 0),
   );
   const roundOff = roundCurrency(this.summary?.roundOff ?? 0);
+  const additionalChargesTotal = roundCurrency(
+    (this.additionalCharges || []).reduce(
+      (total, charge) => total + (charge.amount || 0),
+      0,
+    ),
+  );
   const computedGrandTotal = roundCurrency(
-    subtotal - discountTotal + taxTotal + roundOff,
+    subtotal - discountTotal + taxTotal + roundOff + additionalChargesTotal,
   );
   const existingGrandTotal = roundCurrency(this.summary?.grandTotal ?? 0);
   const grandTotal =
@@ -457,36 +488,45 @@ transactionSchema.pre("save" as any, async function (this: any) {
     const original = this.$original();
     if (original && original.status !== "draft") {
       // Block any modifications once transaction is no longer draft
-      if (JSON.stringify(this.lineItems) !== JSON.stringify(original.lineItems)) {
-        throw new Error("Cannot modify line items once transaction is confirmed or cancelled");
+      if (
+        JSON.stringify(this.lineItems) !== JSON.stringify(original.lineItems)
+      ) {
+        throw new Error(
+          "Cannot modify line items once transaction is confirmed or cancelled",
+        );
       }
-      
+
       const protectedFields = ["type", "transactionDate", "party", "status"];
       for (const field of protectedFields) {
         if (this[field] !== original[field]) {
-          throw new Error(`Cannot modify ${field} once transaction is confirmed or cancelled`);
+          throw new Error(
+            `Cannot modify ${field} once transaction is confirmed or cancelled`,
+          );
         }
       }
     }
   }
-  
+
   // Stock validation when confirming transaction
   if (this.status === "confirmed" && this.isModified("status")) {
     const movementTypeMap: Record<string, string> = {
-      "sale": "OUT",
-      "purchase-return": "RETURN_OUT"
+      sale: "OUT",
+      "purchase-return": "RETURN_OUT",
     };
-    
+
     if (movementTypeMap[this.type]) {
       // Only validate stock for OUT movements
       for (const lineItem of this.lineItems) {
         if (!lineItem.item) continue;
-        
+
         const item: any = await mongoose.model("Item").findById(lineItem.item);
         if (item && item.trackInventory && !item.stock.allowNegativeStock) {
-          const availableStock = item.stock.currentQuantity - item.stock.reservedQuantity;
+          const availableStock =
+            item.stock.currentQuantity - item.stock.reservedQuantity;
           if (availableStock < lineItem.quantity) {
-            throw new Error(`Insufficient stock for item ${lineItem.itemName}: ${availableStock} available, ${lineItem.quantity} required`);
+            throw new Error(
+              `Insufficient stock for item ${lineItem.itemName}: ${availableStock} available, ${lineItem.quantity} required`,
+            );
           }
         }
       }

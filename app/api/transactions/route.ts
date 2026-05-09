@@ -53,6 +53,8 @@ export async function GET(request: Request) {
     const type = searchParams.get('type');
     const status = searchParams.get('status');
     const party = searchParams.get('party');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
 
     const query: any = { owner: user.id };
     
@@ -63,6 +65,12 @@ export async function GET(request: Request) {
     if (type) query.type = type;
     if (status) query.status = status;
     if (party) query.party = party;
+    if (startDate && endDate) {
+      query.transactionDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
 
     const transactions = await Transaction.find(query)
       .sort({ transactionDate: -1, createdAt: -1 })
@@ -70,6 +78,7 @@ export async function GET(request: Request) {
       .limit(limit)
       .populate('party', 'displayName phoneNumber email')
       .populate('lineItems.item', 'itemType')
+      .populate('invoiceId', 'invoiceNumber status')
       .lean();
 
     const total = await Transaction.countDocuments(query);
@@ -85,8 +94,10 @@ export async function GET(request: Request) {
     });
   } catch (error: any) {
     console.error('Error fetching transactions:', error);
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
   }
 }
 
@@ -153,8 +164,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Validation failed', details: error.issues }, { status: 400 });
     }
 
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
   } finally {
     session.endSession();
   }

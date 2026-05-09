@@ -23,7 +23,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 interface ItemsClientProps {
-  items: (IItem & { _id: string })[];
+  items: (IItem & { _id: string; serviceUsageCount?: number })[];
 }
 
 export default function ItemsClient({ items }: ItemsClientProps) {
@@ -158,16 +158,22 @@ export default function ItemsClient({ items }: ItemsClientProps) {
                       {item.sku || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col">
-                        <span className={availableQuantity <= item.stock.reorderLevel ? 'text-red-600 font-medium' : 'text-gray-600'}>
-                          {availableQuantity} {item.unitOfMeasure}
+                      {item.itemType === 'service' ? (
+                        <span className="text-gray-600">
+                          {(item as any).serviceUsageCount ?? 0} times
                         </span>
-                        {item.stock.reservedQuantity > 0 && (
-                          <span className="text-xs text-amber-600">
-                            {item.stock.reservedQuantity} reserved
+                      ) : (
+                        <div className="flex flex-col">
+                          <span className={availableQuantity <= item.stock.reorderLevel ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                            {availableQuantity} {item.unitOfMeasure}
                           </span>
-                        )}
-                      </div>
+                          {item.stock.reservedQuantity > 0 && (
+                            <span className="text-xs text-amber-600">
+                              {item.stock.reservedQuantity} reserved
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       ₹{item.pricing.sellingPrice.toFixed(2)}
@@ -184,17 +190,19 @@ export default function ItemsClient({ items }: ItemsClientProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                       <StockAdjustmentDialog
-                         item={item}
-                         onAdjustmentComplete={() => window.location.reload()}
-                       >
-                          <button 
-                            className="text-blue-600 hover:text-blue-900 mr-3"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Adjust Stock
-                          </button>
-                       </StockAdjustmentDialog>
+                       {item.itemType === 'product' && (
+                         <StockAdjustmentDialog
+                           item={item}
+                           onAdjustmentComplete={() => window.location.reload()}
+                         >
+                            <button 
+                              className="text-blue-600 hover:text-blue-900 mr-3"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Adjust Stock
+                            </button>
+                         </StockAdjustmentDialog>
+                       )}
                        <EditItemDialog
                          item={item}
                          onItemUpdated={() => window.location.reload()}

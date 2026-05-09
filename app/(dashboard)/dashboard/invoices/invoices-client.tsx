@@ -1,21 +1,42 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Download, Eye, FileText, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateInvoice from '@/modules/billing/create-invoice';
+import InvoiceShareSheet from '@/components/invoice-share-sheet';
+
+interface TransactionSummary {
+  grandTotal: number;
+  paidAmount: number;
+  dueAmount: number;
+}
+
+interface Transaction {
+  paymentStatus: 'unpaid' | 'partial' | 'paid' | 'void' | 'not-applicable';
+  lineItems: any[];
+  summary: TransactionSummary;
+  party?: {
+    id: string;
+    displayName?: string;
+    name?: string;
+  } | null;
+}
 
 interface Invoice {
   id?: string;
   _id?: string;
   invoiceNumber: string;
-  transactionId: string;
+  transactionId: Transaction;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   dueDate: string | Date;
   totalAmount?: number;
@@ -39,8 +60,12 @@ function getInvoiceId(invoice: Invoice) {
   return invoice.id || invoice._id || invoice.invoiceNumber;
 }
 
-function getPartyName(party?: Invoice['party']) {
-  return party?.displayName || party?.name || '-';
+function getPartyName(invoice: Invoice) {
+  return invoice.transactionId?.party?.displayName 
+      || invoice.transactionId?.party?.name 
+      || invoice.party?.displayName 
+      || invoice.party?.name 
+      || '-';
 }
 
 export default function InvoicesClient() {
@@ -68,7 +93,7 @@ export default function InvoicesClient() {
 
       const res = await fetch(`/api/invoices?${params}`);
       const data = await res.json();
-      
+
       if (res.ok) {
         setInvoices(
           (data.data || []).map((invoice: Invoice) => ({
@@ -117,12 +142,20 @@ export default function InvoicesClient() {
     }
   };
 
+  const getPaymentBadgeClass = (status: string) => {
+    switch (status) {
+      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'partial': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+    }
+  };
+
   const filteredInvoices = invoices.filter(invoice => {
     if (searchQuery === '') return true;
     const query = searchQuery.toLowerCase();
     return (
       invoice.invoiceNumber.toLowerCase().includes(query) ||
-      getPartyName(invoice.party).toLowerCase().includes(query)
+      getPartyName(invoice).toLowerCase().includes(query)
     );
   });
 
@@ -134,10 +167,10 @@ export default function InvoicesClient() {
           <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
           <p className="text-muted-foreground">View and manage all invoices</p>
         </div>
-         <Button onClick={() => setCreateDialogOpen(true)}>
-           <FileText className="mr-2 h-4 w-4" />
-           New Invoice
-         </Button>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <FileText className="mr-2 h-4 w-4" />
+          New Invoice
+        </Button>
       </div>
 
       <Tabs defaultValue="" value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))} className="w-full">
@@ -167,6 +200,7 @@ export default function InvoicesClient() {
                 <th className="px-4 py-3 text-left font-medium">Party</th>
                 <th className="px-4 py-3 text-left font-medium">Due Date</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-medium">Payment</th>
                 <th className="px-4 py-3 text-left font-medium">Amount</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -178,7 +212,7 @@ export default function InvoicesClient() {
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-4 py-3 text-right"><Skeleton className="h-8 w-24 ml-auto" /></td>
@@ -186,7 +220,7 @@ export default function InvoicesClient() {
                 ))
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
                       <FileText className="h-6 w-6 opacity-50" />
                     </div>
@@ -204,7 +238,7 @@ export default function InvoicesClient() {
                       {invoice.invoiceNumber}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {getPartyName(invoice.party)}
+                      {getPartyName(invoice)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {new Date(invoice.dueDate).toLocaleDateString()}
@@ -214,18 +248,40 @@ export default function InvoicesClient() {
                         {invoice.status}
                       </Badge>
                     </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <Badge className={getPaymentBadgeClass(invoice.transactionId?.paymentStatus)}>
+                        {invoice.transactionId?.paymentStatus || '-'}
+                      </Badge>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap font-medium">
-                      ₹{(invoice.totalAmount || 0).toFixed(2)}
+                      ₹{(invoice.totalAmount || invoice.transactionId?.summary?.grandTotal || 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <Button variant="ghost" size="sm" onClick={() => viewInvoice(invoice)} className="mr-1">
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => downloadInvoice(invoice)}>
-                        <Download className="h-4 w-4 mr-1" />
-                        Download
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            Actions
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className='bg-white/80'>
+                          <DropdownMenuItem onClick={() => viewInvoice(invoice)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => downloadInvoice(invoice)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => printInvoice(invoice)}>
+                            <Printer className="mr-2 h-4 w-4" />
+                            Print
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-600">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Cancel Invoice
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))
@@ -262,68 +318,36 @@ export default function InvoicesClient() {
         )}
       </div>
 
-      {/* View Invoice Dialog */}
-      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-3xl">
+      {/* View Invoice Dialog - Full Invoice Preview */}
+      {selectedInvoice && (
+        <InvoicePreviewModal
+          open={viewDialogOpen}
+          onOpenChange={setViewDialogOpen}
+          invoice={selectedInvoice}
+          onDownload={() => downloadInvoice(selectedInvoice)}
+          onPrint={() => printInvoice(selectedInvoice)}
+        />
+      )}
+
+      {/* Create Invoice Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Invoice Details</DialogTitle>
-            <DialogDescription>
-              {selectedInvoice?.invoiceNumber}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedInvoice && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <p className="font-medium">{selectedInvoice.status}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Due Date</p>
-                  <p className="font-medium">{new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Party</p>
-                  <p className="font-medium">{getPartyName(selectedInvoice.party)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="font-medium">{new Date(selectedInvoice.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button onClick={() => downloadInvoice(selectedInvoice)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download PDF
-                </Button>
-              </div>
+            <div className="flex justify-between items-center">
+              <DialogTitle>Create New Invoice</DialogTitle>
             </div>
-          )}
+          </DialogHeader>
+          <CreateInvoice
+            onSuccess={() => {
+              setCreateDialogOpen(false);
+              loadInvoices();
+              toast.success('Invoice created successfully');
+            }}
+            onCancel={() => setCreateDialogOpen(false)}
+          />
         </DialogContent>
-       </Dialog>
+      </Dialog>
 
-       {/* Create Invoice Dialog */}
-       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-           <DialogHeader>
-             <div className="flex justify-between items-center">
-               <DialogTitle>Create New Invoice</DialogTitle>
-               <Button variant="ghost" size="icon" onClick={() => setCreateDialogOpen(false)}>
-                 <X className="h-4 w-4" />
-               </Button>
-             </div>
-           </DialogHeader>
-           <CreateInvoice 
-             onSuccess={() => {
-               setCreateDialogOpen(false);
-               loadInvoices();
-               toast.success('Invoice created successfully');
-             }}
-             onCancel={() => setCreateDialogOpen(false)}
-           />
-         </DialogContent>
-       </Dialog>
-
-     </div>
-   );
- }
+    </div>
+  );
+}

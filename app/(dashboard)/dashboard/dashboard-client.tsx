@@ -1,14 +1,30 @@
 'use client';
 
-import { 
+import { useState, useEffect, useRef, useCallback } from 'react';
+import useSWR from 'swr';
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { 
-  Package, Users, Receipt, 
-  ArrowUpRight, ArrowDownRight, Clock, DollarSign
+import {
+  Package, Users, Receipt,
+  ArrowUpRight, ArrowDownRight, Clock, DollarSign,
+  MoreVertical, CreditCard, MessageCircle,
+  ReceiptIndianRupee,
+  FileText
 } from 'lucide-react';
+import { usePageActions } from '@/components/layout/dashboard-shell';
+import CreatePaymentDialog from '@/components/create-payment-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useTheme } from 'next-themes';
+import { DateRangeFilter } from '@/modules/reports/date-range-filter';
+import Link from 'next/link';
 
 const salesData = [
   { name: 'Jan', sales: 4000, orders: 240 },
@@ -29,6 +45,17 @@ interface LowStockItem {
   };
 }
 
+interface RecentTransaction {
+  id: string;
+  type: string;
+  customer: string;
+  amount: string;
+  paymentStatus: string;
+  date: string;
+  dateIso: string;
+  time: string;
+}
+
 interface DashboardClientProps {
   userName: string;
   stats: {
@@ -38,18 +65,78 @@ interface DashboardClientProps {
     todayRevenue: number;
   };
   lowStockItems: LowStockItem[];
+  recentTransactions: RecentTransaction[];
 }
 
-const recentOrders = [
-  { id: '#INV-001', customer: 'Acme Corp', amount: '₹ 12,450', status: 'Completed', time: '5 min ago' },
-  { id: '#INV-002', customer: 'Global Tech', amount: '₹ 8,920', status: 'Pending', time: '12 min ago' },
-  { id: '#INV-003', customer: 'Prime Suppliers', amount: '₹ 15,670', status: 'Processing', time: '25 min ago' },
-  { id: '#INV-004', customer: 'Metro Industries', amount: '₹ 6,230', status: 'Completed', time: '1 hour ago' },
-];
 
-export default function DashboardClient({ userName, stats, lowStockItems }: DashboardClientProps) {
+export default function DashboardClient({ userName, stats, lowStockItems, recentTransactions }: DashboardClientProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const { setActions } = usePageActions();
+
+  // Set page action buttons
+  useEffect(() => {
+    setActions([
+      {
+        label: 'Payment In',
+        icon: ArrowDownRight,
+        onClick: () => {
+          // Open payment dialog
+        },
+        variant: 'default'
+      },
+      {
+        label: 'Create Invoice',
+        icon: FileText,
+        onClick: () => {
+          // Open create invoice dialog
+        },
+        variant: 'secondary'
+      }
+    ]);
+  }, [setActions]);
+
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+
+  const PAGE_SIZE = 4;
+
+  const getKey = () => {
+    let url = `/api/transactions?page=${page}&limit=${PAGE_SIZE}`;
+    if (startDate) url += `&startDate=${startDate.toISOString()}`;
+    if (endDate) url += `&endDate=${endDate.toISOString()}`;
+    return url;
+  };
+
+  const { data, error, isLoading, mutate } = useSWR(getKey(),
+    (url) => fetch(url).then(res => res.json()),
+    { revalidateOnFocus: false }
+  );
+
+  // Format raw transaction data to match display format
+  const formatTransaction = (tx: any) => ({
+    id: tx.transactionNumber,
+    type: tx.type,
+    customer: tx.party?.displayName || 'Cash Sale',
+    amount: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
+    paymentStatus: tx.paymentStatus,
+    date: new Date(tx.transactionDate).toLocaleDateString('en-IN'),
+    dateIso: new Date(tx.transactionDate).toISOString(),
+    time: new Date(tx.createdAt).toLocaleString()
+  });
+
+  const transactions = data
+    ? data.data.map(formatTransaction)
+    : recentTransactions;
+  const totalPages = data?.pagination?.totalPages || 0;
+  const total = data?.pagination?.total || 0;
+
+  // Reset page on filter change
+  useEffect(() => {
+    setPage(1);
+  }, [startDate, endDate]);
+
 
   const statsCards = [
     {
@@ -90,100 +177,25 @@ export default function DashboardClient({ userName, stats, lowStockItems }: Dash
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Good Morning, {userName} 👋</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Here's what's happening with your business today
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Good Morning, {userName}</h1>
         </div>
         <div className="mt-4 sm:mt-0 flex items-center gap-3">
           <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Grid - Fully Mobile Optimized */}
+      <div className="grid gap-3 md:gap-5 grid-cols-2 lg:grid-cols-4">
         {statsCards.map((stat, index) => (
           <div key={index} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden hover:shadow-md transition-shadow">
-            <div className="p-5">
-              <div className="flex items-start justify-between">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center text-white`}>
-                  {stat.icon}
-                </div>
-                <span className={`inline-flex items-center text-xs font-medium ${stat.positive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {stat.positive ? <ArrowUpRight className="w-3 h-3 mr-1" /> : <ArrowDownRight className="w-3 h-3 mr-1" />}
-                  {stat.change}
-                </span>
-              </div>
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">{stat.title}</h3>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
+            <div className="px-2 md:px-3">
+              <div className="mt-3 md:mt-4">
+                <h3 className="text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400">{stat.title}</h3>
+                <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
               </div>
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Sales Overview</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Monthly sales performance</p>
-            </div>
-          </div>
-          <div className="h-72 w-full min-w-[300px]">
-            <ResponsiveContainer width="100%" height={280} minWidth={300}>
-              <AreaChart data={salesData}>
-                <defs>
-                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: isDark ? '#1f2937' : '#fff', 
-                    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`, 
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                  }}
-                />
-                <Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Orders Trend</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Last 6 months</p>
-            </div>
-          </div>
-          <div className="h-72 w-full min-w-[200px]">
-            <ResponsiveContainer width="100%" height={280} minWidth={200}>
-              <BarChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} vertical={false} />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: isDark ? '#1f2937' : '#fff', 
-                    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`, 
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                  }}
-                />
-                <Bar dataKey="orders" fill="#10b981" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
 
       {/* Low Stock Alerts */}
@@ -229,45 +241,188 @@ export default function DashboardClient({ userName, stats, lowStockItems }: Dash
 
       {/* Recent Orders */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Recent Transactions</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Latest 4 orders</p>
+        <div className="px-4 md:px-6 py-4 md:py-5 border-b border-gray-100 dark:border-gray-800">
+
+          {/* Desktop Layout */}
+          <div className="hidden md:flex items-start justify-between">
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              onDateChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
+            />
+            <div className="text-right">
+              <Link href="/dashboard/transactions" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-1">
+                View all
+              </Link>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Latest Transactions</h3>
             </div>
-            <button className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-              View all
-            </button>
           </div>
+
+          {/* Mobile Layout */}
+          <div className="md:hidden space-y-3">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Latest Transactions</h3>
+            <div className="flex items-center justify-between">
+              <DateRangeFilter
+                startDate={startDate}
+                endDate={endDate}
+                onDateChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+              />
+              <Link href="/dashboard/transactions" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                View all
+              </Link>
+            </div>
+          </div>
+
         </div>
         <div className="divide-y divide-gray-50 dark:divide-gray-800">
-          {recentOrders.map((order, index) => (
-            <div key={index} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                    <Receipt className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+          {transactions.map((transaction: RecentTransaction, index: number) => (
+            <div key={index} className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <Receipt className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white">{transaction.id} - {transaction.customer}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${transaction.type === 'sale' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                          transaction.type === 'purchase' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                            transaction.type === 'payment-in' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                              transaction.type === 'payment-out' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                          }`}>
+                          {transaction.type}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {transaction.date}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{order.id} - {order.customer}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {order.time}
-                    </p>
+                  <div className="text-right">
+                    <p className="text-xs md:text-sm font-semibold text-gray-900 dark:text-white">{transaction.amount}</p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${transaction.paymentStatus === 'paid' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                      transaction.paymentStatus === 'partial' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
+                        transaction.paymentStatus === 'unpaid' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                          'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                      }`}>
+                      {transaction.paymentStatus}
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{order.amount}</p>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'Completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                    order.status === 'Pending' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
-                    'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
+
+                {(transaction.paymentStatus === 'unpaid' || transaction.paymentStatus === 'partial') && (
+                  <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <CreatePaymentDialog type="payment-in" onCreated={() => mutate()}>
+                      <Button variant="ghost" size="sm" className="flex-1 h-9 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20">
+                        <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
+                        Record Payment
+                      </Button>
+                    </CreatePaymentDialog>
+
+                    <Button variant="ghost" size="sm" className="flex-1 h-9 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20" onClick={() => {
+                      const message = `*Transaction Details*\n-------------------\nInvoice #: ${transaction.id}\nCustomer: ${transaction.customer}\nAmount: ${transaction.amount}\nStatus: ${transaction.paymentStatus}\n\nSent from GSMS Shop Management System`;
+                      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+                    }}>
+                      <svg className="h-4 w-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+                      </svg>
+                      Share
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Pagination buttons - ALL SCREEN SIZES */}
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1 || isLoading}
+            className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Page {page} of {totalPages} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || isLoading}
+            className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Sales Overview</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Monthly sales performance</p>
+            </div>
+          </div>
+          <div className="h-72 w-full min-w-72">
+            <ResponsiveContainer width="100%" height={280} minWidth={300}>
+              <AreaChart data={salesData}>
+                <defs>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: isDark ? '#1f2937' : '#fff',
+                    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
+                <Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Orders Trend</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Last 6 months</p>
+            </div>
+          </div>
+          <div className="h-72 w-full min-w-72">
+            <ResponsiveContainer width="100%" height={280} minWidth={200}>
+              <BarChart data={salesData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} vertical={false} />
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: isDark ? '#1f2937' : '#fff',
+                    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
+                <Bar dataKey="orders" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>

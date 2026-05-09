@@ -73,7 +73,9 @@ export async function GET(
     });
 
   } catch (error: any) {
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Failed to generate PDF' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Failed to generate PDF' }, { status: validStatus });
   }
 }

@@ -11,14 +11,11 @@ import StockMovement from '@/models/StockMovement';
 
 
 async function generateInvoiceNumber(ownerId: string): Promise<string> {
-  // Get financial year (April to March)
+  // Get last 2 digits of current year
   const now = new Date();
-  let financialYear = now.getFullYear();
-  if (now.getMonth() < 3) { // Before April
-    financialYear -= 1;
-  }
+  const shortYear = now.getFullYear().toString().slice(-2);
   
-  const prefix = `INV-${financialYear}`;
+  const prefix = `INV-${shortYear}`;
   
   // Atomic counter implementation with database lock
   // This ensures sequential numbering with no gaps even under concurrent load
@@ -30,17 +27,21 @@ async function generateInvoiceNumber(ownerId: string): Promise<string> {
   const counter = await mongoose.connection.db.collection('invoice_counters').findOneAndUpdate(
     { owner: ownerId, prefix },
     { $inc: { sequence: 1 } },
-    { upsert: true, returnDocument: 'after' }
-  );
+    { 
+      upsert: true, 
+      returnDocument: 'after',
+      includeResultMetadata: true
+    }
+  ) as unknown as { value?: { sequence: number } } | null;
   
-  if (!counter || !counter.value) {
-    throw new AppError('Failed to generate invoice number', 500);
+  let sequenceNumber = 1;
+  
+  if (counter?.value) {
+    sequenceNumber = counter.value.sequence;
   }
-
-  const sequenceNumber = counter.value.sequence;
   
-  // Format as INV-2025-00001
-  return `${prefix}-${sequenceNumber.toString().padStart(5, '0')}`;
+  // Format as INV-261, INV-262, INV-263 etc.
+  return `${prefix}${sequenceNumber}`;
 }
 
 const createInvoiceSchema = z.object({
@@ -58,6 +59,10 @@ const createInvoiceSchema = z.object({
     discountAmount: z.coerce.number().min(0).default(0),
     taxRate: z.coerce.number().min(0).max(100).default(0),
     costPrice: z.coerce.number().optional().nullable(),
+  })).default([]),
+  additionalCharges: z.array(z.object({
+    name: z.string().min(1, "Charge name is required"),
+    amount: z.coerce.number().min(0, "Amount must be positive"),
   })).default([]),
   summary: z.object({
     roundOff: z.coerce.number().default(0),
@@ -84,13 +89,22 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const status = searchParams.get('status');
 
-    const query: any = {};
+    const query: any = { owner: user.id };
+    
+    if (user.activeShopId) {
+      query.shopId = user.activeShopId;
+    }
+    
     if (status) query.status = status;
 
     const invoices = await Invoice.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
+      .populate({
+        path: "transactionId",
+        populate: { path: "party", select: "displayName name phone email billingAddress" },
+      })
       .lean();
 
     const total = await Invoice.countDocuments(query);
@@ -105,8 +119,10 @@ export async function GET(request: Request) {
       },
     });
   } catch (error: any) {
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
   }
 }
 
@@ -212,8 +228,10 @@ export async function PATCH(request: Request) {
   } catch (error: any) {
     await session.abortTransaction();
     
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Operation failed' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Operation failed' }, { status: validStatus });
   } finally {
     session.endSession();
   }
@@ -251,6 +269,8 @@ export async function POST(request: Request) {
     // Create invoice record
     const [invoice] = await Invoice.create([{
       transactionId: transaction._id,
+      owner: user.id,
+      shopId: user.activeShopId ?? null,
       invoiceNumber,
       dueDate: validated.dueDate,
       termsAndConditions: validated.termsAndConditions,
@@ -307,6 +327,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // Update the transaction with the invoice reference
+    await Transaction.findOneAndUpdate(
+      { _id: transaction._id },
+      { $set: { invoiceId: invoice._id } },
+      { session }
+    );
+
     await session.commitTransaction();
 
     return NextResponse.json({
@@ -321,14 +348,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Validation failed', details: error.issues }, { status: 400 });
     }
 
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
   } finally {
     session.endSession();
   }
 }
 
-async function handleGenerateInvoice(request: Request) {
+export async function handleGenerateInvoice(request: Request) {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -362,6 +391,8 @@ async function handleGenerateInvoice(request: Request) {
     // Create invoice record
     const [invoice] = await Invoice.create([{
       transactionId: transaction._id,
+      owner: user.id,
+      shopId: user.activeShopId ?? null,
       invoiceNumber,
       dueDate: transaction.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       termsAndConditions: null,
@@ -370,6 +401,13 @@ async function handleGenerateInvoice(request: Request) {
       createdBy: user.id,
       updatedBy: user.id,
     }], { session });
+
+    // Update the transaction with the invoice reference
+    await Transaction.findOneAndUpdate(
+      { _id: transaction._id },
+      { $set: { invoiceId: invoice._id } },
+      { session }
+    );
 
     await session.commitTransaction();
 
@@ -381,8 +419,10 @@ async function handleGenerateInvoice(request: Request) {
   } catch (error: any) {
     await session.abortTransaction();
     
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.message || 'Failed to generate invoice' }, { status });
+    // Safe HTTP status code handling with proper validation and clamping
+    const status = Number(error.status) || 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json({ error: error.message || 'Failed to generate invoice' }, { status: validStatus });
   } finally {
     session.endSession();
   }

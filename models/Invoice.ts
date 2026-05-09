@@ -7,6 +7,8 @@ export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
 export interface IInvoice {
   transactionId: Types.ObjectId;
+  owner: Types.ObjectId;
+  shopId?: Types.ObjectId | null;
   invoiceNumber: string;
   status: InvoiceStatus;
   dueDate: Date;
@@ -23,13 +25,25 @@ type InvoiceModel = Model<IInvoice>;
 
 const invoiceSchema = new Schema<IInvoice, InvoiceModel>(
   {
-    transactionId: {
-      type: Schema.Types.ObjectId,
-      ref: "Transaction",
-      required: true,
-      unique: true,
-      index: true,
-    },
+  transactionId: {
+    type: Schema.Types.ObjectId,
+    ref: "Transaction",
+    required: true,
+    unique: true,
+    index: true,
+  },
+  owner: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true,
+  },
+  shopId: {
+    type: Schema.Types.ObjectId,
+    ref: "Shop",
+    index: true,
+    default: null,
+  },
     invoiceNumber: {
       type: String,
       required: true,
@@ -98,14 +112,6 @@ const invoiceSchema = new Schema<IInvoice, InvoiceModel>(
 
 invoiceSchema.index({ invoiceNumber: 1 }, { unique: true });
 
-// Auto populate transaction
-invoiceSchema.pre(/^find/, function (this: any, next: any) {
-  this.populate({
-    path: "transactionId",
-    populate: { path: "party", select: "name phone email billingAddress" },
-  });
-  next();
-});
 
 const Invoice =
   (mongoose.models.Invoice as InvoiceModel | undefined) ??

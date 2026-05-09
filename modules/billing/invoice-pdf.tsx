@@ -120,6 +120,11 @@ interface InvoiceLineItem {
   lineTotal: number;
 }
 
+interface AdditionalCharge {
+  name: string;
+  amount: number;
+}
+
 interface InvoiceData {
   invoiceNumber: string;
   invoiceDate: string;
@@ -131,6 +136,7 @@ interface InvoiceData {
     address?: string;
   };
   lineItems: InvoiceLineItem[];
+  additionalCharges?: AdditionalCharge[];
   subtotal: number;
   discountTotal: number;
   taxTotal: number;
@@ -197,16 +203,28 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => (
           <Text>Tax</Text>
           <Text>₹ {invoice.taxTotal.toFixed(2)}</Text>
         </View>
+        {invoice.additionalCharges && invoice.additionalCharges.length > 0 && (
+          <>
+            <View style={{ borderTopWidth: 1, borderTopColor: '#eee', marginVertical: 4 }} />
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#666', marginBottom: 2 }}>Additional Charges</Text>
+            {invoice.additionalCharges.map((charge, index) => (
+              <View key={index} style={[styles.summaryRow, { fontSize: 9 }]}>
+                <Text>{charge.name}</Text>
+                <Text>₹ {Number(charge.amount).toFixed(2)}</Text>
+              </View>
+            ))}
+          </>
+        )}
         <View style={styles.totalRow}>
           <Text>Total</Text>
           <Text>₹ {invoice.grandTotal.toFixed(2)}</Text>
         </View>
       </View>
 
-      {invoice.notes && (
+      {invoice.termsAndConditions && (
         <View style={{ marginTop: 30 }}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <Text style={{ fontSize: 10 }}>{invoice.notes}</Text>
+          <Text style={styles.sectionTitle}>Terms & Conditions</Text>
+          <Text style={{ fontSize: 10 }}>{invoice.termsAndConditions}</Text>
         </View>
       )}
 

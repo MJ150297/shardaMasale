@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import Item from '@/models/Item';
+import Transaction from '@/models/Transaction';
 
 const createItemSchema = z.object({
   name: z.string().min(1).max(200),
@@ -165,8 +166,51 @@ export async function GET(request: Request) {
 
     const total = await Item.countDocuments(query);
 
+    // Compute service usage counts for service-type items
+    const serviceItemIds = items
+      .filter(i => i.itemType === 'service')
+      .map(i => i._id);
+
+    let serviceUsageMap = new Map<string, number>();
+
+    if (serviceItemIds.length > 0) {
+      const usageCounts = await Transaction.aggregate([
+        {
+          $match: {
+            type: 'sale',
+            status: 'confirmed',
+            'lineItems.item': { $in: serviceItemIds },
+          },
+        },
+        { $unwind: '$lineItems' },
+        {
+          $match: {
+            'lineItems.item': { $in: serviceItemIds },
+          },
+        },
+        {
+          $group: {
+            _id: '$lineItems.item',
+            totalQuantity: { $sum: { $ifNull: ['$lineItems.quantity', 0] } },
+          },
+        },
+      ]);
+
+      for (const entry of usageCounts) {
+        serviceUsageMap.set(entry._id.toString(), entry.totalQuantity);
+      }
+    }
+
+    const itemsWithUsage = items.map(item => ({
+      ...item,
+      serviceUsageCount:
+        item.itemType === 'service'
+          ? (serviceUsageMap.get(item._id.toString()) || 0)
+          : undefined,
+    }));
+
     return NextResponse.json({
-      items,
+      items: itemsWithUsage,
       pagination: {
         page,
         limit,
@@ -201,6 +245,10 @@ export async function PUT(request: Request) {
     }
 
     const validatedData = createItemSchema.partial().parse(data);
+    // Use raw data to check which fields were actually sent by the client,
+    // since Zod partial() applies default values to sub-schemas when the parent key is present
+    // (e.g. { pricing: { sellingPrice: 150 } } becomes costPrice: 0, purchasePrice: 0 after Zod parse)
+    const rawData = data as Record<string, unknown>;
 
     // Check for duplicate SKU if provided and changed
     if (validatedData.sku && validatedData.sku !== item.sku) {
@@ -226,10 +274,53 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Build $set for targeted partial updates — only fields actually present in raw request data
+    const setFields: Record<string, any> = {};
+
+    if ('name' in rawData) setFields.name = validatedData.name;
+    if ('description' in rawData) setFields.description = validatedData.description;
+    if ('itemType' in rawData) setFields.itemType = validatedData.itemType;
+    if ('category' in rawData) setFields.category = validatedData.category;
+    if ('brand' in rawData) setFields.brand = validatedData.brand;
+    if ('unitOfMeasure' in rawData) setFields.unitOfMeasure = validatedData.unitOfMeasure;
+    if ('sku' in rawData) setFields.sku = validatedData.sku;
+    if ('barcode' in rawData) setFields.barcode = validatedData.barcode;
+    if ('hsnCode' in rawData) setFields.hsnCode = validatedData.hsnCode;
+    if ('sacCode' in rawData) setFields.sacCode = validatedData.sacCode;
+    if ('purchaseTaxRate' in rawData) setFields.purchaseTaxRate = validatedData.purchaseTaxRate;
+    if ('saleTaxRate' in rawData) setFields.saleTaxRate = validatedData.saleTaxRate;
+    if ('taxRate' in rawData) setFields.taxRate = validatedData.taxRate;
+    if ('status' in rawData) setFields.status = validatedData.status;
+    if ('trackInventory' in rawData) setFields.trackInventory = validatedData.trackInventory;
+    if ('trackBatch' in rawData) setFields.trackBatch = validatedData.trackBatch;
+    if ('trackExpiry' in rawData) setFields.trackExpiry = validatedData.trackExpiry;
+    if ('batchNumber' in rawData) setFields.batchNumber = validatedData.batchNumber;
+    if ('expiryDate' in rawData) setFields.expiryDate = validatedData.expiryDate;
+    if ('tags' in rawData) setFields.tags = validatedData.tags;
+
+    // Handle pricing subdocument fields — check raw pricing data for individual field presence
+    const rawPricing = rawData.pricing as Record<string, unknown> | undefined;
+    if (rawPricing) {
+      if ('costPrice' in rawPricing) setFields['pricing.costPrice'] = validatedData.pricing!.costPrice;
+      if ('purchasePrice' in rawPricing) setFields['pricing.purchasePrice'] = validatedData.pricing!.purchasePrice;
+      if ('sellingPrice' in rawPricing) setFields['pricing.sellingPrice'] = validatedData.pricing!.sellingPrice;
+      if ('mrp' in rawPricing) setFields['pricing.mrp'] = validatedData.pricing!.mrp;
+    }
+
+    // Handle stock subdocument fields — check raw stock data for individual field presence
+    const rawStock = rawData.stock as Record<string, unknown> | undefined;
+    if (rawStock) {
+      if ('openingQuantity' in rawStock) setFields['stock.openingQuantity'] = validatedData.stock!.openingQuantity;
+      if ('reorderLevel' in rawStock) setFields['stock.reorderLevel'] = validatedData.stock!.reorderLevel;
+      if ('reorderQuantity' in rawStock) setFields['stock.reorderQuantity'] = validatedData.stock!.reorderQuantity;
+      if ('allowNegativeStock' in rawStock) setFields['stock.allowNegativeStock'] = validatedData.stock!.allowNegativeStock;
+      if ('location' in rawStock) setFields['stock.location'] = validatedData.stock!.location;
+    }
+
     const updatedItem = await Item.findByIdAndUpdate(
       id,
-      normalizeItemTaxRates(validatedData, item),
-      { new: true }
+      { $set: setFields },
+      { new: true, runValidators: true }
     );
 
     return NextResponse.json(updatedItem);

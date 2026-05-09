@@ -258,6 +258,7 @@ export default function TransactionsClient() {
 
       if (response.ok) {
         toast.success('Invoice generated successfully');
+        await loadTransactions();
       } else {
         const error = await response.json();
         toast.error(error.message || 'Failed to generate invoice');
@@ -382,7 +383,6 @@ export default function TransactionsClient() {
               <tr className="border-b bg-muted/50">
                 <th className="px-4 py-3 text-left font-medium">Date</th>
                 <th className="px-4 py-3 text-left font-medium">Party</th>
-                <th className="px-4 py-3 text-left font-medium">Items</th>
                 <th className="px-4 py-3 text-left font-medium">Item Type</th>
                 <th className="px-4 py-3 text-left font-medium">Type</th>
                 <th className="px-4 py-3 text-left font-medium">Total</th>
@@ -398,7 +398,6 @@ export default function TransactionsClient() {
                   <tr key={i} className="border-b">
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
@@ -410,7 +409,7 @@ export default function TransactionsClient() {
                 ))
               ) : filteredTransactions.length === 0 ? (
                 <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center">
+                    <td colSpan={9} className="px-4 py-12 text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
                       <span className="text-2xl">📋</span>
                     </div>
@@ -426,9 +425,6 @@ export default function TransactionsClient() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {getPartyName(transaction.party)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {transaction.lineItems?.length || 0} items
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <Badge className={getItemTypeBadgeClass(getTransactionItemType(transaction))}>
