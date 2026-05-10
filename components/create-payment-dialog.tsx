@@ -41,6 +41,8 @@ interface CreatePaymentDialogProps {
   type: PaymentDialogType;
   onCreated?: () => void;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function getDialogCopy(type: PaymentDialogType) {
@@ -67,8 +69,10 @@ function getDialogCopy(type: PaymentDialogType) {
   };
 }
 
-export default function CreatePaymentDialog({ type, onCreated, children }: CreatePaymentDialogProps) {
-  const [open, setOpen] = useState(false);
+export default function CreatePaymentDialog({ type, onCreated, children, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreatePaymentDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [loading, setLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'draft' | 'confirmed' | null>(null);
   const [parties, setParties] = useState<any[]>([]);
@@ -169,14 +173,16 @@ export default function CreatePaymentDialog({ type, onCreated, children }: Creat
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || (
-          <Button className={copy.buttonClassName}>
-            {copy.buttonLabel}
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-xl bg-white">
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button className={copy.buttonClassName}>
+              {copy.buttonLabel}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-xl bg-white rounded-none sm:rounded-lg p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
           <DialogDescription>{copy.description}</DialogDescription>
@@ -410,7 +416,7 @@ export default function CreatePaymentDialog({ type, onCreated, children }: Creat
               )}
             />
 
-            <div className="flex justify-end gap-3 border-t pt-4">
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 border-t pt-4">
               <Button
                 type="button"
                 variant="outline"

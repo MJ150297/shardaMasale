@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,10 +11,19 @@ import {
   ArrowUpRight, ArrowDownRight, Clock, DollarSign,
   MoreVertical, CreditCard, MessageCircle,
   ReceiptIndianRupee,
-  FileText
+  FileText,
+  ArrowUp,
+  Plus
 } from 'lucide-react';
 import { usePageActions } from '@/components/layout/dashboard-shell';
 import CreatePaymentDialog from '@/components/create-payment-dialog';
+import CreateInvoice from '@/modules/billing/create-invoice';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -74,26 +83,37 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const isDark = resolvedTheme === 'dark';
   const { setActions } = usePageActions();
 
+  // Compute dynamic greeting based on time of day
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon';
+    if (hour >= 17 && hour < 21) return 'Good Evening';
+    return 'Good Night';
+  }, []);
+
+  // Dialog open states
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
+
   // Set page action buttons
   useEffect(() => {
     setActions([
       {
         label: 'Payment In',
         icon: ArrowDownRight,
-        onClick: () => {
-          // Open payment dialog
-        },
+        onClick: () => setPaymentDialogOpen(true),
         variant: 'default'
       },
       {
-        label: 'Create Invoice',
+        label: 'Add Bill',
         icon: FileText,
-        onClick: () => {
-          // Open create invoice dialog
-        },
+        onClick: () => setCreateInvoiceOpen(true),
         variant: 'secondary'
       }
     ]);
+
+    return () => setActions([]);
   }, [setActions]);
 
   const [startDate, setStartDate] = useState<Date | undefined>();
@@ -175,12 +195,13 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Good Morning, {userName}</h1>
-        </div>
-        <div className="mt-4 sm:mt-0 flex items-center gap-3">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+          {greeting}, {userName}
+        </h1>
+        <div className="flex items-center gap-1.5 text-xs md:text-sm text-muted-foreground">
+          <Clock className="size-3.5" />
+          <span>Updated just now</span>
         </div>
       </div>
 
@@ -425,6 +446,33 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
           </div>
         </div>
       </div>
+
+      {/* Payment In Dialog - controlled from mobile action buttons */}
+      <CreatePaymentDialog
+        type="payment-in"
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        onCreated={() => {
+          setPaymentDialogOpen(false);
+          mutate();
+        }}
+      />
+
+      {/* Add Bill / Create Invoice Dialog - controlled from mobile action buttons */}
+      <Dialog open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
+        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Invoice</DialogTitle>
+          </DialogHeader>
+          <CreateInvoice
+            onSuccess={() => {
+              setCreateInvoiceOpen(false);
+              mutate();
+            }}
+            onCancel={() => setCreateInvoiceOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
