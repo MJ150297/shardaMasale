@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import EditPartyDialog from '@/components/edit-party-dialog';
@@ -18,7 +18,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Edit, Trash2, Send, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown } from 'lucide-react';
+import DataTableToolbar from '@/components/data-table-toolbar';
+import CreateSaleDialog from '@/components/create-sale-dialog';
+import CreatePurchaseDialog from '@/components/create-purchase-dialog';
+import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
+import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 
 interface Party {
   _id: string;
@@ -44,16 +49,50 @@ interface PartyClientWrapperProps {
   children: React.ReactNode;
 }
 
+interface TransactionLineItem {
+  item?: { itemType?: string } | null;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface TransactionSummary {
+  grandTotal: number;
+  paidAmount: number;
+  dueAmount: number;
+}
+
 interface Transaction {
   _id: string;
   transactionNumber: string;
-  type: 'sale' | 'purchase' | 'sale-return' | 'purchase-return' | 'payment-in' | 'payment-out';
+  type: 'sale' | 'purchase' | 'sale-return' | 'purchase-return' | 'payment-in' | 'payment-out' | 'adjustment' | 'opening-balance';
   status: 'draft' | 'confirmed' | 'cancelled';
+  paymentStatus?: string;
   transactionDate: string;
-  summary: {
-    grandTotal: number;
-  };
-  lineItems: any[];
+  summary: TransactionSummary;
+  lineItems: TransactionLineItem[];
+  invoiceId?: { _id: string; invoiceNumber: string; status: string } | null;
+}
+
+interface InvoiceTransactionParty {
+  displayName?: string;
+  name?: string;
+}
+
+interface InvoiceTransaction {
+  _id: string;
+  summary: { grandTotal: number; paidAmount: number; dueAmount: number };
+  paymentStatus: string;
+  party?: InvoiceTransactionParty | null;
+}
+
+interface Invoice {
+  _id: string;
+  invoiceNumber: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  dueDate: string;
+  transactionId: InvoiceTransaction;
+  createdAt: string;
 }
 
 interface Pagination {
@@ -67,14 +106,26 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Transactions state (separate page state to avoid infinite loop with useCallback)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 0,
-  });
+  const [transactionPage, setTransactionPage] = useState(1);
+  const [transPagination, setTransPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+
+  // Invoices state
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invPagination, setInvPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+
+  // Search filters
+  const [txnSearchQuery, setTxnSearchQuery] = useState('');
+  const [invSearchQuery, setInvSearchQuery] = useState('');
+
+  // Stable ref for partyId to avoid useCallback dependency churn
+  const partyIdRef = useRef(party._id);
+  partyIdRef.current = party._id;
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -107,13 +158,14 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     router.refresh();
   };
 
+  // Load transactions - stable callback, depends only on numeric page
   const loadTransactions = useCallback(async () => {
     try {
       setTransactionsLoading(true);
       const params = new URLSearchParams({
-        page: pagination.page.toString(),
-        limit: pagination.limit.toString(),
-        party: party._id,
+        page: transactionPage.toString(),
+        limit: '20',
+        party: partyIdRef.current,
       });
 
       const res = await fetch(`/api/transactions?${params}`);
@@ -121,20 +173,73 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
 
       if (res.ok) {
         setTransactions(data.data || []);
-        setPagination(data.pagination);
+        setTransPagination(data.pagination);
       }
     } catch (error) {
       console.error('Failed to load transactions:', error);
     } finally {
       setTransactionsLoading(false);
     }
-  }, [pagination.page, pagination.limit, party._id]);
+  }, [transactionPage]);
 
+  // Load invoices - stable callback, depends only on numeric page
+  const loadInvoices = useCallback(async () => {
+    try {
+      setInvoicesLoading(true);
+      const params = new URLSearchParams({
+        page: invoicePage.toString(),
+        limit: '20',
+        party: partyIdRef.current,
+      });
+
+      const res = await fetch(`/api/invoices?${params}`);
+      const data = await res.json();
+
+      if (res.ok) {
+        setInvoices(data.data || []);
+        setInvPagination(data.pagination);
+      }
+    } catch (error) {
+      console.error('Failed to load invoices:', error);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [invoicePage]);
+
+  // Trigger transaction load when tab is "transactions" or "overview"
   useEffect(() => {
-    if (activeTab === 'transactions') {
+    if (activeTab === 'transactions' || activeTab === 'overview') {
       loadTransactions();
     }
-  }, [activeTab, pagination.page, loadTransactions]);
+  }, [activeTab, transactionPage, loadTransactions]);
+
+  // Trigger invoice load when tab is "invoices" or "overview"
+  useEffect(() => {
+    if (activeTab === 'invoices' || activeTab === 'overview') {
+      loadInvoices();
+    }
+  }, [activeTab, invoicePage, loadInvoices]);
+
+  // Filter transactions by search
+  const filteredTransactions = transactions.filter(txn => {
+    if (txnSearchQuery === '') return true;
+    const q = txnSearchQuery.toLowerCase();
+    return (
+      txn.transactionNumber.toLowerCase().includes(q) ||
+      txn.type.toLowerCase().includes(q) ||
+      txn.status.toLowerCase().includes(q)
+    );
+  });
+
+  // Filter invoices by search
+  const filteredInvoices = invoices.filter(inv => {
+    if (invSearchQuery === '') return true;
+    const q = invSearchQuery.toLowerCase();
+    return (
+      inv.invoiceNumber.toLowerCase().includes(q) ||
+      inv.status.toLowerCase().includes(q)
+    );
+  });
 
   const getTypeBadgeClass = (type: string) => {
     switch (type) {
@@ -157,8 +262,29 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     }
   };
 
+  const getInvoiceStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'sent': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'draft': return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+      case 'overdue': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+    }
+  };
+
+  const getPaymentBadgeClass = (status: string) => {
+    switch (status) {
+      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'partial': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'unpaid': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -182,11 +308,6 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
               Edit
             </Button>
           </EditPartyDialog>
-
-          <Button variant="outline" size="sm">
-            <Send className="w-4 h-4 mr-2" />
-            Send Invite
-          </Button>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -218,26 +339,395 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
         </div>
       </div>
 
-      {children}
+      {/* Tab Navigation + Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex gap-1 bg-muted rounded-lg p-1" role="tablist">
+          <button
+            role="tab"
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'overview'
+                ? 'bg-white dark:bg-gray-800 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab('overview')}
+          >
+            Overview
+          </button>
+          <button
+            role="tab"
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'transactions'
+                ? 'bg-white dark:bg-gray-800 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab('transactions')}
+          >
+            Transactions
+          </button>
+          <button
+            role="tab"
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'invoices'
+                ? 'bg-white dark:bg-gray-800 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab('invoices')}
+          >
+            Invoices
+          </button>
+          <button
+            role="tab"
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              activeTab === 'notes'
+                ? 'bg-white dark:bg-gray-800 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab('notes')}
+          >
+            Notes
+          </button>
+        </div>
+
+        <div className="flex gap-2 shrink-0">
+          {(party.partyType === 'customer' || party.partyType === 'both') && (
+            <CreateSaleDialog
+              onSaleCreated={() => { router.refresh(); }}
+              initialParty={party._id}
+            >
+              <Button variant="outline" size="sm">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                New Sale
+              </Button>
+            </CreateSaleDialog>
+          )}
+          {(party.partyType === 'supplier' || party.partyType === 'both') && (
+            <CreatePurchaseDialog
+              onPurchaseCreated={() => { router.refresh(); }}
+              initialParty={party._id}
+            >
+              <Button variant="outline" size="sm">
+                <ArrowUpDown className="w-4 h-4 mr-2" />
+                New Purchase
+              </Button>
+            </CreatePurchaseDialog>
+          )}
+        </div>
+      </div>
+
+      {/* === TRANSACTIONS TAB === */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-4">
+          {transactions.length > 0 && (
+            <DataTableToolbar
+              onSearch={setTxnSearchQuery}
+              searchPlaceholder="Search transactions..."
+            />
+          )}
+
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <div className="relative overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-4 py-3 text-left font-medium">Date</th>
+                    <th className="px-4 py-3 text-left font-medium">Transaction #</th>
+                    <th className="px-4 py-3 text-left font-medium">Type</th>
+                    <th className="px-4 py-3 text-left font-medium">Items</th>
+                    <th className="px-4 py-3 text-left font-medium">Amount</th>
+                    <th className="px-4 py-3 text-left font-medium">Payment</th>
+                    <th className="px-4 py-3 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactionsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b">
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                      </tr>
+                    ))
+                  ) : filteredTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center">
+                        <Clock className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
+                        <h3 className="text-lg font-medium text-gray-500">No transactions found</h3>
+                        <p className="text-sm text-gray-400 mt-1">No transactions for this party yet</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTransactions.map((txn) => (
+                      <tr key={txn._id} className="border-b hover:bg-muted/50">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {new Date(txn.transactionDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">
+                          {txn.transactionNumber}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={getTypeBadgeClass(txn.type)}>
+                            {txn.type}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {txn.lineItems?.length || 0} items
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">
+                          ₹{(txn.summary.grandTotal || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={getPaymentBadgeClass(txn.paymentStatus || 'unpaid')}>
+                            {txn.paymentStatus || 'unpaid'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={getStatusBadgeClass(txn.status)}>
+                            {txn.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {transPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-muted-foreground">
+                  Showing {((transPagination.page - 1) * transPagination.limit) + 1} to {Math.min(transPagination.page * transPagination.limit, transPagination.total)} of {transPagination.total}
+                </p>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => setTransactionPage(prev => Math.max(prev - 1, 1))}
+                    disabled={transPagination.page <= 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => setTransactionPage(prev => Math.min(prev + 1, transPagination.totalPages))}
+                    disabled={transPagination.page >= transPagination.totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* === INVOICES TAB === */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          {invoices.length > 0 && (
+            <DataTableToolbar
+              onSearch={setInvSearchQuery}
+              searchPlaceholder="Search invoices..."
+            />
+          )}
+
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <div className="relative overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-4 py-3 text-left font-medium">Date</th>
+                    <th className="px-4 py-3 text-left font-medium">Invoice #</th>
+                    <th className="px-4 py-3 text-left font-medium">Due Date</th>
+                    <th className="px-4 py-3 text-left font-medium">Amount</th>
+                    <th className="px-4 py-3 text-left font-medium">Payment</th>
+                    <th className="px-4 py-3 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoicesLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b">
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                      </tr>
+                    ))
+                  ) : filteredInvoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-12 text-center">
+                        <FileText className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
+                        <h3 className="text-lg font-medium text-gray-500">No invoices found</h3>
+                        <p className="text-sm text-gray-400 mt-1">No invoices for this party yet</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInvoices.map((inv) => (
+                      <tr key={inv._id} className="border-b hover:bg-muted/50">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">
+                          {inv.invoiceNumber}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {new Date(inv.dueDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">
+                          ₹{(inv.transactionId?.summary?.grandTotal || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={getPaymentBadgeClass(inv.transactionId?.paymentStatus || 'unpaid')}>
+                            {inv.transactionId?.paymentStatus || 'unpaid'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Badge className={getInvoiceStatusBadgeClass(inv.status)}>
+                            {inv.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {invPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-sm text-muted-foreground">
+                  Showing {((invPagination.page - 1) * invPagination.limit) + 1} to {Math.min(invPagination.page * invPagination.limit, invPagination.total)} of {invPagination.total}
+                </p>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => setInvoicePage(prev => Math.max(prev - 1, 1))}
+                    disabled={invPagination.page <= 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => setInvoicePage(prev => Math.min(prev + 1, invPagination.totalPages))}
+                    disabled={invPagination.page >= invPagination.totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* === OVERVIEW TAB === */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {children}
+
+          {/* Activity Summary */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+            <h3 className="text-lg font-semibold mb-4">Activity Summary</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <p className="text-sm text-gray-500">Total Transactions</p>
+                <p className="text-2xl font-bold">{transPagination.total || 0}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-gray-500">Total Invoices</p>
+                <p className="text-2xl font-bold">{invPagination.total || 0}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-gray-500">Active Since</p>
+                <p className="text-lg font-medium">
+                  {format(new Date(party.createdAt), 'MMM yyyy')}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-gray-500">Party Type</p>
+                <p className="text-lg font-medium capitalize">{partyTypeLabels[party.partyType]}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Activity Timeline */}
+          {!transactionsLoading && filteredTransactions.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+              <h3 className="text-lg font-semibold mb-4">Recent Transactions</h3>
+              <div className="space-y-3">
+                {filteredTransactions.slice(0, 10).map((txn) => (
+                  <div key={txn._id} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium">
+                          {txn.transactionNumber}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(txn.transactionDate).toLocaleDateString()} &middot; {txn.type}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        ₹{(txn.summary.grandTotal || 0).toFixed(2)}
+                      </p>
+                      <Badge className={getStatusBadgeClass(txn.status)}>
+                        {txn.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === NOTES TAB === */}
+      {activeTab === 'notes' && (
+        <div className="space-y-4">
+          {party.notes ? (
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+              <h3 className="text-lg font-semibold mb-3">Party Notes</h3>
+              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {party.notes}
+              </p>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No notes added yet</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-const partyStatusColors = {
+const partyStatusColors: Record<string, string> = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
   blocked: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
-const partyTypeLabels = {
+const partyTypeLabels: Record<string, string> = {
   customer: 'Customer',
   supplier: 'Supplier',
   both: 'Customer & Supplier',
 };
 
-function format(date: Date, formatString: string) {
+function format(date: Date, fmt: string) {
   return date.toLocaleDateString('en-IN', {
-    day: 'numeric',
+    day: fmt.includes('dd') ? 'numeric' : undefined,
     month: 'short',
     year: 'numeric',
   });

@@ -119,9 +119,33 @@ interface TransactionFormProps {
   isOpen: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
+  initialLineItems?: Array<{
+    item?: string | null;
+    itemName: string;
+    sku?: string | null;
+    description?: string | null;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    discountAmount?: number;
+    taxRate?: number;
+    costPrice?: number | null;
+  }>;
+  initialParty?: string | null;
+  disablePartySelection?: boolean;
+  sourceLabel?: string;
 }
 
-export default function TransactionForm({ mode, isOpen, onSuccess, onCancel }: TransactionFormProps) {
+export default function TransactionForm({
+  mode,
+  isOpen,
+  onSuccess,
+  onCancel,
+  initialLineItems,
+  initialParty,
+  disablePartySelection,
+  sourceLabel,
+}: TransactionFormProps) {
   const [loading, setLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'draft' | 'confirmed' | null>(null);
   const [items, setItems] = useState<any[]>([]);
@@ -129,8 +153,10 @@ export default function TransactionForm({ mode, isOpen, onSuccess, onCancel }: T
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingParties, setLoadingParties] = useState(false);
   const [partySearchQuery, setPartySearchQuery] = useState('');
-  const [renderKey, setRenderKey] = useState(0);
-
+  const [selectedPartyInfo, setSelectedPartyInfo] = useState<{
+    currentBalance: number;
+    creditLimit: number;
+  } | null>(null);
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema) as any,
     defaultValues: {
@@ -151,38 +177,9 @@ export default function TransactionForm({ mode, isOpen, onSuccess, onCancel }: T
   });
 
   // Calculate summary totals - FULL REACTIVITY FOR ALL OPERATIONS
-  const lineItemsCount = fields.length;
-
-  // Always watch base lineItems array to detect add/remove operations
-  form.watch('lineItems');
-  
-  // Watch each individual line item field
-  useEffect(() => {
-    const paths: string[] = [];
-    for (let i = 0; i < lineItemsCount; i++) {
-      paths.push(`lineItems.${i}.quantity`);
-      paths.push(`lineItems.${i}.unitPrice`);
-      paths.push(`lineItems.${i}.discountAmount`);
-      paths.push(`lineItems.${i}.taxRate`);
-    }
-    paths.push('summary.roundOff');
-    paths.push('summary.paidAmount');
-    
-    // Watch all paths - increment render counter to force re-render
-    const subscription = form.watch(paths as any, () => {
-      setRenderKey(prev => prev + 1);
-    });
-    
-    // Cleanup on unmount
-    return () => {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
-    };
-  }, [form, lineItemsCount]);
-
-  // Calculate summary DIRECTLY in render - ONLY WORKING WAY for react-hook-form
   const lineItems = form.watch('lineItems') || [];
+  const lineItemsCount = fields.length;
+  // form.watch('lineItems') on the line above provides full reactivity
   const roundOff = roundCurrency(form.watch('summary.roundOff') || 0);
   const paidAmount = roundCurrency(form.watch('summary.paidAmount') || 0);
   
@@ -262,6 +259,58 @@ export default function TransactionForm({ mode, isOpen, onSuccess, onCancel }: T
     loadParties();
   }, [mode, isOpen]);
 
+  // Watch for party selection changes and fetch balance info
+  const selectedPartyId = form.watch('party');
+  useEffect(() => {
+    if (!selectedPartyId) {
+      setSelectedPartyInfo(null);
+      return;
+    }
+
+    async function fetchPartyBalance() {
+      try {
+        const res = await fetch(`/api/parties?limit=1&search=`);
+        // We already have parties loaded, just find it in the list
+        const party = parties.find(p => p._id === selectedPartyId);
+        if (party) {
+          setSelectedPartyInfo({
+            currentBalance: party.currentBalance || 0,
+            creditLimit: party.creditLimit || 0,
+          });
+        }
+      } catch (e) {
+        console.error('Failed to fetch party balance info');
+      }
+    }
+
+    fetchPartyBalance();
+  }, [selectedPartyId, parties]);
+
+  // Populate initial line items and party when provided
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (initialLineItems && initialLineItems.length > 0) {
+      const lineItemsToSet = initialLineItems.map((item) => ({
+        item: item.item || null,
+        itemName: item.itemName,
+        sku: item.sku || null,
+        description: item.description || null,
+        unit: item.unit || 'pcs',
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: item.discountAmount || 0,
+        taxRate: item.taxRate || 0,
+        costPrice: item.costPrice || null,
+      }));
+      form.setValue('lineItems', lineItemsToSet);
+    }
+
+    if (initialParty) {
+      form.setValue('party', initialParty);
+    }
+  }, [isOpen, initialLineItems, initialParty, form]);
+
   // Only load data when dialog is actually open
   if (!isOpen) return null;
 
@@ -330,107 +379,159 @@ export default function TransactionForm({ mode, isOpen, onSuccess, onCancel }: T
         }}
         className="space-y-6"
       >
+        {sourceLabel && (
+          <div className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+            {sourceLabel}
+          </div>
+        )}
+
         {/* Header Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="party"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>{isSaleFlow(mode) ? 'Customer' : 'Supplier'}</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={cn(
-                          "w-full justify-between",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? (() => {
-                              const party = parties.find(p => p._id === field.value);
-                              if (!party) return `Select ${getPartyRole(mode)}`;
-                              return party.phoneNumber 
-                                ? `${party.displayName || party.name} (${party.phoneNumber})` 
-                                : party.displayName || party.name;
-                            })()
-                          : `Select ${getPartyRole(mode)}`}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command shouldFilter={false}>
-                      <CommandInput 
-                        placeholder="Search party by name or phone..." 
-                        className="h-9"
-                        value={partySearchQuery}
-                        onValueChange={setPartySearchQuery}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No party found.</CommandEmpty>
-                        <CommandGroup>
-                          <CommandItem
-                            value="none"
-                            onSelect={() => {
-                              field.onChange(null);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                field.value === null ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            None
-                          </CommandItem>
-                          {(() => {
-                            const search = partySearchQuery.toLowerCase();
-
-                            if (search === '') {
-                              return parties;
-                            }
-                            
-                            return parties.filter(party => {
-                              const partyName = party.displayName || party.name || party.fullName || party.partyName || '';
-                              const phone = party.phoneNumber || party.mobile || party.phone || '';
-
-                              return partyName.toLowerCase().includes(search) || phone.toLowerCase().includes(search);
-                            });
-                          })().map((party) => (
+          {!disablePartySelection ? (
+            <FormField
+              control={form.control}
+              name="party"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>{isSaleFlow(mode) ? 'Customer' : 'Supplier'}</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value
+                            ? (() => {
+                                const party = parties.find(p => p._id === field.value);
+                                if (!party) return `Select ${getPartyRole(mode)}`;
+                                return party.phoneNumber 
+                                  ? `${party.displayName || party.name} (${party.phoneNumber})` 
+                                  : party.displayName || party.name;
+                              })()
+                            : `Select ${getPartyRole(mode)}`}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command shouldFilter={false}>
+                        <CommandInput 
+                          placeholder="Search party by name or phone..." 
+                          className="h-9"
+                          value={partySearchQuery}
+                          onValueChange={setPartySearchQuery}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No party found.</CommandEmpty>
+                          <CommandGroup>
                             <CommandItem
-                              value={party._id}
-                              key={party._id}
+                              value="none"
                               onSelect={() => {
-                                field.onChange(party._id);
+                                field.onChange(null);
                               }}
                             >
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  party._id === field.value ? "opacity-100" : "opacity-0"
+                                  field.value === null ? "opacity-100" : "opacity-0"
                                 )}
                               />
-                              <div className="flex flex-col">
-                              <span className="font-medium">{party.displayName || party.name}</span>
-                              {party.phoneNumber && (
-                                <span className="text-xs text-muted-foreground">{party.phoneNumber}</span>
-                              )}
-                              </div>
+                              None
                             </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                            {(() => {
+                              const search = partySearchQuery.toLowerCase();
+
+                              if (search === '') {
+                                return parties;
+                              }
+                              
+                              return parties.filter(party => {
+                                const partyName = party.displayName || party.name || party.fullName || party.partyName || '';
+                                const phone = party.phoneNumber || party.mobile || party.phone || '';
+
+                                return partyName.toLowerCase().includes(search) || phone.toLowerCase().includes(search);
+                              });
+                            })().map((party) => (
+                              <CommandItem
+                                value={party._id}
+                                key={party._id}
+                                onSelect={() => {
+                                  field.onChange(party._id);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    party._id === field.value ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col">
+                                <span className="font-medium">{party.displayName || party.name}</span>
+                                {party.phoneNumber && (
+                                  <span className="text-xs text-muted-foreground">{party.phoneNumber}</span>
+                                )}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                  
+                  {/* Available Credit Display */}
+                  {isSaleFlow(mode) && selectedPartyInfo && selectedPartyInfo.creditLimit > 0 && (
+                    <div className="mt-2 rounded-md border p-3 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Current Balance:</span>
+                        <span className={`font-semibold ${selectedPartyInfo.currentBalance > selectedPartyInfo.creditLimit ? 'text-red-600' : ''}`}>
+                          ₹{selectedPartyInfo.currentBalance.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-muted-foreground">Credit Limit:</span>
+                        <span className="font-semibold">₹{selectedPartyInfo.creditLimit.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1 pt-1 border-t">
+                        <span className="text-muted-foreground">Available Credit:</span>
+                        <span className={`font-semibold ${(selectedPartyInfo.creditLimit - selectedPartyInfo.currentBalance) <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          ₹{Math.max(0, selectedPartyInfo.creditLimit - selectedPartyInfo.currentBalance).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </FormItem>
+              )}
+            />
+          ) : (
+            <FormField
+              control={form.control}
+              name="party"
+              render={({ field }) => {
+                const party = parties.find(p => p._id === field.value);
+                return (
+                  <FormItem>
+                    <FormLabel>{isSaleFlow(mode) ? 'Customer' : 'Supplier'}</FormLabel>
+                    <FormControl>
+                      <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/50 px-3 text-sm">
+                        {party
+                          ? (party.phoneNumber
+                            ? `${party.displayName || party.name} (${party.phoneNumber})`
+                            : party.displayName || party.name)
+                          : field.value || `Selected ${getPartyRole(mode)}`}
+                      </div>
+                    </FormControl>
+                  </FormItem>
+                );
+              }}
+            />
+          )}
 
           <FormField
             control={form.control}

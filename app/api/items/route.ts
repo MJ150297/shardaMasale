@@ -283,8 +283,8 @@ export async function PUT(request: Request) {
     if ('category' in rawData) setFields.category = validatedData.category;
     if ('brand' in rawData) setFields.brand = validatedData.brand;
     if ('unitOfMeasure' in rawData) setFields.unitOfMeasure = validatedData.unitOfMeasure;
-    if ('sku' in rawData) setFields.sku = validatedData.sku;
-    if ('barcode' in rawData) setFields.barcode = validatedData.barcode;
+    if ('sku' in rawData) setFields.sku = validatedData.sku?.trim().toUpperCase() || null;
+    if ('barcode' in rawData) setFields.barcode = validatedData.barcode?.trim() || null;
     if ('hsnCode' in rawData) setFields.hsnCode = validatedData.hsnCode;
     if ('sacCode' in rawData) setFields.sacCode = validatedData.sacCode;
     if ('purchaseTaxRate' in rawData) setFields.purchaseTaxRate = validatedData.purchaseTaxRate;
@@ -320,7 +320,7 @@ export async function PUT(request: Request) {
     const updatedItem = await Item.findByIdAndUpdate(
       id,
       { $set: setFields },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     return NextResponse.json(updatedItem);

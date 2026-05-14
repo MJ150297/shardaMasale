@@ -9,9 +9,10 @@ import TransactionForm from '@/components/transaction-form';
 interface CreatePurchaseDialogProps {
   onPurchaseCreated?: () => void;
   children?: React.ReactNode;
+  initialParty?: string | null;
 }
 
-export default function CreatePurchaseDialog({ onPurchaseCreated, children }: CreatePurchaseDialogProps) {
+export default function CreatePurchaseDialog({ onPurchaseCreated, children, initialParty }: CreatePurchaseDialogProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -34,6 +35,8 @@ export default function CreatePurchaseDialog({ onPurchaseCreated, children }: Cr
         <TransactionForm
           mode="purchase"
           isOpen={open}
+          initialParty={initialParty}
+          disablePartySelection={!!initialParty}
           onSuccess={() => {
             setOpen(false);
             onPurchaseCreated?.();

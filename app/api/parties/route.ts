@@ -16,6 +16,7 @@ const createPartySchema = z.object({
   gstin: z.string().optional().nullable(),
   pan: z.string().optional().nullable(),
   taxTreatment: z.enum(['registered', 'unregistered', 'consumer', 'overseas']).default('unregistered'),
+  address: z.string().max(300).optional().nullable(),
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
@@ -42,10 +43,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create the party
+    // Create the party — set currentBalance to openingBalance
     const party = new Party({
       ...validatedData,
       owner: user.id,
+      currentBalance: validatedData.openingBalance || 0,
     });
 
     await party.save();

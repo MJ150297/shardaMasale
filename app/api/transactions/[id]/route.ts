@@ -9,7 +9,10 @@ import {
   releaseDraftSaleInventory,
   reverseConfirmedTransactionInventory,
 } from '@/lib/transaction-inventory';
+import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
+import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
+import Invoice from '@/models/Invoice';
 
 const updateTransactionSchema = z.object({
   type: z.enum(["sale", "purchase", "sale-return", "purchase-return", "payment-in", "payment-out", "adjustment", "opening-balance"]).optional(),
@@ -143,6 +146,37 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     if (transaction.status === 'draft' && nextStatus === 'confirmed') {
+      // Check credit limit for sale and purchase-return transactions
+      if (
+        transaction.party &&
+        (transaction.type === 'sale' || transaction.type === 'purchase-return') &&
+        transaction.summary.grandTotal > 0
+      ) {
+        const party = await Party.findOne({
+          _id: transaction.party,
+          owner: user.id,
+        }).session(session);
+
+        if (party && party.creditLimit > 0) {
+          const delta = getBalanceDelta(
+            transaction.type as any,
+            transaction.summary.grandTotal,
+            transaction.summary.paidAmount,
+          );
+          const projectedBalance = (party.currentBalance || 0) + delta;
+
+          if (projectedBalance > party.creditLimit) {
+            throw new AppError(
+              `Credit limit exceeded. Current balance: ₹${(party.currentBalance || 0).toFixed(2)}, ` +
+              `this transaction: ₹${delta.toFixed(2)}, ` +
+              `credit limit: ₹${party.creditLimit.toFixed(2)}. ` +
+              `Available credit: ₹${Math.max(0, party.creditLimit - (party.currentBalance || 0)).toFixed(2)}`,
+              400,
+            );
+          }
+        }
+      }
+
       if (transaction.type === 'sale') {
         await releaseDraftSaleInventory(
           {
@@ -167,6 +201,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         transaction.type,
         transaction.lineItems,
       );
+
+      // Update party balance on confirm
+      if (transaction.party) {
+        const partyId = transaction.party.toString();
+        const delta = getBalanceDelta(
+          transaction.type as any,
+          transaction.summary.grandTotal,
+          transaction.summary.paidAmount,
+        );
+        await updatePartyBalance(partyId, delta, user.id, session);
+      }
     } else if (transaction.status === 'draft' && nextStatus === 'cancelled') {
       if (transaction.type === 'sale') {
         await releaseDraftSaleInventory(
@@ -192,6 +237,32 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         transaction.type,
         transaction.lineItems,
       );
+
+      // Reverse party balance on cancellation
+      if (transaction.party) {
+        const partyId = transaction.party.toString();
+        const delta = getBalanceDelta(
+          transaction.type as any,
+          transaction.summary.grandTotal,
+          transaction.summary.paidAmount,
+        );
+        await updatePartyBalance(partyId, -delta, user.id, session);
+      }
+
+      // Auto-cancel linked invoice if it exists
+      if (transaction.invoiceId) {
+        const linkedInvoice = await Invoice.findOne({
+          _id: transaction.invoiceId,
+          owner: user.id,
+        }).session(session);
+
+        if (linkedInvoice && linkedInvoice.status !== 'cancelled' && linkedInvoice.status !== 'paid') {
+          linkedInvoice.status = 'cancelled';
+          linkedInvoice.cancelledAt = new Date();
+          linkedInvoice.updatedBy = new mongoose.Types.ObjectId(user.id);
+          await linkedInvoice.save({ session });
+        }
+      }
     } else {
       throw new AppError(
         `Unsupported status transition from ${transaction.status} to ${nextStatus}`,

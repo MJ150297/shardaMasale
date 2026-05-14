@@ -9,9 +9,10 @@ import TransactionForm from '@/components/transaction-form';
 interface CreateSaleDialogProps {
   onSaleCreated?: () => void;
   children?: React.ReactNode;
+  initialParty?: string | null;
 }
 
-export default function CreateSaleDialog({ onSaleCreated, children }: CreateSaleDialogProps) {
+export default function CreateSaleDialog({ onSaleCreated, children, initialParty }: CreateSaleDialogProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -34,6 +35,8 @@ export default function CreateSaleDialog({ onSaleCreated, children }: CreateSale
         <TransactionForm
           mode="sale"
           isOpen={open}
+          initialParty={initialParty}
+          disablePartySelection={!!initialParty}
           onSuccess={() => {
             setOpen(false);
             onSaleCreated?.();

@@ -49,6 +49,7 @@ export interface IParty {
   gstin?: string | null;
   pan?: string | null;
   taxTreatment: TaxTreatment;
+  address?: string | null;
   billingAddress?: PartyAddress | null;
   shippingAddress?: PartyAddress | null;
   contactPerson?: PartyContactPerson | null;
@@ -213,6 +214,12 @@ const partySchema = new Schema<IParty, PartyModel>(
       type: String,
       enum: TAX_TREATMENTS,
       default: "unregistered",
+    },
+    address: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 300,
     },
     billingAddress: {
       type: addressSchema,

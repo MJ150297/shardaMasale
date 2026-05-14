@@ -142,7 +142,6 @@ const navItems: NavItem[] = [
     url: '/settings',
     icon: Settings,
     roles: ['owner', 'admin'],
-    comingSoon: true,
   },
   {
     title: 'Developer',
@@ -328,7 +327,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
-                          <Link href="/dashboard/settings">
+                          <Link href="/settings">
                             <Settings className="mr-2 size-4" />
                             Settings
                           </Link>

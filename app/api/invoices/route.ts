@@ -3,10 +3,12 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
-import { AppError } from '@/lib/utils';
+import { AppError, roundCurrency } from '@/lib/utils';
+import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
 import Item from '@/models/Item';
+import Party from '@/models/Party';
 import StockMovement from '@/models/StockMovement';
 
 
@@ -44,6 +46,18 @@ async function generateInvoiceNumber(ownerId: string): Promise<string> {
   return `${prefix}${sequenceNumber}`;
 }
 
+function getSafeStatus(error: unknown): number {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error
+  ) {
+    return Number((error as { status?: number }).status) || 500;
+  }
+
+  return 500;
+}
+
 const createInvoiceSchema = z.object({
   party: z.string().optional().nullable(),
   transactionDate: z.coerce.date().default(() => new Date()),
@@ -67,6 +81,8 @@ const createInvoiceSchema = z.object({
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
+    totalDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
+    totalDiscountValue: z.coerce.number().min(0).optional().nullable(),
   }).default(() => ({ roundOff: 0, paidAmount: 0 })),
   payment: z.object({
     method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
@@ -88,8 +104,10 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const status = searchParams.get('status');
+    const party = searchParams.get('party');
+    const settlement = searchParams.get('settlement');
 
-    const query: any = { owner: user.id };
+    const query: Record<string, unknown> = { owner: user.id };
     
     if (user.activeShopId) {
       query.shopId = user.activeShopId;
@@ -97,20 +115,44 @@ export async function GET(request: Request) {
     
     if (status) query.status = status;
 
-    const invoices = await Invoice.find(query)
+    const transactionMatch: Record<string, unknown> = {};
+
+    if (party) {
+      transactionMatch.party = party;
+    }
+
+    if (settlement === 'open') {
+      transactionMatch.paymentStatus = { $in: ['unpaid', 'partial'] };
+      transactionMatch.status = 'confirmed';
+      query.status = { $in: ['sent', 'overdue'] };
+    }
+
+    let invoiceQuery = Invoice.find(query)
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
       .populate({
         path: "transactionId",
-        populate: { path: "party", select: "displayName name phone email billingAddress" },
-      })
-      .lean();
+        match: Object.keys(transactionMatch).length > 0 ? transactionMatch : undefined,
+        populate: { path: "party", select: "displayName name phone phoneNumber alternatePhoneNumber contactPerson.name contactPerson.phoneNumber email billingAddress" },
+      });
 
-    const total = await Invoice.countDocuments(query);
+    if (Object.keys(transactionMatch).length === 0) {
+      invoiceQuery = invoiceQuery.skip((page - 1) * limit).limit(limit);
+    }
+
+    const invoices = await invoiceQuery.lean();
+
+    const filteredInvoices =
+      Object.keys(transactionMatch).length > 0
+        ? invoices.filter((invoice) => invoice.transactionId)
+        : invoices;
+
+    const total =
+      Object.keys(transactionMatch).length > 0
+        ? filteredInvoices.length
+        : await Invoice.countDocuments(query);
 
     return NextResponse.json({
-      data: invoices,
+      data: filteredInvoices,
       pagination: {
         page,
         limit,
@@ -118,125 +160,16 @@ export async function GET(request: Request) {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Safe HTTP status code handling with proper validation and clamping
-    const status = Number(error.status) || 500;
+    const status = getSafeStatus(error);
     const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: validStatus },
+    );
   }
 }
-
-export async function PATCH(request: Request) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const user = await requireBusinessUser();
-    await connectToDatabase();
-
-    const url = new URL(request.url);
-    const invoiceId = url.pathname.split('/').pop();
-    const body = await request.json();
-    const { action } = body;
-
-    const invoice = await Invoice.findOne({ _id: invoiceId, owner: user.id }).session(session);
-    
-    if (!invoice) {
-      throw new AppError('Invoice not found', 404);
-    }
-
-    if (invoice.status === 'cancelled') {
-      throw new AppError('Invoice is already cancelled', 400);
-    }
-
-    if (action === 'cancel') {
-      // Cancel invoice
-      invoice.status = 'cancelled';
-      invoice.cancelledAt = new Date();
-      invoice.updatedBy = new mongoose.Types.ObjectId(user.id);
-
-      await invoice.save({ session });
-
-      // Also cancel linked transaction
-      await Transaction.findOneAndUpdate(
-        { _id: invoice.transactionId },
-        { $set: { status: 'cancelled' } },
-        { session }
-      );
-
-      // Reverse stock movements
-      const stockMovements = await StockMovement.find({
-        referenceId: invoice.transactionId,
-        referenceType: 'SALE'
-      }).session(session);
-
-      for (const movement of stockMovements) {
-        // Reverse stock
-        await Item.findOneAndUpdate(
-          { _id: movement.item },
-          { $inc: { "stock.currentQuantity": movement.quantity } },
-          { session }
-        );
-
-        // Create reverse movement
-        await StockMovement.create([{
-          owner: user.id,
-          item: movement.item,
-          type: "IN",
-          quantity: movement.quantity,
-          referenceType: "INVOICE_CANCEL",
-          referenceId: invoice._id,
-          previousQuantity: movement.newQuantity,
-          newQuantity: movement.previousQuantity,
-          createdBy: user.id,
-          metadata: {
-            originalMovement: movement._id,
-            invoiceNumber: invoice.invoiceNumber
-          }
-        }], { session });
-      }
-    }
-
-    if (action === 'mark-paid') {
-      invoice.status = 'paid';
-      invoice.paidAt = new Date();
-      invoice.updatedBy = new mongoose.Types.ObjectId(user.id);
-
-      await invoice.save({ session });
-
-      // Mark transaction payment status as paid
-      await Transaction.findOneAndUpdate(
-        { _id: invoice.transactionId },
-        { 
-          $set: { 
-            paymentStatus: 'paid',
-            "summary.paidAmount": "$summary.grandTotal",
-            "summary.dueAmount": 0
-          } 
-        },
-        { session }
-      );
-    }
-
-    await session.commitTransaction();
-
-    return NextResponse.json({
-      data: invoice,
-      message: `Invoice ${action === 'cancel' ? 'cancelled' : 'marked as paid'} successfully`,
-    });
-
-  } catch (error: any) {
-    await session.abortTransaction();
-    
-    // Safe HTTP status code handling with proper validation and clamping
-    const status = Number(error.status) || 500;
-    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
-    return NextResponse.json({ error: error.message || 'Operation failed' }, { status: validStatus });
-  } finally {
-    session.endSession();
-  }
-}
-
 export async function POST(request: Request) {
   const url = new URL(request.url);
   
@@ -327,6 +260,49 @@ export async function POST(request: Request) {
       }
     }
 
+    // Compute grand total and update party balance for confirmed invoices
+    if (validated.status === "confirmed") {
+      let subtotal = 0;
+      let discountTotal = 0;
+      let taxTotal = 0;
+      for (const item of validated.lineItems) {
+        const lineSubtotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
+        subtotal += lineSubtotal;
+        discountTotal += Number(item.discountAmount || 0);
+        const taxableAmount = lineSubtotal - Number(item.discountAmount || 0);
+        taxTotal += taxableAmount * (Number(item.taxRate || 0) / 100);
+      }
+      const grandTotal = roundCurrency(subtotal - discountTotal + taxTotal + (validated.summary.roundOff || 0));
+      const paidAmount = validated.summary.paidAmount ?? 0;
+
+      // Check credit limit
+      if (validated.party && grandTotal > 0) {
+        const party = await Party.findOne({
+          _id: validated.party,
+          owner: user.id,
+        }).session(session);
+
+        if (party && party.creditLimit > 0) {
+          const delta = getBalanceDelta("sale", grandTotal, paidAmount);
+          const projectedBalance = (party.currentBalance || 0) + delta;
+
+          if (projectedBalance > party.creditLimit) {
+            throw new AppError(
+              `Credit limit exceeded. Current balance: ₹${(party.currentBalance || 0).toFixed(2)}, ` +
+              `this transaction: ₹${delta.toFixed(2)}, ` +
+              `credit limit: ₹${party.creditLimit.toFixed(2)}. ` +
+              `Available credit: ₹${Math.max(0, party.creditLimit - (party.currentBalance || 0)).toFixed(2)}`,
+              400,
+            );
+          }
+        }
+
+        // Update party balance
+        const delta = getBalanceDelta("sale", grandTotal, paidAmount);
+        await updatePartyBalance(validated.party, delta, user.id, session);
+      }
+    }
+
     // Update the transaction with the invoice reference
     await Transaction.findOneAndUpdate(
       { _id: transaction._id },
@@ -341,7 +317,7 @@ export async function POST(request: Request) {
       message: 'Invoice created successfully',
     }, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     await session.abortTransaction();
 
     if (error instanceof z.ZodError) {
@@ -349,9 +325,12 @@ export async function POST(request: Request) {
     }
 
     // Safe HTTP status code handling with proper validation and clamping
-    const status = Number(error.status) || 500;
+    const status = getSafeStatus(error);
     const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: validStatus },
+    );
   } finally {
     session.endSession();
   }
@@ -416,13 +395,16 @@ export async function handleGenerateInvoice(request: Request) {
       message: 'Invoice generated successfully',
     }, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     await session.abortTransaction();
     
     // Safe HTTP status code handling with proper validation and clamping
-    const status = Number(error.status) || 500;
+    const status = getSafeStatus(error);
     const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
-    return NextResponse.json({ error: error.message || 'Failed to generate invoice' }, { status: validStatus });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to generate invoice' },
+      { status: validStatus },
+    );
   } finally {
     session.endSession();
   }

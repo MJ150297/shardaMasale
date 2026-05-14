@@ -1,22 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
 import {
-  Package, Users, Receipt,
-  ArrowUpRight, ArrowDownRight, Clock, DollarSign,
-  MoreVertical, CreditCard, MessageCircle,
+  Package, Receipt,
+  ArrowDownRight, Clock, DollarSign,
   ReceiptIndianRupee,
   FileText,
-  ArrowUp,
-  Plus
 } from 'lucide-react';
 import { usePageActions } from '@/components/layout/dashboard-shell';
-import CreatePaymentDialog from '@/components/create-payment-dialog';
+import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
+import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateInvoice from '@/modules/billing/create-invoice';
 import {
   Dialog,
@@ -25,15 +23,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { useTheme } from 'next-themes';
 import { DateRangeFilter } from '@/modules/reports/date-range-filter';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { getPartyId, getPartyName, getPartyPhone, type PartyLike } from '@/lib/party-helpers';
+import { cn } from '@/lib/utils';
 
 const salesData = [
   { name: 'Jan', sales: 4000, orders: 240 },
@@ -55,14 +50,60 @@ interface LowStockItem {
 }
 
 interface RecentTransaction {
+  transactionId?: string;
   id: string;
   type: string;
   customer: string;
+  partyId?: string | null;
+  invoiceId?: string | null;
+  customerPhone?: string | null;
   amount: string;
   paymentStatus: string;
   date: string;
   dateIso: string;
   time: string;
+}
+
+interface DashboardTransactionRecord {
+  _id: string;
+  transactionNumber: string;
+  type: string;
+  party?: PartyLike | string | null;
+  invoiceId?: string | { _id?: string | { toString(): string }; id?: string | null } | null;
+  summary: {
+    grandTotal: number;
+  };
+  paymentStatus: string;
+  transactionDate: string | Date;
+  createdAt: string | Date;
+}
+
+interface DashboardTransactionsResponse {
+  data: DashboardTransactionRecord[];
+  pagination?: {
+    totalPages?: number;
+    total?: number;
+  };
+}
+
+function getInvoiceId(
+  invoice?: string | { _id?: string | { toString(): string }; id?: string | null } | null,
+): string | null {
+  if (!invoice) {
+    return null;
+  }
+
+  if (typeof invoice === 'string') {
+    return invoice;
+  }
+
+  const invoiceId = invoice._id ?? invoice.id;
+
+  if (!invoiceId) {
+    return null;
+  }
+
+  return typeof invoiceId === 'string' ? invoiceId : invoiceId.toString();
 }
 
 interface DashboardClientProps {
@@ -123,22 +164,29 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const PAGE_SIZE = 4;
 
   const getKey = () => {
-    let url = `/api/transactions?page=${page}&limit=${PAGE_SIZE}`;
+    let url = `/api/transactions?page=${page}&limit=${PAGE_SIZE}&status=confirmed`;
     if (startDate) url += `&startDate=${startDate.toISOString()}`;
     if (endDate) url += `&endDate=${endDate.toISOString()}`;
     return url;
   };
 
-  const { data, error, isLoading, mutate } = useSWR(getKey(),
+  const { data, isLoading, mutate } = useSWR<DashboardTransactionsResponse>(getKey(),
     (url) => fetch(url).then(res => res.json()),
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: false,
+      revalidateOnMount: false,
+    }
   );
 
   // Format raw transaction data to match display format
-  const formatTransaction = (tx: any) => ({
+  const formatTransaction = (tx: DashboardTransactionRecord): RecentTransaction => ({
+    transactionId: tx._id,
     id: tx.transactionNumber,
     type: tx.type,
-    customer: tx.party?.displayName || 'Cash Sale',
+    customer: getPartyName(tx.party, 'Cash Sale'),
+    partyId: getPartyId(tx.party),
+    invoiceId: getInvoiceId(tx.invoiceId),
+    customerPhone: getPartyPhone(tx.party),
     amount: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
     paymentStatus: tx.paymentStatus,
     date: new Date(tx.transactionDate).toLocaleDateString('en-IN'),
@@ -146,17 +194,23 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
     time: new Date(tx.createdAt).toLocaleString()
   });
 
+  const handleShareTransaction = (transaction: RecentTransaction) => {
+    const phone = transaction.customerPhone?.replace(/\D/g, '');
+
+    if (!phone) {
+      toast.error(`No phone number found for ${transaction.customer}.`);
+      return;
+    }
+
+    const message = `*Transaction Details*\n-------------------\nInvoice #: ${transaction.id}\nCustomer: ${transaction.customer}\nAmount: ${transaction.amount}\nStatus: ${transaction.paymentStatus}\n\nSent from GSMS Shop Management System`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
   const transactions = data
     ? data.data.map(formatTransaction)
     : recentTransactions;
   const totalPages = data?.pagination?.totalPages || 0;
   const total = data?.pagination?.total || 0;
-
-  // Reset page on filter change
-  useEffect(() => {
-    setPage(1);
-  }, [startDate, endDate]);
-
 
   const statsCards = [
     {
@@ -272,6 +326,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
               onDateChange={(start, end) => {
                 setStartDate(start);
                 setEndDate(end);
+                setPage(1);
               }}
             />
             <div className="text-right">
@@ -292,6 +347,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
                 onDateChange={(start, end) => {
                   setStartDate(start);
                   setEndDate(end);
+                  setPage(1);
                 }}
               />
               <Link href="/dashboard/transactions" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
@@ -341,17 +397,52 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
 
                 {(transaction.paymentStatus === 'unpaid' || transaction.paymentStatus === 'partial') && (
                   <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                    <CreatePaymentDialog type="payment-in" onCreated={() => mutate()}>
-                      <Button variant="ghost" size="sm" className="flex-1 h-9 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20">
-                        <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
-                        Record Payment
-                      </Button>
-                    </CreatePaymentDialog>
+                    {transaction.type === 'sale' ? (
+                      <CreatePaymentInDialog
+                        initialPartyId={transaction.partyId}
+                        initialPartyName={transaction.customer}
+                        initialPartyPhone={transaction.customerPhone}
+                        initialSelectedInvoiceIds={
+                          transaction.invoiceId ? [transaction.invoiceId] : []
+                        }
+                        onCreated={() => mutate()}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-9 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                        >
+                          <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
+                          Record Payment
+                        </Button>
+                      </CreatePaymentInDialog>
+                    ) : (
+                      <CreatePaymentOutDialog
+                        initialPartyId={transaction.partyId}
+                        initialPartyName={transaction.customer}
+                        initialPartyPhone={transaction.customerPhone}
+                        initialSelectedTransactionIds={
+                          transaction.transactionId ? [transaction.transactionId] : []
+                        }
+                        onCreated={() => mutate()}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1 h-9 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                        >
+                          <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
+                          Record Payment
+                        </Button>
+                      </CreatePaymentOutDialog>
+                    )}
 
-                    <Button variant="ghost" size="sm" className="flex-1 h-9 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20" onClick={() => {
-                      const message = `*Transaction Details*\n-------------------\nInvoice #: ${transaction.id}\nCustomer: ${transaction.customer}\nAmount: ${transaction.amount}\nStatus: ${transaction.paymentStatus}\n\nSent from GSMS Shop Management System`;
-                      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-                    }}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1 h-9 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                      onClick={() => handleShareTransaction(transaction)}
+                    >
                       <svg className="h-4 w-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
                       </svg>
@@ -448,8 +539,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
       </div>
 
       {/* Payment In Dialog - controlled from mobile action buttons */}
-      <CreatePaymentDialog
-        type="payment-in"
+      <CreatePaymentInDialog
         open={paymentDialogOpen}
         onOpenChange={setPaymentDialogOpen}
         onCreated={() => {

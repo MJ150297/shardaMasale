@@ -3,7 +3,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, Printer } from 'lucide-react';
-import Invoice from '@/models/Invoice';
 import InvoiceShareSheet from '@/components/invoice-share-sheet';
 
 interface InvoicePreviewModalProps {
@@ -31,9 +30,18 @@ export default function InvoicePreviewModal({
               invoice={{
                 id: invoice?.id || invoice?._id || invoice?.invoiceNumber,
                 invoiceNumber: invoice?.invoiceNumber,
-                grandTotal: invoice?.totalAmount || invoice?.transactionId?.summary?.grandTotal || 0,
+                grandTotal: invoice?.totalAmount || invoice?.transactionId?.summary?.grandTotal || invoice?.summary?.grandTotal || 0,
                 dueDate: invoice?.dueDate,
                 party: invoice?.transactionId?.party || invoice?.party,
+                // Pass the full transaction data for image capture
+                transactionId: invoice?.transactionId,
+                lineItems: invoice?.transactionId?.lineItems || invoice?.lineItems,
+                additionalCharges: invoice?.transactionId?.additionalCharges || invoice?.additionalCharges,
+                subtotal: invoice?.transactionId?.summary?.subtotal || invoice?.summary?.subtotal,
+                discountTotal: invoice?.transactionId?.summary?.discountTotal || invoice?.summary?.discountTotal,
+                taxTotal: invoice?.transactionId?.summary?.taxTotal || invoice?.summary?.taxTotal,
+                notes: invoice?.notes,
+                termsAndConditions: invoice?.termsAndConditions,
               }}
               variant="button"
             />
@@ -136,6 +144,13 @@ export default function InvoicePreviewModal({
               <div className="mt-8">
                 <h4 className="font-semibold text-sm border-b pb-1 mb-2">Notes</h4>
                 <p className="text-sm text-gray-600">{invoice.notes}</p>
+              </div>
+            )}
+
+            {invoice?.termsAndConditions && (
+              <div className="mt-4">
+                <h4 className="font-semibold text-sm border-b pb-1 mb-2">Terms & Conditions</h4>
+                <p className="text-sm text-gray-600">{invoice.termsAndConditions}</p>
               </div>
             )}
 

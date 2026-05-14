@@ -64,6 +64,9 @@ export interface TransactionSummary {
   subtotal: number;
   discountTotal: number;
   taxTotal: number;
+  totalDiscountType?: "percentage" | "fixed" | null;
+  totalDiscountValue?: number | null;
+  totalDiscount: number;
   roundOff: number;
   grandTotal: number;
   paidAmount: number;
@@ -192,6 +195,21 @@ const summarySchema = new Schema<TransactionSummary>(
       min: 0,
     },
     taxTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    totalDiscountType: {
+      type: String,
+      enum: ["percentage", "fixed", null],
+      default: null,
+    },
+    totalDiscountValue: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    totalDiscount: {
       type: Number,
       default: 0,
       min: 0,
@@ -456,8 +474,19 @@ transactionSchema.pre("validate", function preValidate() {
       0,
     ),
   );
+
+  // Compute total discount (percentage or fixed)
+  const totalDiscountType = this.summary?.totalDiscountType || null;
+  const totalDiscountValue = Number(this.summary?.totalDiscountValue) || 0;
+  let totalDiscount = 0;
+  if (totalDiscountType === "percentage") {
+    totalDiscount = roundCurrency((subtotal - discountTotal) * (Math.min(totalDiscountValue, 100) / 100));
+  } else if (totalDiscountType === "fixed") {
+    totalDiscount = roundCurrency(Math.min(totalDiscountValue, subtotal - discountTotal));
+  }
+
   const computedGrandTotal = roundCurrency(
-    subtotal - discountTotal + taxTotal + roundOff + additionalChargesTotal,
+    subtotal - discountTotal - totalDiscount + taxTotal + roundOff + additionalChargesTotal,
   );
   const existingGrandTotal = roundCurrency(this.summary?.grandTotal ?? 0);
   const grandTotal =
@@ -469,6 +498,9 @@ transactionSchema.pre("validate", function preValidate() {
     subtotal,
     discountTotal,
     taxTotal,
+    totalDiscountType: totalDiscountType as "percentage" | "fixed" | null | undefined,
+    totalDiscountValue: totalDiscountValue || null,
+    totalDiscount,
     roundOff,
     grandTotal,
     paidAmount,
@@ -484,7 +516,7 @@ transactionSchema.pre("validate", function preValidate() {
 
 // ========== IMMUTABILITY ENFORCEMENT ==========
 transactionSchema.pre("save" as any, async function (this: any) {
-  if (!this.isNew) {
+  if (!this.isNew && typeof this.$original === 'function') {
     const original = this.$original();
     if (original && original.status !== "draft") {
       // Block any modifications once transaction is no longer draft
@@ -508,7 +540,7 @@ transactionSchema.pre("save" as any, async function (this: any) {
   }
 
   // Stock validation when confirming transaction
-  if (this.status === "confirmed" && this.isModified("status")) {
+  if (!this.isNew && typeof this.$original === 'function' && this.status === "confirmed" && this.isModified("status")) {
     const movementTypeMap: Record<string, string> = {
       sale: "OUT",
       "purchase-return": "RETURN_OUT",

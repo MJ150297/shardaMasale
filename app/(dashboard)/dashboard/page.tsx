@@ -3,6 +3,41 @@ import dbConnect from '@/lib/db';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
 import DashboardClient from './dashboard-client';
+import { getPartyId, getPartyName, getPartyPhone, type PartyLike } from '@/lib/party-helpers';
+
+interface RecentTransactionRecord {
+  _id: string | { toString(): string };
+  transactionNumber: string;
+  type: string;
+  party?: PartyLike | string | null;
+  invoiceId?: string | { _id?: string | { toString(): string }; id?: string | null } | null;
+  summary: {
+    grandTotal: number;
+  };
+  paymentStatus: string;
+  transactionDate: string | Date;
+  createdAt: string | Date;
+}
+
+function getInvoiceId(
+  invoice?: string | { _id?: string | { toString(): string }; id?: string | null } | null,
+): string | null {
+  if (!invoice) {
+    return null;
+  }
+
+  if (typeof invoice === 'string') {
+    return invoice;
+  }
+
+  const invoiceId = invoice._id ?? invoice.id;
+
+  if (!invoiceId) {
+    return null;
+  }
+
+  return typeof invoiceId === 'string' ? invoiceId : invoiceId.toString();
+}
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -70,12 +105,13 @@ export default async function DashboardPage() {
   // Fetch recent transactions
   const recentTransactions = await Transaction.find({
     owner: user.id,
-    status: 'confirmed'
+    status: 'confirmed',
+    ...(user.activeShopId ? { shopId: user.activeShopId } : {}),
   })
   .sort({ createdAt: -1 })
   .limit(4)
-  .populate('party', 'displayName')
-  .select('transactionNumber party summary.grandTotal paymentStatus createdAt type transactionDate')
+  .populate('party', 'displayName name phoneNumber alternatePhoneNumber phone contactPerson.phoneNumber contactPerson.name')
+  .select('transactionNumber party invoiceId summary.grandTotal paymentStatus createdAt type transactionDate')
   .lean();
 
   // Convert ObjectId to string for client serialization
@@ -84,10 +120,14 @@ export default async function DashboardPage() {
     _id: item._id.toString()
   }));
 
-  const serializedRecentTransactions = recentTransactions.map((tx: any) => ({
+  const serializedRecentTransactions = (recentTransactions as unknown as RecentTransactionRecord[]).map((tx) => ({
+    transactionId: typeof tx._id === 'string' ? tx._id : tx._id.toString(),
     id: tx.transactionNumber,
     type: tx.type,
-    customer: tx.party?.displayName || 'Cash Sale',
+    customer: getPartyName(tx.party, 'Cash Sale'),
+    partyId: getPartyId(tx.party),
+    invoiceId: getInvoiceId(tx.invoiceId),
+    customerPhone: getPartyPhone(tx.party),
     amount: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
     paymentStatus: tx.paymentStatus,
     date: new Date(tx.transactionDate).toLocaleDateString('en-IN'),

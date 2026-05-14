@@ -41,12 +41,12 @@ const createPartySchema = z.object({
   gstin: z.string().optional().nullable(),
   pan: z.string().optional().nullable(),
   taxTreatment: z.enum(['registered', 'unregistered', 'consumer', 'overseas']).default('unregistered'),
+  address: z.string().max(300).optional().nullable(),
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
   tags: z.array(z.string()).default([]),
 });
-
 type CreatePartyFormData = z.infer<typeof createPartySchema>;
 
 interface CreatePartyDialogProps {
@@ -60,22 +60,23 @@ export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogP
 
   const form = useForm<CreatePartyFormData>({
     resolver: zodResolver(createPartySchema) as any,
-    defaultValues: {
-      displayName: '',
-      legalName: null,
-      partyType: 'customer',
-      status: 'active',
-      email: null,
-      phoneNumber: null,
-      alternatePhoneNumber: null,
-      gstin: null,
-      pan: null,
-      taxTreatment: 'unregistered',
-      creditLimit: 0,
-      openingBalance: 0,
-      notes: null,
-      tags: [],
-    },
+      defaultValues: {
+        displayName: '',
+        legalName: null,
+        partyType: 'customer',
+        status: 'active',
+        email: null,
+        phoneNumber: null,
+        alternatePhoneNumber: null,
+        gstin: null,
+        pan: null,
+        taxTreatment: 'unregistered',
+        address: null,
+        creditLimit: 0,
+        openingBalance: 0,
+        notes: null,
+        tags: [],
+      },
   });
 
   const selectedPartyType = form.watch('partyType');
@@ -273,6 +274,20 @@ export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogP
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="123 Main St, Springfield, 12345" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {!isCustomerOnly && (
                   <div className="grid grid-cols-2 gap-4">

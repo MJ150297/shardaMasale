@@ -16,7 +16,8 @@ import { roundCurrency, debounce } from '@/lib/utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateSaleDialog from '@/components/create-sale-dialog';
 import CreatePurchaseDialog from '@/components/create-purchase-dialog';
-import CreatePaymentDialog from '@/components/create-payment-dialog';
+import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
+import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateSaleReturnDialog from '@/components/create-sale-return-dialog';
 import CreatePurchaseReturnDialog from '@/components/create-purchase-return-dialog';
 
@@ -125,6 +126,7 @@ export default function TransactionsClient() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [filters, setFilters] = useState({ type: '', status: '' });
   const [searchQuery, setSearchQuery] = useState('');
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState<'payment-in' | 'payment-out' | null>(null);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
@@ -145,6 +147,9 @@ export default function TransactionsClient() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [transactionToCancel, setTransactionToCancel] = useState<Transaction | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     loadTransactions();
@@ -238,6 +243,42 @@ export default function TransactionsClient() {
     }
   }
 
+  function handleCancelClick(transaction: Transaction) {
+    setTransactionToCancel(transaction);
+    setCancelDialogOpen(true);
+  }
+
+  async function handleConfirmCancel() {
+    if (!transactionToCancel) return;
+    setIsCancelling(true);
+    try {
+      const transactionId = getTransactionId(transactionToCancel);
+      const res = await fetch(`/api/transactions/${transactionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel transaction');
+      }
+
+      await loadTransactions();
+      toast.success('Transaction cancelled successfully');
+      setCancelDialogOpen(false);
+      setTransactionToCancel(null);
+    } catch (error) {
+      console.error('Failed to cancel transaction:', error);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to cancel transaction',
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
   function viewTransaction(transaction: Transaction) {
     setSelectedTransaction(transaction);
     setViewDialogOpen(true);
@@ -322,40 +363,51 @@ export default function TransactionsClient() {
               New Transaction
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 bg-white/80">
-            <CreateSaleDialog onSaleCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                New Sale
-              </DropdownMenuItem>
-            </CreateSaleDialog>
-            <CreatePurchaseDialog onPurchaseCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                New Purchase
-              </DropdownMenuItem>
-            </CreatePurchaseDialog>
-            <CreateSaleReturnDialog onSaleReturnCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                Sale Return
-              </DropdownMenuItem>
-            </CreateSaleReturnDialog>
-            <CreatePurchaseReturnDialog onPurchaseReturnCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                Purchase Return
-              </DropdownMenuItem>
-            </CreatePurchaseReturnDialog>
-            <div className="h-px bg-gray-200 my-1" />
-            <CreatePaymentDialog type="payment-in" onCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+            <DropdownMenuContent align="end" className="w-56 bg-white/80">
+              <CreateSaleDialog onSaleCreated={loadTransactions}>
+                <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                  New Sale
+                </DropdownMenuItem>
+              </CreateSaleDialog>
+              <CreatePurchaseDialog onPurchaseCreated={loadTransactions}>
+                <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                  New Purchase
+                </DropdownMenuItem>
+              </CreatePurchaseDialog>
+              <CreateSaleReturnDialog onSaleReturnCreated={loadTransactions}>
+                <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                  Sale Return
+                </DropdownMenuItem>
+              </CreateSaleReturnDialog>
+              <CreatePurchaseReturnDialog onPurchaseReturnCreated={loadTransactions}>
+                <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                  Purchase Return
+                </DropdownMenuItem>
+              </CreatePurchaseReturnDialog>
+              <div className="h-px bg-gray-200 my-1" />
+              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => { e.preventDefault(); setPaymentDialogOpen('payment-in'); }}>
                 Payment In (Receive)
               </DropdownMenuItem>
-            </CreatePaymentDialog>
-            <CreatePaymentDialog type="payment-out" onCreated={loadTransactions}>
-              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
+              <DropdownMenuItem className="cursor-pointer" onSelect={(e) => { e.preventDefault(); setPaymentDialogOpen('payment-out'); }}>
                 Payment Out (Pay)
               </DropdownMenuItem>
-            </CreatePaymentDialog>
-          </DropdownMenuContent>
+            </DropdownMenuContent>
         </DropdownMenu>
+
+        {paymentDialogOpen === 'payment-in' && (
+          <CreatePaymentInDialog
+            open={true}
+            onOpenChange={(open) => { if (!open) setPaymentDialogOpen(null); }}
+            onCreated={() => { setPaymentDialogOpen(null); loadTransactions(); }}
+          />
+        )}
+        {paymentDialogOpen === 'payment-out' && (
+          <CreatePaymentOutDialog
+            open={true}
+            onOpenChange={(open) => { if (!open) setPaymentDialogOpen(null); }}
+            onCreated={() => { setPaymentDialogOpen(null); loadTransactions(); }}
+          />
+        )}
       </div>
 
       <Tabs defaultValue="" value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))} className="w-full">
@@ -495,8 +547,11 @@ export default function TransactionsClient() {
                             </DropdownMenuItem>
                           )}
                           {(transaction.status === 'draft' || transaction.status === 'confirmed') && (
-                            <DropdownMenuItem onClick={() => handleStatusUpdate(transaction, 'cancelled')}>
-                              <Edit className="mr-2 h-4 w-4" />
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => handleCancelClick(transaction)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
                               Cancel Transaction
                             </DropdownMenuItem>
                           )}
@@ -589,6 +644,40 @@ export default function TransactionsClient() {
         </DialogContent>
       </Dialog>
 
+      {/* Cancel Transaction Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this transaction?
+              {transactionToCancel && (
+                <>
+                  <span className="mt-2 font-medium block">{transactionToCancel.transactionNumber}</span>
+                  {transactionToCancel.invoiceId && (
+                    <span className="mt-1 text-amber-600 block">The linked invoice will also be cancelled.</span>
+                  )}
+                </>
+              )}
+              This will reverse any inventory movements and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancelling}>Keep Transaction</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isCancelling}
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmCancel();
+              }}
+            >
+              {isCancelling ? 'Cancelling...' : 'Yes, Cancel Transaction'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -597,7 +686,7 @@ export default function TransactionsClient() {
             <AlertDialogDescription>
               Are you sure you want to delete this transaction? This action cannot be undone.
               {transactionToDelete && (
-                <p className="mt-2 font-medium">{transactionToDelete.transactionNumber}</p>
+                <span className="mt-2 font-medium block">{transactionToDelete.transactionNumber}</span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

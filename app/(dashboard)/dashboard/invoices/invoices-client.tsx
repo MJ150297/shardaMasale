@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2 } from 'lucide-react';
+import { CheckCircle, Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -77,10 +77,64 @@ export default function InvoicesClient() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoices();
   }, [pagination.page, filters]);
+
+  async function handleCancelInvoice(invoice: Invoice) {
+    const invoiceId = getInvoiceId(invoice);
+    setCancelLoading(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(data.message || 'Invoice cancelled successfully');
+        setCancelDialogOpen(false);
+        loadInvoices();
+      } else {
+        toast.error(data.error || 'Failed to cancel invoice');
+      }
+    } catch (error) {
+      toast.error('Failed to cancel invoice');
+    } finally {
+      setCancelLoading(false);
+    }
+  }
+
+  async function handleMarkAsPaid(invoice: Invoice) {
+    const invoiceId = getInvoiceId(invoice);
+    setActionLoading(invoiceId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-paid' }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(data.message || 'Invoice marked as paid');
+        loadInvoices();
+      } else {
+        toast.error(data.error || 'Failed to mark invoice as paid');
+      }
+    } catch (error) {
+      toast.error('Failed to mark invoice as paid');
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   async function loadInvoices() {
     try {
@@ -276,10 +330,24 @@ export default function InvoicesClient() {
                             <Printer className="mr-2 h-4 w-4" />
                             Print
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Cancel Invoice
-                          </DropdownMenuItem>
+                          {(invoice.status === 'sent' || invoice.status === 'overdue') && (
+                            <>
+                              <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Mark as Paid
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => {
+                                  setSelectedInvoice(invoice);
+                                  setCancelDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Cancel Invoice
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -347,6 +415,35 @@ export default function InvoicesClient() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Invoice Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel invoice <strong>{selectedInvoice?.invoiceNumber}</strong>?
+              This will reverse all inventory movements and mark the invoice as cancelled.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelLoading}>Keep Invoice</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={cancelLoading}
+              onClick={(e) => {
+                e.preventDefault();
+                if (selectedInvoice) {
+                  handleCancelInvoice(selectedInvoice);
+                }
+              }}
+            >
+              {cancelLoading ? 'Cancelling...' : 'Yes, Cancel Invoice'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

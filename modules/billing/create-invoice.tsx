@@ -69,7 +69,14 @@ const createInvoiceSchema = z.object({
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
+    totalDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
+    totalDiscountValue: z.coerce.number().min(0).optional().nullable(),
   }),
+  payment: z.object({
+    method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
+    referenceNumber: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+  }).optional().nullable(),
   notes: z.string().optional().nullable(),
   termsAndConditions: z.string().optional().nullable(),
   status: z.enum(["draft", "confirmed"]).default("draft"),
@@ -192,6 +199,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
         roundOff: 0,
         paidAmount: 0,
       },
+      payment: null,
       status: 'draft',
     },
   });
@@ -235,6 +243,10 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
     }
     paths.push('summary.roundOff');
     paths.push('summary.paidAmount');
+    paths.push('summary.totalDiscountType');
+    paths.push('summary.totalDiscountValue');
+    paths.push('payment.method');
+    paths.push('payment.referenceNumber');
     
     // Watch all paths - increment render counter to force re-render
     const subscription = form.watch(paths as any, () => {
@@ -254,6 +266,8 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   const roundOff = roundCurrency(form.watch('summary.roundOff') || 0);
   const paidAmount = roundCurrency(form.watch('summary.paidAmount') || 0);
   const additionalCharges = form.watch('additionalCharges') || [];
+  const totalDiscountType = form.watch('summary.totalDiscountType');
+  const totalDiscountValue = Number(form.watch('summary.totalDiscountValue') || 0);
   
   let subtotal = 0;
   let discountTotal = 0;
@@ -272,13 +286,23 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
     additionalCharges.reduce((total, charge) => total + (Number(charge.amount) || 0), 0)
   );
 
-  const grandTotal = roundCurrency(subtotal - discountTotal + taxTotal + roundOff + additionalChargesTotal);
+  // Compute total discount (percentage or fixed)
+  let totalDiscount = 0;
+  if (totalDiscountType === 'percentage') {
+    const baseAmount = subtotal - discountTotal;
+    totalDiscount = roundCurrency(baseAmount * (Math.min(totalDiscountValue, 100) / 100));
+  } else if (totalDiscountType === 'fixed') {
+    totalDiscount = roundCurrency(Math.min(totalDiscountValue, Math.max(subtotal - discountTotal, 0)));
+  }
+
+  const grandTotal = roundCurrency(subtotal - discountTotal - totalDiscount + taxTotal + roundOff + additionalChargesTotal);
   const dueAmount = Math.max(roundCurrency(grandTotal - paidAmount), 0);
 
   const calculations = {
     subtotal: roundCurrency(subtotal),
     discountTotal: roundCurrency(discountTotal),
     taxTotal: roundCurrency(taxTotal),
+    totalDiscount: roundCurrency(totalDiscount),
     additionalChargesTotal,
     grandTotal: roundCurrency(grandTotal),
     dueAmount: roundCurrency(dueAmount),
@@ -832,13 +856,69 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                       <span>₹ {calculations.subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span>Discount</span>
+                      <span>Line Discount</span>
                       <span className="text-destructive">- ₹ {calculations.discountTotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Tax</span>
                       <span>₹ {calculations.taxTotal.toFixed(2)}</span>
                     </div>
+
+                    {/* Total Discount - Percentage or Fixed */}
+                    <div className="flex justify-between text-sm items-center gap-2">
+                      <FormLabel className="text-xs shrink-0">Total Discount</FormLabel>
+                      <div className="flex items-center gap-1">
+                        <FormField
+                          control={form.control as any}
+                          name="summary.totalDiscountType"
+                          render={({ field }) => (
+                            <FormItem className="m-0">
+                              <FormControl>
+                                <select
+                                  value={field.value || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value || null;
+                                    field.onChange(val);
+                                    form.setValue('summary.totalDiscountValue', 0);
+                                    setRenderKey(k => k + 1);
+                                  }}
+                                  className="h-7 w-10 text-xs border rounded px-1 bg-background"
+                                >
+                                  <option value="">-</option>
+                                  <option value="percentage">%</option>
+                                  <option value="fixed">₹</option>
+                                </select>
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control as any}
+                          name="summary.totalDiscountValue"
+                          render={({ field }) => (
+                            <FormItem className="m-0">
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min={0}
+                                  disabled={!totalDiscountType}
+                                  placeholder="0"
+                                  className="w-16 h-7 text-right text-xs"
+                                  {...field}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                    {totalDiscountType && calculations.totalDiscount > 0 && (
+                      <div className="flex justify-between text-xs text-destructive">
+                        <span></span>
+                        <span>- ₹ {calculations.totalDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
 
                     {/* Additional Charges Section */}
                     <div className="border rounded-md">
@@ -983,6 +1063,53 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                     <div className="flex justify-between font-medium">
                       <span>Balance Due</span>
                       <span className="text-destructive">₹ {calculations.dueAmount.toFixed(2)}</span>
+                    </div>
+
+                    {/* Payment Method */}
+                    <Separator className="mt-2" />
+                    <div className="space-y-2 pt-1">
+                      <div className="flex justify-between text-sm items-center gap-2">
+                        <FormLabel className="text-xs shrink-0">Payment Method</FormLabel>
+                        <FormField
+                          control={form.control as any}
+                          name="payment.method"
+                          render={({ field }) => (
+                            <FormItem className="m-0">
+                              <FormControl>
+                                <select
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value || null)}
+                                  className="h-7 text-xs border rounded px-1 bg-background w-28"
+                                >
+                                  <option value="">Select</option>
+                                  <option value="cash">Cash</option>
+                                  <option value="card">Card</option>
+                                  <option value="upi">UPI</option>
+                                  <option value="bank-transfer">Bank Transfer</option>
+                                  <option value="cheque">Cheque</option>
+                                  <option value="other">Other</option>
+                                </select>
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={form.control as any}
+                        name="payment.referenceNumber"
+                        render={({ field }) => (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <Input
+                                placeholder="Reference / Transaction ID"
+                                className="h-7 text-xs"
+                                {...field}
+                                value={field.value || ''}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </CardContent>
                 </Card>

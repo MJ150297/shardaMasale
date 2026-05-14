@@ -34,6 +34,7 @@ const editPartySchema = z.object({
   status: z.enum(['active', 'inactive', 'blocked']).default('active'),
   gstin: z.string().optional().nullable(),
   pan: z.string().optional().nullable(),
+  address: z.string().max(300).optional().nullable(),
   creditLimit: z.coerce.number().min(0).default(0),
 });
 
@@ -48,6 +49,7 @@ interface Party {
   status: string;
   gstin?: string | null;
   pan?: string | null;
+  address?: string | null;
   creditLimit?: number;
 }
 
@@ -68,16 +70,17 @@ export default function EditPartyDialog({
   const form = useForm({
     // @ts-ignore - Zod v4 resolver type compatibility issue
     resolver: zodResolver(editPartySchema),
-    defaultValues: {
-      name: party.name,
-      email: party.email || '',
-      phoneNumber: party.phoneNumber || '',
-      partyType: party.partyType,
-      status: party.status as 'active' | 'inactive' | 'blocked',
-      gstin: party.gstin || '',
-      pan: party.pan || '',
-      creditLimit: party.creditLimit || 0,
-    },
+      defaultValues: {
+        name: party.name,
+        email: party.email || '',
+        phoneNumber: party.phoneNumber || '',
+        partyType: party.partyType,
+        status: party.status as 'active' | 'inactive' | 'blocked',
+        gstin: party.gstin || '',
+        pan: party.pan || '',
+        address: party.address || '',
+        creditLimit: party.creditLimit || 0,
+      },
   });
 
   const onSubmit = async (formData: EditPartyFormData) => {
@@ -193,6 +196,20 @@ export default function EditPartyDialog({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Address</FormLabel>
+                  <FormControl>
+                    <Input placeholder="123 Main St, Springfield, 12345" {...field} value={field.value || ''} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-3 gap-4">
               <FormField
