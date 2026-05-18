@@ -1,6 +1,6 @@
 import connectToDatabase from '@/lib/db';
 import NotificationModel from '@/models/Notification';
-import NotificationDelivery from '@/models/NotificationDelivery';
+import NotificationDelivery, { type INotificationDelivery } from '@/models/NotificationDelivery';
 import Settings from '@/models/Settings';
 import {
   NotificationChannel,
@@ -24,8 +24,8 @@ export interface NotificationPublishOptions {
 }
 
 export interface PublishResult {
-  notifications: Awaited<ReturnType<typeof NotificationModel.create>>[];
-  deliveries?: Awaited<ReturnType<typeof NotificationDelivery.create>>[];
+  notifications: Array<import('mongoose').HydratedDocument<import('@/models/Notification').INotification>>;
+  deliveries?: Array<import('mongoose').HydratedDocument<import('@/models/NotificationDelivery').INotificationDelivery>>;
   skippedDedupe: boolean;
   channels: NotificationChannel[];
 }
@@ -101,16 +101,16 @@ export async function publishNotification(
         owner: options.businessOwnerId,
         recipientUserId,
         businessOwnerId: options.businessOwnerId,
-        shopId: options.shopId ?? null,
-        actorUserId: options.actorUserId ?? null,
+        shopId: options.shopId ?? undefined,
+        actorUserId: options.actorUserId ?? undefined,
         eventKey: options.eventKey,
         type: eventTypeMap[options.eventKey] ?? 'info',
         channel: 'in_app',
         deliveryStatus: 'sent',
         priority:
           eventPriorityMap[options.eventKey] ?? eventDefinition.defaultPriority ?? 'normal',
-        entityType: options.entityType ?? null,
-        entityId: options.entityId ?? null,
+        entityType: options.entityType ?? undefined,
+        entityId: options.entityId ?? undefined,
         cta: rendered.cta ?? undefined,
         title: rendered.title,
         message: rendered.message,

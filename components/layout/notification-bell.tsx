@@ -212,7 +212,7 @@ export function NotificationBell() {
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-2 pb-2">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as NotificationCategory)} className="px-2 pb-2">
           <TabsList className="w-full overflow-x-auto gap-1">
             {categories.map((category) => {
               const Icon = category.icon;

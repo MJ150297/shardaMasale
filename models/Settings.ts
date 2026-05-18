@@ -66,10 +66,23 @@ export interface SecuritySettings {
 }
 
 export interface NotificationSettings {
+  inAppEnabled: boolean;
   emailEnabled: boolean;
+  whatsappEnabled: boolean;
   lowStockAlerts: boolean;
   duePaymentAlerts: boolean;
   dailySummary: boolean;
+  subscriptionExpiringAlerts: boolean;
+  subscriptionExpiredAlerts: boolean;
+  invoiceOverdueAlerts: boolean;
+  invoiceDueSoonAlerts: boolean;
+  paymentReceivedAlerts: boolean;
+  creditLimitWarningAlerts: boolean;
+  systemAnnouncements: boolean;
+  quietHours: { start: string; end: string };
+  digestMode: string;
+  digestEmailEnabled: boolean;
+  notifyRoles: Record<string, boolean>;
   retentionDays?: number;
   archiveAfterDays?: number;
 }
