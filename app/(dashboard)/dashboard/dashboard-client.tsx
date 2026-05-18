@@ -125,7 +125,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const { setActions } = usePageActions();
-  const { availableShops } = useActiveShop();
+  const { availableShops, isLoading: shopIsLoading } = useActiveShop();
 
   // Compute dynamic greeting based on time of day
   const greeting = useMemo(() => {
@@ -263,7 +263,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
       </div>
 
       {/* First-run onboarding banner */}
-      {availableShops.length === 0 && <OnboardingBanner />}
+      {!shopIsLoading && availableShops.length === 0 && <OnboardingBanner />}
 
       {/* Stats Grid - Fully Mobile Optimized */}
       <div className="grid gap-3 md:gap-5 grid-cols-2 lg:grid-cols-4">
