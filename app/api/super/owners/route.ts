@@ -44,13 +44,22 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      owner: owner.toSafeObject(),
+      owner: {
+        ...owner.toSafeObject(),
+        _id: owner._id.toString(),
+        createdAt: owner.createdAt,
+        updatedAt: owner.updatedAt,
+        lastLoginAt: owner.lastLoginAt,
+        allowedShops: owner.allowedShops?.map((shopId) => shopId.toString()) ?? [],
+        subscription: owner.subscription ?? undefined,
+      },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to create owner";
     console.error("Create owner error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to create owner" },
+      { error: message },
       { status: 500 }
     );
   }
@@ -68,10 +77,11 @@ export async function GET() {
 
     return NextResponse.json({ owners });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch owners";
     console.error("Fetch owners error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to fetch owners" },
+      { error: message },
       { status: 500 }
     );
   }

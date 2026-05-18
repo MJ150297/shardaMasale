@@ -23,15 +23,19 @@ export function getBalanceDelta(
 ): number {
   switch (type) {
     case 'sale':
-      return roundCurrency(grandTotal);
+      // Net amount customer owes = grandTotal - paidAmount
+      return roundCurrency(grandTotal - paidAmount);
     case 'sale-return':
-      return roundCurrency(-grandTotal);
+      // Net reduction in what customer owes = -(grandTotal - paidAmount)
+      return roundCurrency(-(grandTotal - paidAmount));
     case 'payment-in':
       return roundCurrency(-paidAmount);
     case 'purchase':
-      return roundCurrency(-grandTotal);
+      // Net amount business owes = -(grandTotal - paidAmount)
+      return roundCurrency(-(grandTotal - paidAmount));
     case 'purchase-return':
-      return roundCurrency(grandTotal);
+      // Net reduction in what business owes = grandTotal - paidAmount
+      return roundCurrency(grandTotal - paidAmount);
     case 'payment-out':
       return roundCurrency(paidAmount);
     case 'adjustment':

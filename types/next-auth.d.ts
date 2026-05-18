@@ -12,6 +12,12 @@ declare module "next-auth" {
       currency: string;
       belongsTo?: string | null;
       activeShopId?: string | null;
+      subscription?: {
+        plan: string;
+        status: string;
+        expiryDate?: string | null;
+        trialEndsAt?: string | null;
+      } | null;
     }
   }
 }

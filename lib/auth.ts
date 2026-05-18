@@ -14,6 +14,7 @@ import { AppError, normalizeEmail } from "@/lib/utils";
 import User, { type SafeUser, type UserRole, type UserStatus } from "@/models/User";
 import Settings from "@/models/Settings";
 import Shop from "@/models/Shop";
+import { checkUserSubscription, requireActiveSubscription, getPlanFeatures } from "@/lib/subscription";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -34,6 +35,12 @@ export type AppSessionUser = SafeUser & {
   timezone: string;
   currency: string;
   activeShopId?: string | null;
+  subscription?: {
+    plan: string;
+    status: string;
+    expiryDate?: string | null;
+    trialEndsAt?: string | null;
+  } | null;
 };
 
 export type AppSession = Omit<Session, "user"> & {
@@ -58,6 +65,12 @@ export type AuthenticatedToken = JWT & {
   currency?: string;
   belongsTo?: string | null;
   activeShopId?: string | null;
+  subscription?: {
+    plan: string;
+    status: string;
+    expiryDate?: string | null;
+    trialEndsAt?: string | null;
+  } | null;
 };
 
 function getLockoutExpiresAt(referenceTimeMs: number): Date {
@@ -186,8 +199,14 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       const nextToken = token as AuthenticatedToken;
+
+      // Handle session updates (e.g., shop switching via update())
+      if (trigger === "update" && session?.activeShopId) {
+        nextToken.activeShopId = session.activeShopId;
+        return nextToken;
+      }
 
       if (user) {
         const authenticatedUser = user as unknown as AuthenticatedUserPayload & { belongsTo?: string | null };
@@ -201,12 +220,35 @@ export const authOptions: NextAuthOptions = {
         nextToken.currency = authenticatedUser.currency;
         nextToken.belongsTo = authenticatedUser.belongsTo ?? null;
         
-        // Load user shops and set default active shop
+        // Load subscription info for owners and business users
         if (nextToken.role && nextToken.role !== 'customer' && nextToken.role !== 'superOwner') {
+          const userRecord = await User.findById(nextToken.sub).select('subscription').lean();
+          if (userRecord?.subscription) {
+            nextToken.subscription = {
+              plan: userRecord.subscription.plan ?? 'free',
+              status: userRecord.subscription.status ?? 'trial',
+              expiryDate: userRecord.subscription.expiryDate?.toISOString?.() ?? null,
+              trialEndsAt: userRecord.subscription.trialEndsAt?.toISOString?.() ?? null,
+            };
+          } else {
+            nextToken.subscription = { plan: 'free', status: 'trial', expiryDate: null, trialEndsAt: null };
+          }
+
+          // Load user shops and set default active shop
           const shops = await Shop.find({ ownerId: nextToken.sub, isActive: true }).select('_id name').lean();
           
           if (shops.length > 0) {
             nextToken.activeShopId = shops[0]._id.toString();
+          }
+        } else if (nextToken.role === 'customer') {
+          const userRecord = await User.findById(nextToken.sub).select('subscription').lean();
+          if (userRecord?.subscription) {
+            nextToken.subscription = {
+              plan: userRecord.subscription.plan ?? 'free',
+              status: userRecord.subscription.status ?? 'trial',
+              expiryDate: userRecord.subscription.expiryDate?.toISOString?.() ?? null,
+              trialEndsAt: userRecord.subscription.trialEndsAt?.toISOString?.() ?? null,
+            };
           }
         }
       }
@@ -226,6 +268,7 @@ export const authOptions: NextAuthOptions = {
         currency: (token as AuthenticatedToken).currency ?? "INR",
         belongsTo: (token as AuthenticatedToken).belongsTo ?? null,
         activeShopId: (token as AuthenticatedToken).activeShopId ?? null,
+        subscription: (token as AuthenticatedToken).subscription ?? null,
       };
 
       return nextSession;
@@ -286,4 +329,44 @@ export const requireBusinessUser = cache(async (): Promise<AppSessionUser> => {
   }
 
   return user;
+});
+
+/**
+ * Require that the authenticated user has an active (or trial) subscription.
+ * Only checks business users (owner/admin/manager/cashier/staff).
+ * SuperOwner bypasses this check.
+ */
+export const requireActiveBusinessSubscription = cache(async (): Promise<{
+  user: AppSessionUser;
+  subscription: { plan: string; status: string };
+  features: import("@/lib/subscription").PlanFeatures;
+}> => {
+  const user = await requireUser();
+
+  // Super owner is always allowed
+  if (user.role === "superOwner") {
+    return {
+      user,
+      subscription: { plan: "unlimited", status: "active" },
+      features: getPlanFeatures("unlimited"),
+    };
+  }
+
+  // Customers don't need a subscription check here
+  if (user.role === "customer") {
+    return {
+      user,
+      subscription: { plan: "free", status: "active" },
+      features: getPlanFeatures("free"),
+    };
+  }
+
+  const result = await checkUserSubscription(user.id);
+  requireActiveSubscription(result);
+
+  return {
+    user,
+    subscription: { plan: result.plan, status: result.status },
+    features: result.features,
+  };
 });

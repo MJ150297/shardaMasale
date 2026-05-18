@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown } from 'lucide-react';
+import { formatDate } from '@/lib/date-utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateSaleDialog from '@/components/create-sale-dialog';
 import CreatePurchaseDialog from '@/components/create-purchase-dialog';
@@ -297,7 +298,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
             </Badge>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Created {format(new Date(party.createdAt), 'dd MMM yyyy')}
+            Created {formatDate(party.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}
           </p>
         </div>
 
@@ -463,7 +464,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                     filteredTransactions.map((txn) => (
                       <tr key={txn._id} className="border-b hover:bg-muted/50">
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {new Date(txn.transactionDate).toLocaleDateString()}
+                          {formatDate(txn.transactionDate)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap font-medium">
                           {txn.transactionNumber}
@@ -571,13 +572,13 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                     filteredInvoices.map((inv) => (
                       <tr key={inv._id} className="border-b hover:bg-muted/50">
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {new Date(inv.createdAt).toLocaleDateString()}
+                          {formatDate(inv.createdAt)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap font-medium">
                           {inv.invoiceNumber}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {new Date(inv.dueDate).toLocaleDateString()}
+                          {formatDate(inv.dueDate)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap font-medium">
                           ₹{(inv.transactionId?.summary?.grandTotal || 0).toFixed(2)}
@@ -647,7 +648,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Active Since</p>
                 <p className="text-lg font-medium">
-                  {format(new Date(party.createdAt), 'MMM yyyy')}
+                  {formatDate(party.createdAt, { month: 'short', year: 'numeric' })}
                 </p>
               </div>
               <div className="space-y-1">
@@ -671,7 +672,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                           {txn.transactionNumber}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {new Date(txn.transactionDate).toLocaleDateString()} &middot; {txn.type}
+                          {formatDate(txn.transactionDate)} &middot; {txn.type}
                         </p>
                       </div>
                     </div>
@@ -725,10 +726,3 @@ const partyTypeLabels: Record<string, string> = {
   both: 'Customer & Supplier',
 };
 
-function format(date: Date, fmt: string) {
-  return date.toLocaleDateString('en-IN', {
-    day: fmt.includes('dd') ? 'numeric' : undefined,
-    month: 'short',
-    year: 'numeric',
-  });
-}

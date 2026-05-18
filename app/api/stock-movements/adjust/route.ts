@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireActiveBusinessSubscription } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
 import Item from "@/models/Item";
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   session.startTransaction();
 
   try {
-    const user = await requireUser();
+    const { user } = await requireActiveBusinessSubscription();
     const body = await request.json();
 
     const { itemId, adjustedQuantity, reason } = body;

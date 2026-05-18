@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { formatDate } from '@/lib/date-utils';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -197,7 +198,7 @@ export default function ItemPreviewDialog({
               <Separator />
               <div>
                 <p className="text-xs text-gray-500 uppercase font-medium">Expiry Date</p>
-                <p className="font-medium">{new Date(item.expiryDate).toLocaleDateString()}</p>
+                <p className="font-medium">{formatDate(item.expiryDate)}</p>
               </div>
             </>
           )}

@@ -100,7 +100,7 @@ const addressSchema = new Schema<SettingsAddress>(
   {
     line1: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       maxlength: 200,
     },
@@ -112,19 +112,19 @@ const addressSchema = new Schema<SettingsAddress>(
     },
     city: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       maxlength: 100,
     },
     state: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       maxlength: 100,
     },
     postalCode: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       maxlength: 20,
     },
@@ -158,13 +158,13 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         {
           legalName: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
             maxlength: 200,
           },
           displayName: {
             type: String,
-            required: true,
+            default: "",
             trim: true,
             maxlength: 160,
           },

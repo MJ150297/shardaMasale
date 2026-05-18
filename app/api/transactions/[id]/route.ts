@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import {
   applyConfirmedTransactionInventory,
@@ -92,7 +92,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       data: transaction,
     });
   } catch (error: any) {
-    // Safe HTTP status code handling with proper validation and clamping
     const status = Number(error.status) || 500;
     const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
@@ -104,7 +103,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
     const { id } = await context.params;
 
@@ -146,7 +145,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     if (transaction.status === 'draft' && nextStatus === 'confirmed') {
-      // Check credit limit for sale and purchase-return transactions
       if (
         transaction.party &&
         (transaction.type === 'sale' || transaction.type === 'purchase-return') &&
@@ -202,7 +200,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         transaction.lineItems,
       );
 
-      // Update party balance on confirm
       if (transaction.party) {
         const partyId = transaction.party.toString();
         const delta = getBalanceDelta(
@@ -238,7 +235,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         transaction.lineItems,
       );
 
-      // Reverse party balance on cancellation
       if (transaction.party) {
         const partyId = transaction.party.toString();
         const delta = getBalanceDelta(
@@ -249,7 +245,6 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         await updatePartyBalance(partyId, -delta, user.id, session);
       }
 
-      // Auto-cancel linked invoice if it exists
       if (transaction.invoiceId) {
         const linkedInvoice = await Invoice.findOne({
           _id: transaction.invoiceId,
@@ -307,7 +302,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
     const { id } = await context.params;
 

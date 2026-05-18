@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
@@ -66,7 +66,7 @@ function normalizeItemTaxRates<T extends {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
@@ -94,10 +94,16 @@ export async function POST(request: Request) {
       }
     }
 
+    // Require an active shop for creating items
+    if (!user.activeShopId) {
+      throw new AppError('Please select or create a shop before adding items', 400);
+    }
+
     // Create the item
     const item = new Item({
       ...normalizeItemTaxRates(validatedData),
       owner: user.id,
+      shopId: user.activeShopId,
     });
 
     await item.save();
@@ -141,6 +147,10 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
 
     const query: any = { owner: user.id };
+
+    if (user.activeShopId) {
+      query.shopId = user.activeShopId;
+    }
 
     if (type && ['product', 'service'].includes(type)) {
       query.itemType = type;
@@ -229,7 +239,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const { id, ...data } = await request.json();
@@ -350,7 +360,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);

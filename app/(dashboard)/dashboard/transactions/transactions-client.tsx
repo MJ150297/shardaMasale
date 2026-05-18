@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { roundCurrency, debounce } from '@/lib/utils';
+import { formatDate } from '@/lib/date-utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateSaleDialog from '@/components/create-sale-dialog';
 import CreatePurchaseDialog from '@/components/create-purchase-dialog';
@@ -20,6 +21,7 @@ import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
 import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateSaleReturnDialog from '@/components/create-sale-return-dialog';
 import CreatePurchaseReturnDialog from '@/components/create-purchase-return-dialog';
+import RequireShopGuard from '@/components/require-shop-guard';
 
 interface TransactionLineItem {
   id?: string;
@@ -356,13 +358,14 @@ export default function TransactionsClient() {
           <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
           <p className="text-muted-foreground">View and manage all sales, purchases and payments</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Transaction
-            </Button>
-          </DropdownMenuTrigger>
+        <RequireShopGuard>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Transaction
+              </Button>
+            </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-white/80">
               <CreateSaleDialog onSaleCreated={loadTransactions}>
                 <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
@@ -392,7 +395,8 @@ export default function TransactionsClient() {
                 Payment Out (Pay)
               </DropdownMenuItem>
             </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        </RequireShopGuard>
 
         {paymentDialogOpen === 'payment-in' && (
           <CreatePaymentInDialog
@@ -473,7 +477,7 @@ export default function TransactionsClient() {
                 filteredTransactions.map((transaction) => (
                   <tr key={getTransactionId(transaction)} className="border-b hover:bg-muted/50">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {new Date(transaction.transactionDate).toLocaleDateString()}
+                      {formatDate(transaction.transactionDate)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {getPartyName(transaction.party)}
@@ -632,7 +636,7 @@ export default function TransactionsClient() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Date</p>
-                  <p className="font-medium">{new Date(selectedTransaction.transactionDate).toLocaleDateString()}</p>
+                  <p className="font-medium">{formatDate(selectedTransaction.transactionDate)}</p>
                 </div>
               </div>
               <div className="border rounded-md p-4">

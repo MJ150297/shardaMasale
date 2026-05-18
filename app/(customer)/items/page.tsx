@@ -15,10 +15,14 @@ export default async function ItemsBrowsePage() {
     .sort({ createdAt: -1 })
     .lean();
 
-  const serializedItems = items.map(item => ({
-    ...item,
-    _id: item._id.toString(),
-  }));
+  const serializedItems = JSON.parse(
+    JSON.stringify(
+      items.map((item) => ({
+        ...item,
+        _id: item._id.toString(),
+      })),
+    ),
+  );
 
   return <ItemsBrowseClient items={serializedItems} />;
 }

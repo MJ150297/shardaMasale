@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError, generateTransactionNumber, roundCurrency } from '@/lib/utils';
 import {
   applyConfirmedTransactionInventory,
@@ -13,6 +13,15 @@ import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
 import { allocateInvoiceSettlements } from '@/lib/payment-settlement';
+
+const transactionTypesThatRequireParty = [
+  'sale',
+  'purchase',
+  'sale-return',
+  'purchase-return',
+  'payment-in',
+  'payment-out',
+] as const;
 
 const createTransactionSchema = z.object({
   type: z.enum(["sale", "purchase", "sale-return", "purchase-return", "payment-in", "payment-out", "adjustment", "opening-balance"]),
@@ -47,6 +56,18 @@ const createTransactionSchema = z.object({
   notes: z.string().optional().nullable(),
   tags: z.array(z.string()).default([]),
   status: z.enum(["draft", "confirmed", "cancelled"]).default("draft"),
+}).superRefine((value, ctx) => {
+  const requiresParty = transactionTypesThatRequireParty.includes(
+    value.type as (typeof transactionTypesThatRequireParty)[number],
+  );
+
+  if (requiresParty && (!value.party || value.party.trim().length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['party'],
+      message: 'Party is required',
+    });
+  }
 });
 
 export async function GET(request: Request) {
@@ -128,7 +149,7 @@ export async function POST(request: Request) {
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
@@ -139,6 +160,11 @@ export async function POST(request: Request) {
       paymentDiscountAmount,
       ...transactionInput
     } = validated;
+
+    // Require an active shop for creating transactions
+    if (!user.activeShopId) {
+      throw new AppError('Please select or create a shop before creating transactions', 400);
+    }
 
     const cashAmount = roundCurrency(
       transactionInput.summary.paidAmount ?? transactionInput.summary.grandTotal ?? 0,
@@ -429,7 +455,7 @@ export async function POST(request: Request) {
       if (party && party.creditLimit > 0) {
         // Calculate what balance would be after this transaction
         const delta = getBalanceDelta(
-          transactionInput.type as any,
+          transactionInput.type,
           grandTotal,
           paidAmount,
         );
@@ -451,6 +477,7 @@ export async function POST(request: Request) {
     const [transaction] = await Transaction.create([{
       ...transactionInput,
       owner: user.id,
+      shopId: user.activeShopId,
       transactionNumber,
       createdBy: user.id,
       updatedBy: user.id,

@@ -16,10 +16,14 @@ export default async function CustomerDashboardPage() {
     .sort({ createdAt: -1 })
     .lean();
 
-  const serializedItems = featuredItems.map(item => ({
-    ...item,
-    _id: item._id.toString(),
-  }));
+  const serializedItems = JSON.parse(
+    JSON.stringify(
+      featuredItems.map((item) => ({
+        ...item,
+        _id: item._id.toString(),
+      })),
+    ),
+  );
 
   return <CustomerDashboardClient items={serializedItems} userName={user.name} />;
 }

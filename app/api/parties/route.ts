@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import Party from '@/models/Party';
 
@@ -25,7 +25,7 @@ const createPartySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
@@ -43,16 +43,28 @@ export async function POST(request: Request) {
       }
     }
 
+    // Require an active shop for creating parties
+    if (!user.activeShopId) {
+      throw new AppError('Please select or create a shop before adding parties', 400);
+    }
+
     // Create the party — set currentBalance to openingBalance
     const party = new Party({
       ...validatedData,
       owner: user.id,
+      shopId: user.activeShopId,
       currentBalance: validatedData.openingBalance || 0,
     });
 
     await party.save();
 
-    return NextResponse.json(party, { status: 201 });
+    return NextResponse.json(
+      {
+        ...party.toJSON(),
+        _id: party._id.toString(),
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating party:', error);
 
@@ -89,7 +101,11 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
-    const query: any = { owner: user.id, isArchived: false };
+    const query: Record<string, unknown> = { owner: user.id, isArchived: false };
+
+    if (user.activeShopId) {
+      query.shopId = user.activeShopId;
+    }
 
     if (partyType && ['customer', 'supplier', 'both'].includes(partyType)) {
       query.partyType = partyType;
@@ -135,7 +151,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
@@ -165,7 +181,10 @@ export async function PUT(request: Request) {
     Object.assign(party, updateData);
     await party.save();
 
-    return NextResponse.json(party);
+    return NextResponse.json({
+      ...party.toJSON(),
+      _id: party._id.toString(),
+    });
   } catch (error) {
     console.error('Error updating party:', error);
 
@@ -192,7 +211,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);

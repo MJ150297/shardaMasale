@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError, roundCurrency } from '@/lib/utils';
 import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
 import Transaction from '@/models/Transaction';
@@ -59,7 +59,10 @@ function getSafeStatus(error: unknown): number {
 }
 
 const createInvoiceSchema = z.object({
-  party: z.string().optional().nullable(),
+  party: z.preprocess(
+    (val) => (val === undefined || val === null ? '' : val),
+    z.string().min(1, "Party is required")
+  ),
   transactionDate: z.coerce.date().default(() => new Date()),
   dueDate: z.coerce.date(),
   lineItems: z.array(z.object({
@@ -181,8 +184,13 @@ export async function POST(request: Request) {
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
+
+    // Require an active shop for creating invoices
+    if (!user.activeShopId) {
+      throw new AppError('Please select or create a shop before creating invoices', 400);
+    }
 
     const body = await request.json();
     const validated = createInvoiceSchema.parse(body);
@@ -341,7 +349,7 @@ export async function handleGenerateInvoice(request: Request) {
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();

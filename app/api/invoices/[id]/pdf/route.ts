@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import Invoice from '@/models/Invoice';
+import Settings from '@/models/Settings';
 import InvoicePDF from '@/modules/billing/invoice-pdf';
 
 export async function GET(
@@ -34,6 +37,41 @@ export async function GET(
 
     const transaction = invoice.transactionId as any;
 
+    // Fetch business settings for shop or owner
+    const query: Record<string, unknown> = { owner: user.id };
+    if (user.activeShopId) {
+      query.shopId = user.activeShopId;
+    } else {
+      query.shopId = null;
+    }
+    let settings = await Settings.findOne(query).lean();
+    // Fallback to owner-level settings if no shop-level settings exist
+    if (!settings && user.activeShopId) {
+      settings = await Settings.findOne({ owner: user.id, shopId: null }).lean();
+    }
+
+    const business = settings?.business;
+
+    // Build a formatted address string
+    let businessAddress = '';
+    if (business?.address) {
+      const addr = business.address;
+      businessAddress = [addr.line1, addr.city, addr.state].filter(Boolean).join(', ');
+    }
+
+    // Read logo and convert to base64 data URI
+    let logoDataUri: string | undefined;
+    try {
+      const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+      if (fs.existsSync(logoPath)) {
+        const logoBuffer = fs.readFileSync(logoPath);
+        const ext = path.extname('logo.png').slice(1);
+        logoDataUri = `data:image/${ext};base64,${logoBuffer.toString('base64')}`;
+      }
+    } catch {
+      // Logo is optional, silently skip if it fails
+    }
+
     const invoiceData = {
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: new Date(transaction.transactionDate).toLocaleDateString('en-IN'),
@@ -56,6 +94,15 @@ export async function GET(
       grandTotal: transaction.summary.grandTotal,
       notes: invoice.notes,
       termsAndConditions: invoice.termsAndConditions,
+      business: {
+        displayName: business?.displayName,
+        legalName: business?.legalName,
+        address: businessAddress,
+        gstin: business?.gstin,
+        phoneNumber: business?.phoneNumber,
+        email: business?.email,
+      },
+      logoDataUri,
     };
 
     // @ts-ignore - react-pdf types incompatibility

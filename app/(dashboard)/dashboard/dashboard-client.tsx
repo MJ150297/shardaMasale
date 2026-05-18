@@ -29,6 +29,8 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { getPartyId, getPartyName, getPartyPhone, type PartyLike } from '@/lib/party-helpers';
 import { cn } from '@/lib/utils';
+import { useActiveShop } from '@/components/providers/shop-provider';
+import OnboardingBanner from '@/components/onboarding-banner';
 
 const salesData = [
   { name: 'Jan', sales: 4000, orders: 240 },
@@ -123,6 +125,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const { setActions } = usePageActions();
+  const { availableShops } = useActiveShop();
 
   // Compute dynamic greeting based on time of day
   const greeting = useMemo(() => {
@@ -258,6 +261,9 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
           <span>Updated just now</span>
         </div>
       </div>
+
+      {/* First-run onboarding banner */}
+      {availableShops.length === 0 && <OnboardingBanner />}
 
       {/* Stats Grid - Fully Mobile Optimized */}
       <div className="grid gap-3 md:gap-5 grid-cols-2 lg:grid-cols-4">

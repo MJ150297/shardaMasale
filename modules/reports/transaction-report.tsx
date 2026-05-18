@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { formatDate } from '@/lib/date-utils';
 import { ExportButton } from './export-button';
 import { DateRangeFilter } from './date-range-filter';
 
@@ -151,7 +152,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
             <TableBody>
               {data.transactions.map((tx: any) => (
                 <TableRow key={tx._id}>
-                  <TableCell>{new Date(tx.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatDate(tx.createdAt)}</TableCell>
                   <TableCell>{tx.party?.name || '-'}</TableCell>
                   <TableCell>
                     <Badge variant={tx.type === 'sale' ? 'default' : 'secondary'}>

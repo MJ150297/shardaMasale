@@ -19,7 +19,7 @@ import type { ISettings } from "@/models/Settings";
 type SettingsFormData = Omit<ISettings, '_id' | 'owner' | 'shopId' | 'createdAt' | 'updatedAt' | '__v'>;
 
 export default function SettingsPage() {
-  const { activeShopId, currentShop } = useActiveShop();
+  const { activeShopId, currentShop, availableShops } = useActiveShop();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("business");
@@ -95,17 +95,14 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    if (activeShopId) {
-      fetchSettings();
-    } else {
-      setLoading(false);
-    }
+    fetchSettings();
   }, [activeShopId]);
 
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/settings?shopId=${activeShopId}`);
+      const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
+      const response = await fetch(`/api/settings${queryParam}`);
       if (!response.ok) throw new Error("Failed to fetch settings");
 
       const settings = await response.json();
@@ -121,7 +118,8 @@ export default function SettingsPage() {
   const onSubmit = async (data: SettingsFormData) => {
     try {
       setSaving(true);
-      const response = await fetch(`/api/settings?shopId=${activeShopId}`, {
+      const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
+      const response = await fetch(`/api/settings${queryParam}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -137,24 +135,6 @@ export default function SettingsPage() {
       setSaving(false);
     }
   };
-
-  if (!activeShopId) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">
-            Configure your shop settings
-          </p>
-        </div>
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Please select a shop to manage settings.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (loading) {
     return (
@@ -172,7 +152,11 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            {currentShop ? `Configure settings for ${currentShop.name}` : 'Configure business and system settings'}
+            {currentShop
+              ? `Configure settings for ${currentShop.name}`
+              : availableShops.length === 0
+                ? 'Configure your default business settings. Create a shop to manage location-specific settings.'
+                : 'Configure business and system settings'}
           </p>
         </div>
         <Button onClick={handleSubmit(onSubmit)} disabled={saving}>

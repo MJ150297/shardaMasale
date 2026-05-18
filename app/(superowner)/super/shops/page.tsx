@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { requireSuperOwner } from "@/lib/auth";
+import { formatDate } from "@/lib/date-utils";
 import connectToDatabase from "@/lib/db";
 import Shop from "@/models/Shop";
 
@@ -51,7 +52,7 @@ export default async function ShopsListingPage() {
                       {shop.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
-                  <TableCell>{new Date(shop.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatDate(shop.createdAt)}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button size="sm" variant="secondary">View</Button>
                   </TableCell>

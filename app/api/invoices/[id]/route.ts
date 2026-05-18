@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
-import { requireBusinessUser } from '@/lib/auth';
+import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
 import { AppError } from '@/lib/utils';
 import { reverseConfirmedTransactionInventory } from '@/lib/transaction-inventory';
 import Transaction from '@/models/Transaction';
@@ -63,7 +63,7 @@ export async function PATCH(
   session.startTransaction();
 
   try {
-    const user = await requireBusinessUser();
+    const { user } = await requireActiveBusinessSubscription();
     await connectToDatabase();
     const { id } = await context.params;
 

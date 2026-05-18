@@ -25,6 +25,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import CommandCreateButton from '@/components/command-create-button';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 
 import TransactionForm from '@/components/transaction-form';
 
@@ -75,6 +77,7 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
   // Party selection
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
   const [selectedPartyName, setSelectedPartyName] = useState<string | null>(null);
 
@@ -230,6 +233,37 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
     onPurchaseReturnCreated?.();
   }
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !['supplier', 'both'].includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    setSelectedPartyId(createdParty._id);
+    setSelectedPartyName(
+      createdParty.displayName ||
+        createdParty.name ||
+        createdParty.fullName ||
+        createdParty.partyName ||
+        null,
+    );
+    setSelectedTransactionId(null);
+    setSelectedTransactionNumber(null);
+    setSelectedLineItems([]);
+    setManualEntry(false);
+    setPartySearchQuery('');
+    setCreatePartyOpen(false);
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -244,6 +278,13 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
           step === 'form' ? 'sm:max-w-5xl' : 'sm:max-w-2xl'
         } max-h-dvh overflow-y-auto p-4 sm:p-6`}
       >
+        <CreatePartyDialog
+          defaultPartyType="supplier"
+          onPartyCreated={handleCreatedParty}
+          open={createPartyOpen}
+          onOpenChange={setCreatePartyOpen}
+          showTrigger={false}
+        />
         {step === 'select' && (
           <>
             <DialogHeader>
@@ -321,6 +362,11 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
                           })()}
                         </CommandGroup>
                       </CommandList>
+                      <div className="border-t p-1">
+                        <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                          Create supplier
+                        </CommandCreateButton>
+                      </div>
                     </Command>
                   </PopoverContent>
                 </Popover>

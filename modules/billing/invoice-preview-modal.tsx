@@ -1,9 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 import { Download, Printer } from 'lucide-react';
+import { formatDate } from '@/lib/date-utils';
 import InvoiceShareSheet from '@/components/invoice-share-sheet';
+import { useActiveShop } from '@/components/providers/shop-provider';
 
 interface InvoicePreviewModalProps {
   open: boolean;
@@ -13,6 +17,23 @@ interface InvoicePreviewModalProps {
   onPrint: () => void;
 }
 
+interface BusinessSettings {
+  displayName?: string;
+  legalName?: string;
+  email?: string;
+  phoneNumber?: string;
+  gstin?: string;
+  pan?: string;
+  address: {
+    line1: string;
+    line2?: string | null;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+}
+
 export default function InvoicePreviewModal({
   open,
   onOpenChange,
@@ -20,6 +41,34 @@ export default function InvoicePreviewModal({
   onDownload,
   onPrint
 }: InvoicePreviewModalProps) {
+  const { activeShopId } = useActiveShop();
+  const [business, setBusiness] = useState<BusinessSettings | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const fetchSettings = async () => {
+      try {
+        const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
+        const res = await fetch(`/api/settings${queryParam}`);
+        if (res.ok) {
+          const settings = await res.json();
+          setBusiness(settings.business);
+        }
+      } catch (error) {
+        console.error('Failed to fetch business settings:', error);
+      }
+    };
+    fetchSettings();
+  }, [open, activeShopId]);
+
+  const businessName = business?.displayName || business?.legalName || 'BUSINESS NAME';
+  const businessAddress = business?.address
+    ? [business.address.line1, business.address.city, business.address.state]
+        .filter(Boolean)
+        .join(', ')
+    : 'Business Address';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-none! w-[90vw] max-h-[90vh] overflow-hidden p-0 flex flex-col">
@@ -57,21 +106,42 @@ export default function InvoicePreviewModal({
         </DialogHeader>
 
         <div className="overflow-y-auto p-8 bg-gray-100 flex-1">
-          <div className="max-w-3xl mx-auto bg-white shadow-xl p-12 rounded-md" style={{ aspectRatio: '1 / 1.414' }}>
+          <div className="max-w-3xl mx-auto shadow-xl rounded-md">
+            <div className="relative bg-white p-12 rounded-md overflow-hidden" style={{ aspectRatio: '1 / 1.414' }}>
+            {/* Watermark Logo */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+              <Image
+                src="/logo.png"
+                alt=""
+                width={300}
+                height={300}
+                className="opacity-10 object-contain"
+                style={{ maxWidth: '60%', maxHeight: '60%', width: 'auto', height: 'auto' }}
+                priority
+              />
+            </div>
             
             {/* Header */}
             <div className="flex justify-between mb-8">
               <div>
-                <h2 className="text-2xl font-bold">BUSINESS NAME</h2>
-                <p className="text-sm text-gray-500">Business Address</p>
-                <p className="text-sm text-gray-500">GSTIN: XXXXXXXXXX</p>
+                <h2 className="text-2xl font-bold">{businessName}</h2>
+                <p className="text-sm text-gray-500">{businessAddress}</p>
+                {business?.gstin && (
+                  <p className="text-sm text-gray-500">GSTIN: {business.gstin}</p>
+                )}
+                {business?.phoneNumber && (
+                  <p className="text-sm text-gray-500">Phone: {business.phoneNumber}</p>
+                )}
+                {business?.email && (
+                  <p className="text-sm text-gray-500">Email: {business.email}</p>
+                )}
               </div>
               <div className="text-right">
                 <h1 className="text-3xl font-bold text-blue-600">INVOICE</h1>
                 <div className="mt-3 text-sm text-gray-600 space-y-1">
                   <p>Invoice #: {invoice?.invoiceNumber}</p>
-                  <p>Date: {invoice?.transactionId?.transactionDate ? new Date(invoice.transactionId.transactionDate).toLocaleDateString() : ''}</p>
-                  <p>Due Date: {invoice?.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : ''}</p>
+                  <p>Date: {invoice?.transactionId?.transactionDate ? formatDate(invoice.transactionId.transactionDate) : ''}</p>
+                  <p>Due Date: {invoice?.dueDate ? formatDate(invoice.dueDate) : ''}</p>
                 </div>
               </div>
             </div>
@@ -81,8 +151,25 @@ export default function InvoicePreviewModal({
               <h3 className="font-semibold text-sm border-b pb-1 mb-2">Bill To</h3>
               <div className="text-sm">
                 <p className="font-medium">{invoice?.transactionId?.party?.displayName || invoice?.transactionId?.party?.name}</p>
-                <p className="text-gray-500">{invoice?.transactionId?.party?.phone}</p>
-                <p className="text-gray-500">{invoice?.transactionId?.party?.address}</p>
+                {(invoice?.transactionId?.party?.phoneNumber || invoice?.transactionId?.party?.phone) && (
+                  <p className="text-gray-500">{invoice?.transactionId?.party?.phoneNumber || invoice?.transactionId?.party?.phone}</p>
+                )}
+                {invoice?.transactionId?.party?.email && (
+                  <p className="text-gray-500">{invoice?.transactionId?.party?.email}</p>
+                )}
+                {(() => {
+                  const party = invoice?.transactionId?.party;
+                  const addressStr = party?.address;
+                  const billingAddr = party?.billingAddress;
+                  if (addressStr) {
+                    return <p className="text-gray-500">{addressStr}</p>;
+                  }
+                  if (billingAddr) {
+                    const parts = [billingAddr.line1, billingAddr.city, billingAddr.state, billingAddr.postalCode].filter(Boolean);
+                    return parts.length > 0 ? <p className="text-gray-500">{parts.join(', ')}</p> : null;
+                  }
+                  return null;
+                })()}
               </div>
             </div>
 
@@ -158,6 +245,7 @@ export default function InvoicePreviewModal({
               <p>Thank you for your business!</p>
             </div>
 
+            </div>
           </div>
         </div>
       </DialogContent>

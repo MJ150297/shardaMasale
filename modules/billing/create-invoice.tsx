@@ -42,6 +42,9 @@ import {
 import { toast } from 'sonner';
 import { roundCurrency, calculateLineTotal } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import CommandCreateButton from '@/components/command-create-button';
+import CreateItemDialog, { type CreatedItem } from '@/components/create-item-dialog';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 
 const lineItemSchema = z.object({
   item: z.string().optional().nullable(),
@@ -61,7 +64,10 @@ const additionalChargeSchema = z.object({
 });
 
 const createInvoiceSchema = z.object({
-  party: z.string().optional().nullable(),
+  party: z.preprocess(
+    (val) => (val === undefined || val === null ? '' : val),
+    z.string().min(1, "*Party is required")
+  ),
   transactionDate: z.coerce.date().default(() => new Date()),
   dueDate: z.coerce.date(),
   lineItems: z.array(lineItemSchema).min(1, "At least one item is required"),
@@ -88,6 +94,7 @@ interface Item {
   _id: string;
   id?: string;
   name: string;
+  description?: string;
   sku: string;
   unit: string;
   price: number;
@@ -109,17 +116,21 @@ interface Item {
   };
 }
 
-interface Party {
-  _id: string;
+interface Party extends CreatedParty {
   id?: string;
-  name?: string;
-  displayName?: string;
-  fullName?: string;
-  partyName?: string;
-  phone?: string;
-  phoneNumber?: string;
-  mobile?: string;
-  email?: string;
+  email?: string | null;
+}
+
+function getItemSellingPrice(item: Item | CreatedItem) {
+  return item.pricing?.sellingPrice ?? item.sellingPrice ?? item.price ?? 0;
+}
+
+function getItemUnit(item: Item | CreatedItem) {
+  return item.unitOfMeasure ?? item.unit ?? 'pcs';
+}
+
+function getDefaultTaxRate(item: Item | CreatedItem) {
+  return item.saleTaxRate ?? item.taxRate ?? item.purchaseTaxRate ?? 0;
 }
 
 interface CreateInvoiceProps {
@@ -132,6 +143,8 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   const [parties, setParties] = useState<Party[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
+  const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
   const [renderKey, setRenderKey] = useState(0);
   const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
   const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
@@ -389,7 +402,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
         }
       } else {
         const error = await response.json();
-        toast.error(error.message || 'Failed to create invoice');
+        toast.error(error.error || error.message || 'Failed to create invoice');
       }
     } catch (error) {
       console.error('Error creating invoice:', error);
@@ -399,8 +412,77 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
     }
   };
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !['customer', 'both'].includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    form.setValue('party', createdParty._id, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setPartySearchQuery('');
+    setCreatePartyOpen(false);
+  }
+
+  function handleCreatedItem(index: number, item: CreatedItem) {
+    const sellingPrice = getItemSellingPrice(item);
+
+    setItems((current) => {
+      if (current.some((entry) => entry._id === item._id)) {
+        return current;
+      }
+
+      return [item as Item, ...current];
+    });
+
+    form.setValue(`lineItems.${index}.item`, item._id);
+    form.setValue(`lineItems.${index}.itemName`, item.name);
+    form.setValue(`lineItems.${index}.sku`, item.sku);
+    form.setValue(`lineItems.${index}.description`, item.description || null);
+    form.setValue(`lineItems.${index}.unit`, getItemUnit(item));
+    form.setValue(`lineItems.${index}.unitPrice`, sellingPrice);
+    form.setValue(`lineItems.${index}.taxRate`, getDefaultTaxRate(item));
+    form.setValue(`lineItems.${index}.discountAmount`, 0);
+    setOriginalPrices((prev) => ({ ...prev, [item._id]: sellingPrice }));
+    setPriceUpdateItems((prev) => ({ ...prev, [item._id]: false }));
+    setCreateItemIndex(null);
+  }
+
   return (
     <div className="space-y-6" key={renderKey}>
+      <CreatePartyDialog
+        defaultPartyType="customer"
+        onPartyCreated={handleCreatedParty}
+        open={createPartyOpen}
+        onOpenChange={setCreatePartyOpen}
+        showTrigger={false}
+      />
+      <CreateItemDialog
+        onItemCreated={(item) => {
+          if (createItemIndex !== null) {
+            handleCreatedItem(createItemIndex, item);
+          }
+        }}
+        open={createItemIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateItemIndex(null);
+          }
+        }}
+        showTrigger={false}
+      />
       <Card>
         <CardContent className="space-y-6">
           <Form {...(form as any)}>
@@ -447,21 +529,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                             <CommandList className="max-h-72 overflow-y-auto">
                               <CommandEmpty>No customer found.</CommandEmpty>
                               <CommandGroup>
-                                <CommandItem
-                                  value="none"
-                                  onSelect={() => {
-                                    field.onChange(null);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === null ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  None
-                                </CommandItem>
-                                {(() => {
+                                 {(() => {
                                   const search = partySearchQuery.toLowerCase();
 
                                   if (search === '') {
@@ -498,6 +566,11 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                                 ))}
                               </CommandGroup>
                             </CommandList>
+                            <div className="border-t p-1">
+                              <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                                Create customer
+                              </CommandCreateButton>
+                            </div>
                           </Command>
                         </PopoverContent>
                       </Popover>
@@ -607,33 +680,19 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                                           <CommandEmpty>No item found.</CommandEmpty>
                                           <CommandGroup>
                                             {items.map((item) => (
-                                               <CommandItem
+                                              <CommandItem
                                                  value={item._id}
                                                  key={item._id}
                                                  onSelect={() => {
-                                                   function getItemSellingPrice(item: any) {
-                                                     return item.pricing?.sellingPrice ?? item.sellingPrice ?? item.price ?? 0;
-                                                   }
-                                                   
-                                                   function getItemCostPrice(item: any) {
-                                                     return item.pricing?.costPrice ?? item.costPrice ?? item.pricing?.purchasePrice ?? item.purchasePrice ?? 0;
-                                                   }
-                                                   
-                                                   function getItemUnit(item: any) {
-                                                     return item.unitOfMeasure ?? item.unit ?? 'pcs';
-                                                   }
-                                                   
-                                                   function getDefaultTaxRate(item: any) {
-                                                     return item.saleTaxRate ?? item.taxRate ?? item.purchaseTaxRate ?? 0;
-                                                   }
-
                                                    const sellingPrice = getItemSellingPrice(item);
                                                    form.setValue(`lineItems.${index}.item`, item._id);
                                                    form.setValue(`lineItems.${index}.itemName`, item.name);
                                                    form.setValue(`lineItems.${index}.sku`, item.sku);
+                                                   form.setValue(`lineItems.${index}.description`, item.description || null);
                                                    form.setValue(`lineItems.${index}.unit`, getItemUnit(item));
                                                    form.setValue(`lineItems.${index}.unitPrice`, sellingPrice);
                                                    form.setValue(`lineItems.${index}.taxRate`, getDefaultTaxRate(item));
+                                                   form.setValue(`lineItems.${index}.discountAmount`, 0);
                                                    setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
                                                    setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
                                                  }}
@@ -649,12 +708,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                                                   <div className="flex gap-3 text-xs text-muted-foreground">
                                                     {item.sku && <span>SKU: {item.sku}</span>}
                                                     <span>
-                                                      Sell: ₹{(() => {
-                                                        function getItemSellingPrice(item: any) {
-                                                          return item.pricing?.sellingPrice ?? item.sellingPrice ?? item.price ?? 0;
-                                                        }
-                                                        return getItemSellingPrice(item).toFixed(2);
-                                                      })()}
+                                                      Sell: ₹{getItemSellingPrice(item).toFixed(2)}
                                                     </span>
                                                     <span>Stock: {
                                                       typeof item.stock === 'object' 
@@ -667,6 +721,11 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                                             ))}
                                           </CommandGroup>
                                         </CommandList>
+                                        <div className="border-t p-1">
+                                          <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                            Create item
+                                          </CommandCreateButton>
+                                        </div>
                                       </Command>
                                     </PopoverContent>
                                   </Popover>

@@ -44,11 +44,18 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import CommandCreateButton from '@/components/command-create-button';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 import { cn, roundCurrency } from '@/lib/utils';
 import { allocateInvoiceSettlements } from '@/lib/payment-settlement';
 
+const requiredPartySchema = z.preprocess(
+  (value) => (value === undefined || value === null ? '' : value),
+  z.string().trim().min(1, 'Supplier is required'),
+);
+
 const paymentFormSchema = z.object({
-  party: z.string().optional().nullable(),
+  party: requiredPartySchema,
   transactionDate: z.coerce.date().default(() => new Date()),
   amount: z.coerce.number().min(0, 'Amount cannot be negative'),
   appliedTransactionIds: z.array(z.string()).default([]),
@@ -73,7 +80,7 @@ type PaymentMethod =
   | 'other';
 
 interface PaymentFormValues {
-  party?: string | null;
+  party: string;
   transactionDate: Date;
   amount: number;
   appliedTransactionIds: string[];
@@ -127,7 +134,7 @@ function getDefaultPaymentValues(
   initialSelectedTransactionIds: string[] = [],
 ): PaymentFormValues {
   return {
-    party: initialPartyId ?? null,
+    party: initialPartyId ?? '',
     transactionDate: new Date(),
     amount: 0,
     appliedTransactionIds: initialSelectedTransactionIds,
@@ -161,6 +168,7 @@ export default function CreatePaymentOutDialog({
   const [submitStatus, setSubmitStatus] = useState<'draft' | 'confirmed' | null>(null);
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [openPurchaseTransactions, setOpenPurchaseTransactions] = useState<
     OpenPurchaseTransactionOption[]
   >([]);
@@ -175,7 +183,12 @@ export default function CreatePaymentOutDialog({
   });
 
   const handleOpenChange = useCallback((value: boolean) => {
-    controlledOnOpenChange ? controlledOnOpenChange(value) : setInternalOpen(value);
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+
     if (!value) {
       onCreated?.();
     }
@@ -344,6 +357,30 @@ export default function CreatePaymentOutDialog({
 
   const disableDraftForSettlements = selectedTransactionIds.length > 0;
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !['supplier', 'both'].includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    form.setValue('party', createdParty._id, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setPartySearchQuery('');
+    setCreatePartyOpen(false);
+  }
+
   async function submitPayment(status: 'draft' | 'confirmed') {
     const values = form.getValues();
     const amount = roundCurrency(Number(values.amount || 0));
@@ -434,6 +471,13 @@ export default function CreatePaymentOutDialog({
         </DialogTrigger>
       )}
       <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-2xl bg-white rounded-none sm:rounded-lg p-4 sm:p-6">
+        <CreatePartyDialog
+          defaultPartyType="supplier"
+          onPartyCreated={handleCreatedParty}
+          open={createPartyOpen}
+          onOpenChange={setCreatePartyOpen}
+          showTrigger={false}
+        />
         <DialogHeader>
           <DialogTitle>Record Payment Out</DialogTitle>
           <DialogDescription>
@@ -455,7 +499,7 @@ export default function CreatePaymentOutDialog({
                 name="party"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Supplier</FormLabel>
+                    <FormLabel>Supplier *</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -506,22 +550,6 @@ export default function CreatePaymentOutDialog({
                           <CommandList>
                             <CommandEmpty>No party found.</CommandEmpty>
                             <CommandGroup>
-                              <CommandItem
-                                value="none"
-                                onSelect={() => {
-                                  field.onChange(null);
-                                  form.setValue('appliedTransactionIds', []);
-                                  setOpenPurchaseTransactions([]);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    field.value === null ? 'opacity-100' : 'opacity-0',
-                                  )}
-                                />
-                                None
-                              </CommandItem>
                               {(() => {
                                 const search = partySearchQuery.toLowerCase();
 
@@ -578,6 +606,11 @@ export default function CreatePaymentOutDialog({
                               ))}
                             </CommandGroup>
                           </CommandList>
+                          <div className="border-t p-1">
+                            <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                              Create supplier
+                            </CommandCreateButton>
+                          </div>
                         </Command>
                       </PopoverContent>
                     </Popover>

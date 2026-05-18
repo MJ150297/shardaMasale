@@ -77,13 +77,60 @@ const SERVICE_UNIT_OPTIONS = [
 ];
 
 interface CreateItemDialogProps {
-  onItemCreated?: () => void;
+  onItemCreated?: (item: CreatedItem) => void;
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }
 
-export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProps) {
-  const [open, setOpen] = useState(false);
+export interface CreatedItem {
+  _id: string;
+  name: string;
+  description?: string;
+  sku?: string;
+  unit?: string;
+  unitOfMeasure?: string;
+  price?: number;
+  purchasePrice?: number;
+  sellingPrice?: number;
+  costPrice?: number;
+  purchaseTaxRate?: number;
+  saleTaxRate?: number;
+  taxRate?: number;
+  pricing?: {
+    costPrice?: number;
+    purchasePrice?: number;
+    sellingPrice?: number;
+    mrp?: number;
+  };
+  stock?: {
+    currentQuantity?: number;
+    openingQuantity?: number;
+    allowNegativeStock?: boolean;
+  };
+  stockQuantity?: number;
+}
+
+export default function CreateItemDialog({
+  onItemCreated,
+  children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  showTrigger = true,
+}: CreateItemDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  }
 
   const form = useForm<CreateItemFormData>({
     // @ts-ignore - Zod v4 resolver type compatibility issue
@@ -148,15 +195,16 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
         body: JSON.stringify(data),
       });
 
+      const item = (await response.json()) as CreatedItem | { error?: string };
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create item');
+        throw new Error('error' in item ? item.error || 'Failed to create item' : 'Failed to create item');
       }
 
       toast.success('Item created successfully!');
-      setOpen(false);
+      handleOpenChange(false);
       form.reset();
-      onItemCreated?.();
+      onItemCreated?.(item as CreatedItem);
     } catch (error) {
       console.error('Error creating item:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create item');
@@ -191,12 +239,16 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-4 rounded-md text-sm font-medium transition-colors'>
-          + Add Item (Product/Service)
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {showTrigger && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-4 rounded-md text-sm font-medium transition-colors'>
+              + Add Item (Product/Service)
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Create New Item</DialogTitle>
@@ -874,7 +926,7 @@ export default function CreateItemDialog({ onItemCreated }: CreateItemDialogProp
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={isSubmitting}
               >
                 Cancel

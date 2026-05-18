@@ -25,6 +25,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import CommandCreateButton from '@/components/command-create-button';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 
 import TransactionForm from '@/components/transaction-form';
 
@@ -78,6 +80,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
   // Party selection
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
   const [selectedPartyName, setSelectedPartyName] = useState<string | null>(null);
 
@@ -251,6 +254,37 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
     onSaleReturnCreated?.();
   }
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !['customer', 'both'].includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    setSelectedPartyId(createdParty._id);
+    setSelectedPartyName(
+      createdParty.displayName ||
+        createdParty.name ||
+        createdParty.fullName ||
+        createdParty.partyName ||
+        null,
+    );
+    setSelectedInvoiceId(null);
+    setSelectedInvoiceNumber(null);
+    setSelectedLineItems([]);
+    setManualEntry(false);
+    setPartySearchQuery('');
+    setCreatePartyOpen(false);
+  }
+
   function getInvoiceBadgeVariant(status: InvoiceOption['status']) {
     if (status === 'paid') return 'default' as const;
     if (status === 'overdue') return 'destructive' as const;
@@ -271,6 +305,13 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
           step === 'form' ? 'sm:max-w-5xl' : 'sm:max-w-2xl'
         } max-h-dvh overflow-y-auto p-4 sm:p-6`}
       >
+        <CreatePartyDialog
+          defaultPartyType="customer"
+          onPartyCreated={handleCreatedParty}
+          open={createPartyOpen}
+          onOpenChange={setCreatePartyOpen}
+          showTrigger={false}
+        />
         {step === 'select' && (
           <>
             <DialogHeader>
@@ -348,6 +389,11 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                           })()}
                         </CommandGroup>
                       </CommandList>
+                      <div className="border-t p-1">
+                        <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                          Create customer
+                        </CommandCreateButton>
+                      </div>
                     </Command>
                   </PopoverContent>
                 </Popover>

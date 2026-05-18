@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, AlertTriangle, TrendingUp, DollarSign, TrendingDown, Calculator } from 'lucide-react';
+import { formatDate } from '@/lib/date-utils';
 import { ExportButton } from './export-button';
 
 interface StockReportProps {
@@ -252,7 +253,7 @@ export function StockReport({ shopId }: StockReportProps) {
                 <TableBody>
                   {data.movements.map((movement: any) => (
                     <TableRow key={movement._id}>
-                      <TableCell>{new Date(movement.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatDate(movement.createdAt)}</TableCell>
                       <TableCell>{movement.item?.name || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={movement.type === 'IN' ? 'default' : 'destructive'}>

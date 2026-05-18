@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import RequireShopGuard from '@/components/require-shop-guard';
 
 interface ItemsClientProps {
   items: (IItem & { _id: string; serviceUsageCount?: number })[];
@@ -59,7 +60,9 @@ export default function ItemsClient({ items }: ItemsClientProps) {
           <h1 className="text-2xl font-bold text-gray-900">Items</h1>
           <p className="text-gray-500 mt-1">Manage your products and services</p>
         </div>
-        <CreateItemDialog onItemCreated={() => window.location.reload()} />
+        <RequireShopGuard>
+          <CreateItemDialog onItemCreated={() => window.location.reload()} />
+        </RequireShopGuard>
       </div>
 
       <Tabs defaultValue="all" value={typeFilter} onValueChange={setTypeFilter} className="w-full">

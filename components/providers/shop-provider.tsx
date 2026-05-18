@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface Shop {
@@ -15,21 +15,74 @@ interface ShopContextType {
   currentShop: Shop | null;
   switchShop: (shopId: string) => Promise<void>;
   isLoading: boolean;
+  hasOwnedShops: boolean;
 }
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
 export function ShopProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const [activeShopId, setActiveShopId] = useState<string | null>(null);
   const [availableShops, setAvailableShops] = useState<Shop[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasOwnedShops, setHasOwnedShops] = useState(false);
+  const hasSyncedFallbackShopRef = useRef(false);
 
   useEffect(() => {
     if (session?.user?.activeShopId) {
       setActiveShopId(session.user.activeShopId);
     }
   }, [session]);
+
+  // Fetch available shops when session is ready
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      let isCancelled = false;
+
+      const loadShops = async () => {
+        setIsLoading(true);
+
+        try {
+          const response = await fetch('/api/shops');
+          const data = await response.json();
+
+          if (isCancelled || !data.shops) {
+            return;
+          }
+
+          setAvailableShops(data.shops);
+          setHasOwnedShops(data.hasOwnedShops ?? false);
+
+          if (session.user.activeShopId) {
+            hasSyncedFallbackShopRef.current = false;
+            return;
+          }
+
+          if (data.shops.length > 0) {
+            const fallbackShopId = data.shops[0].id;
+            setActiveShopId(fallbackShopId);
+
+            if (!hasSyncedFallbackShopRef.current) {
+              hasSyncedFallbackShopRef.current = true;
+              await update({ activeShopId: fallbackShopId });
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch shops:', err);
+        } finally {
+          if (!isCancelled) {
+            setIsLoading(false);
+          }
+        }
+      };
+
+      void loadShops();
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+  }, [status, session, update]);
 
   const switchShop = useCallback(async (shopId: string) => {
     setIsLoading(true);
@@ -44,6 +97,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         setActiveShopId(shopId);
+        // First, persist the new shopId to the JWT token via NextAuth's update()
+        await update({ activeShopId: shopId });
+        // Then reload to re-render Server Components with the new shop data
         window.location.reload();
       }
     } catch (error) {
@@ -51,7 +107,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [update]);
 
   const currentShop = availableShops.find(shop => shop.id === activeShopId) || null;
 
@@ -63,6 +119,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         currentShop,
         switchShop,
         isLoading,
+        hasOwnedShops,
       }}
     >
       {children}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -49,35 +49,95 @@ const createPartySchema = z.object({
 });
 type CreatePartyFormData = z.infer<typeof createPartySchema>;
 
-interface CreatePartyDialogProps {
-  onPartyCreated?: () => void;
+export interface CreatedParty {
+  _id: string;
+  id?: string;
+  displayName?: string | null;
+  name?: string | null;
+  fullName?: string | null;
+  partyName?: string | null;
+  phoneNumber?: string | null;
+  alternatePhoneNumber?: string | null;
+  mobile?: string | null;
+  phone?: string | null;
+  partyType?: 'customer' | 'supplier' | 'both';
+  currentBalance?: number;
+  creditLimit?: number;
 }
 
-export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogProps) {
-  const [open, setOpen] = useState(false);
+interface CreatePartyDialogProps {
+  onPartyCreated?: (party: CreatedParty) => void;
+  children?: React.ReactNode;
+  defaultPartyType?: 'customer' | 'supplier' | 'both';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+}
+
+type CreatedPartyInput = Omit<CreatedParty, '_id'> & {
+  _id?: string;
+  id?: string;
+};
+
+function normalizeCreatedParty(party: CreatedPartyInput): CreatedParty {
+  return {
+    ...party,
+    _id: party._id ?? party.id ?? '',
+  };
+}
+
+function getDefaultPartyValues(defaultPartyType: 'customer' | 'supplier' | 'both' = 'customer'): CreatePartyFormData {
+  return {
+    displayName: '',
+    legalName: null,
+    partyType: defaultPartyType,
+    status: 'active',
+    email: null,
+    phoneNumber: null,
+    alternatePhoneNumber: null,
+    gstin: null,
+    pan: null,
+    taxTreatment: 'unregistered',
+    address: null,
+    creditLimit: 0,
+    openingBalance: 0,
+    notes: null,
+    tags: [],
+  };
+}
+
+export default function CreatePartyDialog({
+  onPartyCreated,
+  children,
+  defaultPartyType = 'customer',
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  showTrigger = true,
+}: CreatePartyDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  }
 
   const form = useForm<CreatePartyFormData>({
-    resolver: zodResolver(createPartySchema) as any,
-      defaultValues: {
-        displayName: '',
-        legalName: null,
-        partyType: 'customer',
-        status: 'active',
-        email: null,
-        phoneNumber: null,
-        alternatePhoneNumber: null,
-        gstin: null,
-        pan: null,
-        taxTreatment: 'unregistered',
-        address: null,
-        creditLimit: 0,
-        openingBalance: 0,
-        notes: null,
-        tags: [],
-      },
+    resolver: zodResolver(createPartySchema) as never,
+    defaultValues: getDefaultPartyValues(defaultPartyType),
   });
+
+  useEffect(() => {
+    if (!open) return;
+
+    form.reset(getDefaultPartyValues(defaultPartyType));
+    setTagInput('');
+  }, [defaultPartyType, form, open]);
 
   const selectedPartyType = form.watch('partyType');
   const isCustomerOnly = selectedPartyType === 'customer';
@@ -93,15 +153,17 @@ export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogP
         body: JSON.stringify(data),
       });
 
+      const party = (await response.json()) as CreatedPartyInput | { error?: string };
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create party');
+        throw new Error('error' in party ? party.error || 'Failed to create party' : 'Failed to create party');
       }
 
+      const normalizedParty = normalizeCreatedParty(party as CreatedPartyInput);
       toast.success('Party created successfully!');
-      setOpen(false);
-      form.reset();
-      onPartyCreated?.();
+      handleOpenChange(false);
+      form.reset(getDefaultPartyValues(defaultPartyType));
+      onPartyCreated?.(normalizedParty);
     } catch (error) {
       console.error('Error creating party:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create party');
@@ -124,12 +186,16 @@ export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogP
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors'>
-          + Add New Customer/Supplier
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {showTrigger && (
+        <DialogTrigger asChild>
+          {children || (
+            <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors'>
+              + Add New Customer/Supplier
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Create New Party / Customer</DialogTitle>
@@ -440,7 +506,7 @@ export default function CreatePartyDialog({ onPartyCreated }: CreatePartyDialogP
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={isSubmitting}
               >
                 Cancel

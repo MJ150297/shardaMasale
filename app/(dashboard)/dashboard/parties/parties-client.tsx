@@ -22,6 +22,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import DataTableToolbar from '@/components/data-table-toolbar';
+import RequireShopGuard from '@/components/require-shop-guard';
 
 interface Party {
   _id: string;
@@ -75,7 +76,9 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers / Suppliers</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your customers and send login invites</p>
         </div>
-        <CreatePartyDialog onPartyCreated={handlePartyCreated} />
+        <RequireShopGuard>
+          <CreatePartyDialog onPartyCreated={handlePartyCreated} />
+        </RequireShopGuard>
       </div>
 
       <Tabs defaultValue="all" value={partyTypeFilter} onValueChange={setPartyTypeFilter} className="w-full">

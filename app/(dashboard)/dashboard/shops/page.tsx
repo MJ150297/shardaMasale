@@ -1,18 +1,27 @@
+import { formatDate } from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { requireOwner } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Shop from "@/models/Shop";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import ShopsClient from "./shops-client";
 
 export default async function OwnerShopsManagementPage() {
   const user = await requireOwner();
   await connectToDatabase();
 
-  const shops = await Shop.find({ ownerId: user.id })
+  const rawShops = await Shop.find({ ownerId: user.id })
     .sort({ createdAt: -1 })
     .lean();
+
+  // Serialize dates server-side to avoid hydration mismatch on locale-dependent formatting
+  const shops = rawShops.map((shop: any) => ({
+    ...shop,
+    _id: shop._id.toString(),
+    createdAtFormatted: formatDate(shop.createdAt),
+  }));
 
   return (
     <div className="space-y-6">
@@ -23,7 +32,12 @@ export default async function OwnerShopsManagementPage() {
             Manage your business locations
           </p>
         </div>
-        <Button>Add New Shop</Button>
+        <Button asChild>
+          <Link href="/dashboard/shops/new">
+            <Plus className="size-4 mr-2" />
+            Add New Shop
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -58,33 +72,7 @@ export default async function OwnerShopsManagementPage() {
           <CardTitle>All Shops</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Shop Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {shops.map((shop: any) => (
-                <TableRow key={shop._id.toString()}>
-                  <TableCell className="font-medium">{shop.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={shop.isActive ? 'default' : 'secondary'}>
-                      {shop.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{new Date(shop.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="secondary">Edit</Button>
-                    <Button size="sm" variant="default">View</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ShopsClient shops={JSON.parse(JSON.stringify(shops))} />
         </CardContent>
       </Card>
     </div>

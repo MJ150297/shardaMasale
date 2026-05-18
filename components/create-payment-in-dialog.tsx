@@ -44,11 +44,18 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import CommandCreateButton from '@/components/command-create-button';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 import { cn, roundCurrency } from '@/lib/utils';
 import { allocateInvoiceSettlements } from '@/lib/payment-settlement';
 
+const requiredPartySchema = z.preprocess(
+  (value) => (value === undefined || value === null ? '' : value),
+  z.string().trim().min(1, 'Customer is required'),
+);
+
 const paymentFormSchema = z.object({
-  party: z.string().optional().nullable(),
+  party: requiredPartySchema,
   transactionDate: z.coerce.date().default(() => new Date()),
   amount: z.coerce.number().min(0, 'Amount cannot be negative'),
   settlementDiscount: z.coerce.number().min(0, 'Discount cannot be negative').default(0),
@@ -74,7 +81,7 @@ type PaymentMethod =
   | 'other';
 
 interface PaymentFormValues {
-  party?: string | null;
+  party: string;
   transactionDate: Date;
   amount: number;
   settlementDiscount: number;
@@ -134,7 +141,7 @@ function getDefaultPaymentValues(
   initialSelectedInvoiceIds: string[] = [],
 ): PaymentFormValues {
   return {
-    party: initialPartyId ?? null,
+    party: initialPartyId ?? '',
     transactionDate: new Date(),
     amount: 0,
     settlementDiscount: 0,
@@ -175,6 +182,7 @@ export default function CreatePaymentInDialog({
   const [submitStatus, setSubmitStatus] = useState<'draft' | 'confirmed' | null>(null);
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [openInvoices, setOpenInvoices] = useState<OpenInvoiceOption[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
@@ -187,7 +195,12 @@ export default function CreatePaymentInDialog({
   });
 
   const handleOpenChange = useCallback((value: boolean) => {
-    controlledOnOpenChange ? controlledOnOpenChange(value) : setInternalOpen(value);
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+
     if (!value) {
       onCreated?.();
     }
@@ -358,6 +371,30 @@ export default function CreatePaymentInDialog({
   const disableDraftForSettlements =
     selectedInvoiceIds.length > 0 || settlementDiscount > 0;
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !['customer', 'both'].includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    form.setValue('party', createdParty._id, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setPartySearchQuery('');
+    setCreatePartyOpen(false);
+  }
+
   async function submitPayment(status: 'draft' | 'confirmed') {
     const values = form.getValues();
     const amount = roundCurrency(Number(values.amount || 0));
@@ -449,6 +486,13 @@ export default function CreatePaymentInDialog({
         </DialogTrigger>
       )}
       <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-2xl bg-white rounded-none sm:rounded-lg p-4 sm:p-6">
+        <CreatePartyDialog
+          defaultPartyType="customer"
+          onPartyCreated={handleCreatedParty}
+          open={createPartyOpen}
+          onOpenChange={setCreatePartyOpen}
+          showTrigger={false}
+        />
         <DialogHeader>
           <DialogTitle>Record Payment In</DialogTitle>
           <DialogDescription>
@@ -470,7 +514,7 @@ export default function CreatePaymentInDialog({
                 name="party"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Customer</FormLabel>
+                    <FormLabel>Customer *</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -521,22 +565,6 @@ export default function CreatePaymentInDialog({
                           <CommandList>
                             <CommandEmpty>No party found.</CommandEmpty>
                             <CommandGroup>
-                              <CommandItem
-                                value="none"
-                                onSelect={() => {
-                                  field.onChange(null);
-                                  form.setValue('appliedInvoiceIds', []);
-                                  setOpenInvoices([]);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    field.value === null ? 'opacity-100' : 'opacity-0',
-                                  )}
-                                />
-                                None
-                              </CommandItem>
                               {(() => {
                                 const search = partySearchQuery.toLowerCase();
 
@@ -593,6 +621,11 @@ export default function CreatePaymentInDialog({
                               ))}
                             </CommandGroup>
                           </CommandList>
+                          <div className="border-t p-1">
+                            <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                              Create customer
+                            </CommandCreateButton>
+                          </div>
                         </Command>
                       </PopoverContent>
                     </Popover>

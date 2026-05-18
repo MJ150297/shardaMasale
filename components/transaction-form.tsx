@@ -18,13 +18,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import CommandCreateButton from '@/components/command-create-button';
+import CreateItemDialog, { type CreatedItem } from '@/components/create-item-dialog';
+import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 
 import { roundCurrency } from '@/lib/utils';
+
+const requiredPartySchema = z.preprocess(
+  (value) => (value === undefined || value === null ? '' : value),
+  z.string().trim().min(1, 'Party is required'),
+);
 
 // Transaction Types
 const transactionFormSchema = z.object({
   type: z.enum(["sale", "purchase", "sale-return", "purchase-return"]),
-  party: z.string().optional().nullable(),
+  party: requiredPartySchema,
   transactionDate: z.coerce.date().default(() => new Date()),
   dueDate: z.coerce.date().optional().nullable(),
   lineItems: z.array(z.object({
@@ -80,6 +88,10 @@ function getModeLabel(mode: InventoryTransactionMode) {
 
 function getPartyRole(mode: InventoryTransactionMode) {
   return isSaleFlow(mode) ? 'customer' : 'supplier';
+}
+
+function getAllowedPartyTypes(mode: InventoryTransactionMode) {
+  return isSaleFlow(mode) ? ['customer', 'both'] : ['supplier', 'both'];
 }
 
 function isReturnFlow(mode: InventoryTransactionMode) {
@@ -153,6 +165,8 @@ export default function TransactionForm({
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingParties, setLoadingParties] = useState(false);
   const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [createPartyOpen, setCreatePartyOpen] = useState(false);
+  const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
   const [selectedPartyInfo, setSelectedPartyInfo] = useState<{
     currentBalance: number;
     creditLimit: number;
@@ -235,17 +249,13 @@ export default function TransactionForm({
     async function loadParties() {
       setLoadingParties(true);
       try {
-        const allowedTypes = isSaleFlow(mode)
-          ? ['customer', 'both'] 
-          : ['supplier', 'both'];
-          
         const res = await fetch('/api/parties?limit=1000');
         const data = await res.json();
         
         if (res.ok) {
           // Filter parties by allowed types
           const filtered = (data.parties || []).filter((party: any) => {
-            return party.partyType === undefined || allowedTypes.includes(party.partyType);
+            return party.partyType === undefined || getAllowedPartyTypes(mode).includes(party.partyType);
           });
           
           setParties(filtered);
@@ -370,8 +380,68 @@ export default function TransactionForm({
     form.setValue(`lineItems.${index}.taxRate`, getDefaultTaxRate(item, mode));
   }
 
+  function handleCreatedParty(createdParty: CreatedParty) {
+    if (
+      createdParty.partyType !== undefined &&
+      !getAllowedPartyTypes(mode).includes(createdParty.partyType)
+    ) {
+      return;
+    }
+
+    setParties((current) => {
+      if (current.some((party) => party._id === createdParty._id)) {
+        return current;
+      }
+
+      return [createdParty, ...current];
+    });
+    form.setValue('party', createdParty._id, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    setSelectedPartyInfo({
+      currentBalance: createdParty.currentBalance || 0,
+      creditLimit: createdParty.creditLimit || 0,
+    });
+    setCreatePartyOpen(false);
+  }
+
+  function handleCreatedItem(index: number, item: CreatedItem) {
+    setItems((current) => {
+      if (current.some((entry) => entry._id === item._id)) {
+        return current;
+      }
+
+      return [item, ...current];
+    });
+    handleItemSelect(index, item);
+    setCreateItemIndex(null);
+  }
+
   return (
     <Form {...form}>
+      <CreatePartyDialog
+        defaultPartyType={isSaleFlow(mode) ? 'customer' : 'supplier'}
+        onPartyCreated={handleCreatedParty}
+        open={createPartyOpen}
+        onOpenChange={setCreatePartyOpen}
+        showTrigger={false}
+      />
+      <CreateItemDialog
+        onItemCreated={(item) => {
+          if (createItemIndex !== null) {
+            handleCreatedItem(createItemIndex, item);
+          }
+        }}
+        open={createItemIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateItemIndex(null);
+          }
+        }}
+        showTrigger={false}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -393,7 +463,7 @@ export default function TransactionForm({
               name="party"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>{isSaleFlow(mode) ? 'Customer' : 'Supplier'}</FormLabel>
+                  <FormLabel>{isSaleFlow(mode) ? 'Customer *' : 'Supplier *'}</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -429,20 +499,6 @@ export default function TransactionForm({
                         <CommandList>
                           <CommandEmpty>No party found.</CommandEmpty>
                           <CommandGroup>
-                            <CommandItem
-                              value="none"
-                              onSelect={() => {
-                                field.onChange(null);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  field.value === null ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              None
-                            </CommandItem>
                             {(() => {
                               const search = partySearchQuery.toLowerCase();
 
@@ -480,6 +536,11 @@ export default function TransactionForm({
                             ))}
                           </CommandGroup>
                         </CommandList>
+                        <div className="border-t p-1">
+                          <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                            Create {getPartyRole(mode)}
+                          </CommandCreateButton>
+                        </div>
                       </Command>
                     </PopoverContent>
                   </Popover>
@@ -517,7 +578,7 @@ export default function TransactionForm({
                 const party = parties.find(p => p._id === field.value);
                 return (
                   <FormItem>
-                    <FormLabel>{isSaleFlow(mode) ? 'Customer' : 'Supplier'}</FormLabel>
+                    <FormLabel>{isSaleFlow(mode) ? 'Customer *' : 'Supplier *'}</FormLabel>
                     <FormControl>
                       <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/50 px-3 text-sm">
                         {party
@@ -640,6 +701,11 @@ export default function TransactionForm({
                                   ))}
                                 </CommandGroup>
                               </CommandList>
+                              <div className="border-t p-1">
+                                <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                  Create item
+                                </CommandCreateButton>
+                              </div>
                             </Command>
                           </PopoverContent>
                         </Popover>

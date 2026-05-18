@@ -3,10 +3,12 @@
 import { ReactNode, useState, createContext, useContext, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useActiveShop } from '@/components/providers/shop-provider';
 import { signOut } from 'next-auth/react';
 import ThemeToggle from '@/components/ui/theme-toggle';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { useIsMobile } from '@/hooks/use-mobile';
+import CreateShopDialog from '@/components/create-shop-dialog';
 
 import {
   LayoutDashboard,
@@ -180,6 +182,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
   const pathname = usePathname();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const isMobile = useIsMobile();
+  const { activeShopId, currentShop, availableShops, switchShop, isLoading } = useActiveShop();
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -364,30 +367,53 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                 <div className="flex items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="secondary" size="sm" className="h-8 gap-1">
+                      <Button variant="secondary" size="sm" className="h-8 gap-1" disabled={isLoading}>
                         <Store className="size-3.5" />
-                        <span className="truncate max-w-28">My Shop</span>
+                        <span className="truncate max-w-28">
+                          {currentShop ? currentShop.name : (isLoading ? 'Loading...' : 'Select Shop')}
+                        </span>
                         <ChevronDown className="size-3.5 ml-1 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
                       <DropdownMenuLabel>Select Shop</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem>
-                        <div className="flex items-center gap-2">
-                          <Check className="size-3.5 opacity-100" />
-                          Main Shop
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <div className="flex items-center gap-2">
-                          <div className="size-3.5" />
-                          Second Location
-                        </div>
-                      </DropdownMenuItem>
+                      {availableShops.length > 0 ? (
+                        availableShops.map((shop) => {
+                          const isActive = shop.id === activeShopId;
+                          return (
+                            <DropdownMenuItem
+                              key={shop.id}
+                              onClick={() => switchShop(shop.id)}
+                              disabled={isActive}
+                            >
+                              <div className="flex items-center gap-2">
+                                {isActive ? (
+                                  <Check className="size-3.5" />
+                                ) : (
+                                  <div className="size-3.5" />
+                                )}
+                                {shop.name}
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })
+                      ) : (
+                        <DropdownMenuItem asChild>
+                          <CreateShopDialog
+                            trigger={
+                              <span className="flex items-center gap-2 text-sm">
+                                <Store className="size-3.5" />
+                                Create your first shop
+                              </span>
+                            }
+                            autoSwitch={true}
+                          />
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
-                        <Link href="/super/shops">
+                        <Link href={user.role === 'superOwner' ? '/super/shops' : '/dashboard/shops'}>
                           <Store className="mr-2 size-3.5" />
                           Manage Shops
                         </Link>

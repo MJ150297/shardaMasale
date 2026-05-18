@@ -10,10 +10,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatDate } from '@/lib/date-utils';
 import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateInvoice from '@/modules/billing/create-invoice';
 import InvoiceShareSheet from '@/components/invoice-share-sheet';
+import RequireShopGuard from '@/components/require-shop-guard';
 
 interface TransactionSummary {
   grandTotal: number;
@@ -221,10 +223,12 @@ export default function InvoicesClient() {
           <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
           <p className="text-muted-foreground">View and manage all invoices</p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <FileText className="mr-2 h-4 w-4" />
-          New Invoice
-        </Button>
+        <RequireShopGuard>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <FileText className="mr-2 h-4 w-4" />
+            New Invoice
+          </Button>
+        </RequireShopGuard>
       </div>
 
       <Tabs defaultValue="" value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))} className="w-full">
@@ -286,7 +290,7 @@ export default function InvoicesClient() {
                 filteredInvoices.map((invoice) => (
                   <tr key={getInvoiceId(invoice)} className="border-b hover:bg-muted/50">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {new Date(invoice.createdAt).toLocaleDateString()}
+                      {formatDate(invoice.createdAt)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap font-medium">
                       {invoice.invoiceNumber}
@@ -295,7 +299,7 @@ export default function InvoicesClient() {
                       {getPartyName(invoice)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {new Date(invoice.dueDate).toLocaleDateString()}
+                      {formatDate(invoice.dueDate)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <Badge className={getStatusBadgeClass(invoice.status)}>

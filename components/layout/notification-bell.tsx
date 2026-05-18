@@ -1,27 +1,27 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bell, Check } from 'lucide-react';
+import { BarChart3, Bell, Check, CreditCard, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Notification {
   _id: string;
-  type: 'low_stock' | 'system' | 'alert' | 'info';
+  type: string;
   title: string;
   message: string;
   read: boolean;
   createdAt: string;
+  metadata?: Record<string, unknown>;
 }
 
 export function NotificationBell() {
@@ -87,6 +87,101 @@ export function NotificationBell() {
     return `${diffDays}d ago`;
   };
 
+  const categories = [
+    { id: 'general', label: 'General', icon: Bell },
+    { id: 'transactions', label: 'Transactions', icon: CreditCard },
+    { id: 'analysis', label: 'Analysis', icon: BarChart3 },
+    { id: 'security', label: 'Security', icon: ShieldCheck },
+  ] as const;
+
+  type NotificationCategory = (typeof categories)[number]['id'];
+
+  const [activeTab, setActiveTab] = useState<NotificationCategory>('general');
+
+  const getNotificationCategory = (notification: Notification): NotificationCategory => {
+    const text = `${notification.title} ${notification.message}`.toLowerCase();
+    const metadata = notification.metadata || {};
+
+    const hasTransactionMeta =
+      Boolean(metadata.invoiceId) ||
+      Boolean(metadata.transactionId) ||
+      /invoice|transaction|sale|purchase|payment|due|overdue|bill/.test(text);
+
+    const hasAnalysisMeta =
+      Boolean(metadata.analysis) ||
+      /analysis|report|trend|forecast|insight|recommendation|analytics|prediction/.test(text);
+
+    const hasSecurityMeta =
+      Boolean(metadata.security) ||
+      /security|password|login|unauthorized|unauthorised|authentication|auth|access|breach/.test(text);
+
+    if (hasSecurityMeta) return 'security';
+    if (hasTransactionMeta) return 'transactions';
+    if (hasAnalysisMeta) return 'analysis';
+    return 'general';
+  };
+
+  const notificationsByCategory = categories.reduce((map, category) => {
+    map[category.id] = notifications.filter(
+      notification => getNotificationCategory(notification) === category.id
+    );
+    return map;
+  }, {} as Record<NotificationCategory, Notification[]>);
+
+  const counts = categories.reduce((map, category) => {
+    map[category.id] = notificationsByCategory[category.id].length;
+    return map;
+  }, {} as Record<NotificationCategory, number>);
+
+  const renderNotificationList = (items: Notification[]) => {
+    if (loading) {
+      return Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="flex flex-col items-start gap-2 p-3">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-1/4" />
+        </div>
+      ));
+    }
+
+    if (items.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center p-6 text-muted-foreground">
+          <Bell className="size-8 mb-2 opacity-50" />
+          <p className="text-sm">No notifications</p>
+        </div>
+      );
+    }
+
+    return items.map((notification) => (
+      <div
+        key={notification._id}
+        className={`flex flex-col items-start p-3 ${!notification.read ? 'bg-accent/50' : ''}`}
+      >
+        <div className="flex w-full items-start justify-between gap-2">
+          <div className="flex-1">
+            <p className="text-sm font-medium leading-none">{notification.title}</p>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notification.message}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{formatDate(notification.createdAt)}</p>
+          </div>
+          {!notification.read && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                markAsRead(notification._id);
+              }}
+            >
+              <Check className="size-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+    ));
+  };
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -117,50 +212,36 @@ export function NotificationBell() {
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuGroup className="max-h-[300px] overflow-y-auto">
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <DropdownMenuItem key={i} className="flex flex-col items-start p-3">
-                <Skeleton className="h-4 w-3/4 mb-1" />
-                <Skeleton className="h-3 w-full mb-1" />
-                <Skeleton className="h-3 w-1/4" />
-              </DropdownMenuItem>
-            ))
-          ) : notifications.length === 0 ? (
-            <DropdownMenuItem className="flex flex-col items-center justify-center p-6 text-muted-foreground">
-              <Bell className="size-8 mb-2 opacity-50" />
-              <p className="text-sm">No notifications</p>
-            </DropdownMenuItem>
-          ) : (
-            notifications.map((notification) => (
-              <DropdownMenuItem
-                key={notification._id}
-                className={`flex flex-col items-start p-3 cursor-default ${!notification.read ? 'bg-accent/50' : ''}`}
-              >
-                <div className="flex w-full items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium leading-none">{notification.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notification.message}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">{formatDate(notification.createdAt)}</p>
-                  </div>
-                  {!notification.read && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        markAsRead(notification._id);
-                      }}
-                    >
-                      <Check className="size-3" />
-                    </Button>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="px-2 pb-2">
+          <TabsList className="w-full overflow-x-auto gap-1">
+            {categories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <TabsTrigger
+                  key={category.id}
+                  value={category.id}
+                  className="w-10 px-1 justify-center"
+                  title={category.label}
+                  aria-label={category.label}
+                >
+                  <Icon className="size-4" aria-hidden="true" />
+                  <span className="sr-only">{category.label}</span>
+                  {counts[category.id] > 0 && (
+                    <Badge className="ml-1 rounded-full px-2 py-0.5 text-[10px]" variant="secondary">
+                      {counts[category.id]}
+                    </Badge>
                   )}
-                </div>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuGroup>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {categories.map((category) => (
+            <TabsContent key={category.id} value={category.id} className="min-h-55 max-h-75 overflow-y-auto px-0 py-2">
+              {renderNotificationList(notificationsByCategory[category.id])}
+            </TabsContent>
+          ))}
+        </Tabs>
       </DropdownMenuContent>
     </DropdownMenu>
   );

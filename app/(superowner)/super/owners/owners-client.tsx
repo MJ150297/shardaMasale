@@ -1,17 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import EditOwnerDialog from '@/components/edit-owner-dialog';
+import { formatDate } from '@/lib/date-utils';
 
 const createOwnerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -35,20 +39,53 @@ interface Owner {
   createdAt?: Date | string;
   updatedAt?: Date | string;
   lastLoginAt?: Date | string | null;
+  allowedShops?: string[];
+  subscription?: {
+    plan: string;
+    status: string;
+    expiryDate?: string | null;
+    trialEndsAt?: string | null;
+  };
+}
+
+interface ShopItem {
+  _id: string;
+  name: string;
+  displayName: string | null;
+  isActive: boolean;
 }
 
 interface OwnersClientProps {
   initialOwners: Owner[];
+  shops: ShopItem[];
 }
 
-export default function OwnersClient({ initialOwners }: OwnersClientProps) {
-  const [owners, setOwners] = useState<Owner[]>(initialOwners);
+type OwnerInput = Omit<Owner, '_id'> & {
+  _id?: string;
+  id?: string;
+};
+
+function normalizeOwner(owner: OwnerInput): Owner {
+  return {
+    ...owner,
+    _id: owner._id ?? owner.id ?? owner.email,
+    allowedShops: owner.allowedShops ?? [],
+    subscription: owner.subscription ?? undefined,
+  };
+}
+
+export default function OwnersClient({ initialOwners, shops }: OwnersClientProps) {
+  const [owners, setOwners] = useState<Owner[]>(() => initialOwners.map(normalizeOwner));
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    setOwners(initialOwners.map(normalizeOwner));
+  }, [initialOwners]);
 
   const form = useForm<CreateOwnerFormValues>({
     resolver: zodResolver(createOwnerSchema),
@@ -79,7 +116,7 @@ export default function OwnersClient({ initialOwners }: OwnersClientProps) {
         throw new Error(data.error || 'Failed to create owner');
       }
 
-      setOwners([data.owner, ...owners]);
+      setOwners((currentOwners) => [normalizeOwner(data.owner), ...currentOwners]);
       
       toast.success('Owner created successfully');
 
@@ -87,14 +124,18 @@ export default function OwnersClient({ initialOwners }: OwnersClientProps) {
       setIsOpen(false);
       router.refresh();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('Error creating owner', {
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Failed to create owner',
       });
     } finally {
       setIsLoading(false);
     }
   }
+
+  const handleOwnerUpdated = () => {
+    router.refresh();
+  };
 
   return (
     <div className="space-y-6">
@@ -230,6 +271,70 @@ export default function OwnersClient({ initialOwners }: OwnersClientProps) {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All Owners ({owners.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>Sub. Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Last Login</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {owners.map((owner: Owner) => (
+                <TableRow key={owner._id}>
+                  <TableCell className="font-medium">{owner.name}</TableCell>
+                  <TableCell>{owner.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={owner.status === 'active' ? 'default' : 'secondary'}>
+                      {owner.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="capitalize text-sm font-medium">
+                      {owner.subscription?.plan || 'free'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        owner.subscription?.status === 'active' || owner.subscription?.status === 'trial'
+                          ? 'default'
+                          : 'destructive'
+                      }
+                      className="capitalize"
+                    >
+                      {owner.subscription?.status || 'trial'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{owner.createdAt ? formatDate(owner.createdAt) : '-'}</TableCell>
+                  <TableCell>{owner.lastLoginAt ? formatDate(owner.lastLoginAt) : 'Never'}</TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <EditOwnerDialog
+                      owner={owner}
+                      shops={shops}
+                      onOwnerUpdated={handleOwnerUpdated}
+                    >
+                      <Button size="sm" variant="secondary">Edit</Button>
+                    </EditOwnerDialog>
+                    <Button size="sm" variant="default">Impersonate</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
