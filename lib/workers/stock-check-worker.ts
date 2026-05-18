@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import connectToDatabase from '@/lib/db';
 import Item from '@/models/Item';
-import Notification from '@/models/Notification';
+import { publishNotification } from '@/lib/notifications/notification-service';
 
 /**
  * Stock Check Worker - Runs every hour to check for low stock items
@@ -44,33 +44,25 @@ export class StockCheckWorker {
       console.log(`📋 Found ${lowStockItems.length} items with low stock`);
 
       for (const item of lowStockItems) {
-        // Check if we already sent notification for this item in last 24h
-        const existingNotification = await Notification.findOne({
-          owner: item.owner,
-          'metadata.itemId': item._id,
-          createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-        });
+        // dedup handled by publishNotification service; proceed to publish
 
-        if (existingNotification) {
-          console.log(`⏭️ Notification already exists for item: ${item.name}, skipping...`);
-          continue;
-        }
-
-        // Create new low stock notification
-        await Notification.create({
-          owner: item.owner,
-          shopId: item.shopId,
-          type: 'low_stock',
-          title: `Low Stock Alert: ${item.name}`,
-          message: `Current stock: ${item.stock.currentQuantity} ${item.unitOfMeasure}. Reorder level: ${item.stock.reorderLevel} ${item.unitOfMeasure}. Please restock this item.`,
-          metadata: {
-            itemId: item._id,
+        // Publish low stock notification through the centralized notification service
+        await publishNotification({
+          eventKey: 'item.low_stock',
+          recipientUserIds: [item.owner.toString()],
+          businessOwnerId: item.owner.toString(),
+          shopId: item.shopId?.toString() ?? null,
+          entityType: 'Item',
+          entityId: item._id.toString(),
+          payload: {
+            itemId: item._id.toString(),
             itemName: item.name,
             sku: item.sku,
             currentQuantity: item.stock.currentQuantity,
             reorderLevel: item.stock.reorderLevel,
-            unitOfMeasure: item.unitOfMeasure
-          }
+            unitOfMeasure: item.unitOfMeasure,
+            shopId: item.shopId?.toString() ?? null,
+          },
         });
 
         console.log(`✅ Created low stock notification for: ${item.name}`);

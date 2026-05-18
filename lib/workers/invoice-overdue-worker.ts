@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import connectToDatabase from '@/lib/db';
 import Invoice from '@/models/Invoice';
-import Notification from '@/models/Notification';
+import { publishNotification } from '@/lib/notifications/notification-service';
 
 /**
  * Invoice Overdue Worker - Runs daily at midnight
@@ -133,19 +133,20 @@ export class InvoiceOverdueWorker {
         invoice.status = 'overdue';
         await invoice.save();
 
-        // Create notification for business owner
-        await Notification.create({
-          owner: (invoice as any).owner,
-          type: 'invoice_overdue',
-          title: `Invoice Overdue: ${invoice.invoiceNumber}`,
-          message: `Invoice ${invoice.invoiceNumber} is now overdue. Please follow up with customer for payment.`,
-          metadata: {
-            invoiceId: invoice._id,
+        // Publish overdue invoice notification through the centralized notification service
+        await publishNotification({
+          eventKey: 'invoice.overdue',
+          recipientUserIds: [(invoice as any).owner.toString()],
+          businessOwnerId: (invoice as any).owner.toString(),
+          shopId: null,
+          entityType: 'Invoice',
+          entityId: invoice._id.toString(),
+          payload: {
+            invoiceId: invoice._id.toString(),
             invoiceNumber: invoice.invoiceNumber,
             dueDate: invoice.dueDate,
-            transactionId: invoice.transactionId,
-            amount: invoice.transactionId?.summary?.grandTotal
-          }
+            amount: invoice.transactionId?.summary?.grandTotal,
+          },
         });
 
         console.log(`✅ Marked invoice ${invoice.invoiceNumber} as overdue`);

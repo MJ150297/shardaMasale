@@ -70,6 +70,8 @@ export interface NotificationSettings {
   lowStockAlerts: boolean;
   duePaymentAlerts: boolean;
   dailySummary: boolean;
+  retentionDays?: number;
+  archiveAfterDays?: number;
 }
 
 export interface PosSettings {
@@ -427,6 +429,16 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             type: Boolean,
             default: false,
           },
+          retentionDays: {
+            type: Number,
+            default: 90,
+            min: 1,
+          },
+          archiveAfterDays: {
+            type: Number,
+            default: 30,
+            min: 1,
+          },
         },
         { _id: false },
       ),
@@ -435,6 +447,8 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         lowStockAlerts: true,
         duePaymentAlerts: true,
         dailySummary: false,
+        retentionDays: 90,
+        archiveAfterDays: 30,
       }),
     },
     pos: {

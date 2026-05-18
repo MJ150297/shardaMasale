@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
-import Notification from '@/models/Notification';
+import { publishNotification } from '@/lib/notifications/notification-service';
 
 /**
  * Subscription Expiry Worker - Runs daily at midnight
@@ -51,13 +51,14 @@ export class SubscriptionExpiryWorker {
 
         // Create notification for the owner
         try {
-          await Notification.create({
-            owner: user._id,
-            type: 'subscription_expired',
-            title: 'Trial Period Expired',
-            message:
-              'Your free trial has ended. Please upgrade to a paid plan to continue using all features.',
-            metadata: {
+          await publishNotification({
+            eventKey: 'subscription.expired',
+            recipientUserIds: [user._id.toString()],
+            businessOwnerId: user._id.toString(),
+            shopId: null,
+            entityType: 'Subscription',
+            entityId: user._id.toString(),
+            payload: {
               userId: user._id.toString(),
               previousPlan: 'trial',
               newStatus: 'expired',
@@ -106,13 +107,14 @@ export class SubscriptionExpiryWorker {
         }
 
         try {
-          await Notification.create({
-            owner: user._id,
-            type: 'subscription_expired',
-            title: 'Subscription Expired',
-            message:
-              'Your subscription has expired. Please renew to restore full access.',
-            metadata: {
+          await publishNotification({
+            eventKey: 'subscription.expired',
+            recipientUserIds: [user._id.toString()],
+            businessOwnerId: user._id.toString(),
+            shopId: null,
+            entityType: 'Subscription',
+            entityId: user._id.toString(),
+            payload: {
               userId: user._id.toString(),
               previousPlan: user.subscription?.plan ?? 'unknown',
               newStatus: 'expired',
@@ -179,16 +181,14 @@ export class SubscriptionExpiryWorker {
           : 0;
 
         try {
-          await Notification.create({
-            owner: user._id,
-            type: 'subscription_expiry_warning',
-            title: isTrial
-              ? 'Trial Period Ending Soon'
-              : 'Subscription Expiring Soon',
-            message: isTrial
-              ? `Your free trial ends in ${daysRemaining} day(s). Upgrade now to avoid interruption.`
-              : `Your ${user.subscription?.plan} subscription expires in ${daysRemaining} day(s). Renew to keep your business running.`,
-            metadata: {
+          await publishNotification({
+            eventKey: 'subscription.expiring',
+            recipientUserIds: [user._id.toString()],
+            businessOwnerId: user._id.toString(),
+            shopId: null,
+            entityType: 'Subscription',
+            entityId: user._id.toString(),
+            payload: {
               userId: user._id.toString(),
               plan: user.subscription?.plan ?? 'unknown',
               status: user.subscription?.status ?? 'unknown',

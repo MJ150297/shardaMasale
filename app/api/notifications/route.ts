@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
-import Notification from '@/models/Notification';
+import NotificationModel from '@/models/Notification';
 
 export async function GET(request: Request) {
   try {
@@ -19,14 +19,14 @@ export async function GET(request: Request) {
       query.read = false;
     }
 
-    const notifications = await Notification.find(query)
+    const notifications = await NotificationModel.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip((page - 1) * limit)
       .lean();
 
-    const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ owner: user.id, read: false });
+    const total = await NotificationModel.countDocuments(query);
+    const unreadCount = await NotificationModel.countDocuments({ owner: user.id, read: false });
 
     return NextResponse.json({
       notifications,
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     // Mark all notifications as read
-    await Notification.updateMany(
+    await NotificationModel.updateMany(
       { owner: user.id, read: false },
       { $set: { read: true, readAt: new Date() } }
     );

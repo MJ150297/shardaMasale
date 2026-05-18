@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
-import Notification from '@/models/Notification';
+import NotificationModel from '@/models/Notification';
 
 export async function POST(
   request: Request,
@@ -12,7 +12,7 @@ export async function POST(
     const user = await requireBusinessUser();
     await connectToDatabase();
 
-    const notification = await Notification.findOne({
+    const notification = await NotificationModel.findOne({
       _id: params.id,
       owner: user.id
     });
