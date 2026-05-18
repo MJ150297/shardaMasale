@@ -42,6 +42,8 @@ export interface IUser {
   lastLoginAt?: Date | null;
   emailVerifiedAt?: Date | null;
   passwordChangedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
   loginAttempts: number;
   lastFailedLoginAt?: Date | null;
   belongsTo?: string | null;
