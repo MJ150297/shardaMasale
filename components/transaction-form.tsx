@@ -9,9 +9,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,10 +165,18 @@ export default function TransactionForm({
   const [partySearchQuery, setPartySearchQuery] = useState('');
   const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
+  const [itemSearchQueryByIndex, setItemSearchQueryByIndex] = useState<Record<number, string>>({});
+  const [openItemPopoverIndex, setOpenItemPopoverIndex] = useState<number | null>(null);
   const [selectedPartyInfo, setSelectedPartyInfo] = useState<{
     currentBalance: number;
     creditLimit: number;
   } | null>(null);
+  const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
+  const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    console.log('Transaction: openItemPopoverIndex changed', openItemPopoverIndex);
+  }, [openItemPopoverIndex]);
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema) as any,
     defaultValues: {
@@ -324,6 +330,41 @@ export default function TransactionForm({
   // Only load data when dialog is actually open
   if (!isOpen) return null;
 
+  const updateItemPrices = async (data: TransactionFormValues) => {
+    const updatePromises: Promise<any>[] = [];
+
+    data.lineItems.forEach(item => {
+      const itemId = item.item;
+      if (itemId && priceUpdateItems[itemId]) {
+        const newPrice = Number(item.unitPrice) || 0;
+        const payload: any = {
+          id: itemId,
+        };
+        // Determine which price field to update based on transaction mode
+        if (isSaleFlow(mode)) {
+          payload.pricing = { sellingPrice: newPrice };
+        } else {
+          payload.pricing = { purchasePrice: newPrice };
+        }
+        updatePromises.push(
+          fetch('/api/items', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        );
+      }
+    });
+
+    if (updatePromises.length === 0) return;
+
+    const results = await Promise.allSettled(updatePromises);
+    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok));
+    if (failed.length > 0) {
+      toast.error(`${failed.length} item(s) price update failed`);
+    }
+  };
+
   async function submitTransaction(status: 'draft' | 'confirmed') {
     const values = form.getValues();
     setLoading(true);
@@ -341,6 +382,11 @@ export default function TransactionForm({
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || error.message || 'Failed to create transaction');
+      }
+
+      // Update item prices for checked items on confirmed transactions
+      if (status === 'confirmed') {
+        await updateItemPrices(values);
       }
 
       toast.success(
@@ -371,13 +417,37 @@ export default function TransactionForm({
   }
 
   function handleItemSelect(index: number, item: any) {
-    form.setValue(`lineItems.${index}.item`, item._id);
-    form.setValue(`lineItems.${index}.itemName`, item.name);
-    form.setValue(`lineItems.${index}.sku`, item.sku);
-    form.setValue(`lineItems.${index}.unitPrice`, getDefaultUnitPrice(item, mode));
-    form.setValue(`lineItems.${index}.costPrice`, getItemCostPrice(item));
-    form.setValue(`lineItems.${index}.unit`, getItemUnit(item));
-    form.setValue(`lineItems.${index}.taxRate`, getDefaultTaxRate(item, mode));
+    // Update the entire lineItems array entry to ensure RHF picks up the change
+    const current = form.getValues('lineItems') || [];
+    const updated = [...current];
+    updated[index] = {
+      ...(updated[index] || {}),
+      item: item._id,
+      itemName: item.name,
+      sku: item.sku || null,
+      unitPrice: getDefaultUnitPrice(item, mode),
+      costPrice: getItemCostPrice(item),
+      unit: getItemUnit(item),
+      taxRate: getDefaultTaxRate(item, mode),
+    };
+
+    form.setValue('lineItems', updated, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    // Save original price for the "Update price" checkbox
+    setOriginalPrices((prev) => ({ ...prev, [item._id]: getDefaultUnitPrice(item, mode) }));
+    setPriceUpdateItems((prev) => ({ ...prev, [item._id]: false }));
+
+    // Visible feedback for debugging: toast + console
+    console.log('Item selected:', item);
+    try {
+      toast.success(`Selected item: ${item.name}`);
+    } catch (e) {
+      // ignore toast errors in non-browser environments
+    }
   }
 
   function handleCreatedParty(createdParty: CreatedParty) {
@@ -464,86 +534,62 @@ export default function TransactionForm({
               render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>{isSaleFlow(mode) ? 'Customer *' : 'Supplier *'}</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value
-                            ? (() => {
-                                const party = parties.find(p => p._id === field.value);
-                                if (!party) return `Select ${getPartyRole(mode)}`;
-                                return party.phoneNumber 
-                                  ? `${party.displayName || party.name} (${party.phoneNumber})` 
-                                  : party.displayName || party.name;
-                              })()
-                            : `Select ${getPartyRole(mode)}`}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command shouldFilter={false}>
-                        <CommandInput 
-                          placeholder="Search party by name or phone..." 
-                          className="h-9"
+                  <Select value={field.value || ''} onValueChange={(value) => field.onChange(value)}>
+                    <SelectTrigger className={cn(
+                      "w-full justify-between",
+                      !field.value && "text-muted-foreground"
+                    )}>
+                      <SelectValue placeholder={`Select ${getPartyRole(mode)}`} className="truncate" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <div className="px-3 py-2 bg-white">
+                        <Input
                           value={partySearchQuery}
-                          onValueChange={setPartySearchQuery}
+                          onChange={(event) => setPartySearchQuery(event.target.value)}
+                          placeholder="Search party by name or phone..."
+                          className="h-9 w-full"
                         />
-                        <CommandList>
-                          <CommandEmpty>No party found.</CommandEmpty>
-                          <CommandGroup>
-                            {(() => {
-                              const search = partySearchQuery.toLowerCase();
-
-                              if (search === '') {
-                                return parties;
-                              }
-                              
-                              return parties.filter(party => {
-                                const partyName = party.displayName || party.name || party.fullName || party.partyName || '';
-                                const phone = party.phoneNumber || party.mobile || party.phone || '';
-
-                                return partyName.toLowerCase().includes(search) || phone.toLowerCase().includes(search);
-                              });
-                            })().map((party) => (
-                              <CommandItem
-                                value={party._id}
-                                key={party._id}
-                                onSelect={() => {
-                                  field.onChange(party._id);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    party._id === field.value ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div className="flex flex-col">
-                                <span className="font-medium">{party.displayName || party.name}</span>
-                                {party.phoneNumber && (
-                                  <span className="text-xs text-muted-foreground">{party.phoneNumber}</span>
-                                )}
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                        <div className="border-t p-1">
-                          <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
-                            Create {getPartyRole(mode)}
-                          </CommandCreateButton>
-                        </div>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                      </div>
+                      {(() => {
+                        const search = partySearchQuery.toLowerCase();
+                        const filteredParties = search === ''
+                          ? parties
+                          : parties.filter((party) => {
+                              const partyName = (party.displayName || party.name || party.fullName || party.partyName || '').toLowerCase();
+                              const phone = (party.phoneNumber || party.mobile || party.phone || '').toLowerCase();
+                              return partyName.includes(search) || phone.includes(search);
+                            });
+                        if (filteredParties.length === 0) {
+                          return (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              No party found.
+                            </div>
+                          );
+                        }
+                        return filteredParties.map((party) => (
+                          <SelectItem
+                            value={party._id}
+                            key={party._id}
+                            textValue={party.displayName || party.name}
+                            className='bg-white'
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{party.displayName || party.name}</span>
+                              {(party.phoneNumber || party.mobile || party.phone) && (
+                                <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ));
+                      })()}
+                      <SelectSeparator className="my-1" />
+                      <div className="border-t p-1 bg-white">
+                        <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                          Create {getPartyRole(mode)}
+                        </CommandCreateButton>
+                      </div>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                   
                   {/* Available Credit Display */}
@@ -622,8 +668,13 @@ export default function TransactionForm({
             </Button>
           </div>
 
+          <div className="rounded-md border border-dashed border-slate-400 px-3 py-2 text-sm text-slate-700">
+            Debug open item popover index: {openItemPopoverIndex === null ? 'null' : openItemPopoverIndex}
+          </div>
+
           <div className="border rounded-md">
-            <div className="grid grid-cols-12 gap-2 p-3 bg-muted/50 font-medium text-sm border-b">
+            {/* Desktop Header */}
+            <div className="hidden md:grid grid-cols-12 gap-2 p-3 bg-muted/50 font-medium text-sm border-b">
               <div className="col-span-4">Item</div>
               <div className="col-span-2 text-center">Qty</div>
               <div className="col-span-2 text-center">{isSaleFlow(mode) ? 'Selling Price' : 'Purchase Price'}</div>
@@ -640,185 +691,420 @@ export default function TransactionForm({
             )}
 
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-12 gap-2 p-3 border-b items-center">
-                <div className="col-span-4">
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.itemName`}
-                    render={({ field: itemField }) => (
-                      <FormItem className="m-0">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                role="combobox"
-                                className="w-full justify-between font-normal"
-                              >
-                                {itemField.value || "Select item"}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-full p-0">
-                            <Command shouldFilter={false}>
-                              <CommandInput 
-                                placeholder="Search item by name or sku..." 
-                                className="h-9"
-                              />
-                              <CommandList>
-                                <CommandEmpty>No item found.</CommandEmpty>
-                                <CommandGroup>
-                                  {items.map((item) => (
-                                    <CommandItem
-                                      value={item._id}
-                                      key={item._id}
-                                      onSelect={() => {
-                                        handleItemSelect(index, item);
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          form.watch(`lineItems.${index}.item`) === item._id ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
+              <div key={field.id}>
+                {/* Desktop Line Item Row */}
+                <div className="hidden md:grid grid-cols-12 gap-2 p-3 border-b items-center">
+                  <div className="col-span-4">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.itemName`}
+                      render={({ field: itemField }) => {
+                        const selectedItemId = form.watch(`lineItems.${index}.item`);
+
+                        return (
+                          <FormItem className="m-0">
+                            <Select
+                              value={selectedItemId || ''}
+                              onValueChange={(value) => {
+                                const item = items.find((item) => item._id === value);
+                                if (item) {
+                                  handleItemSelect(index, item);
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select item" className="truncate" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white">
+                                <div className="px-3 py-2">
+                                  <Input
+                                    value={itemSearchQueryByIndex[index] ?? ''}
+                                    onChange={(event) => setItemSearchQueryByIndex(prev => ({
+                                      ...prev,
+                                      [index]: event.target.value,
+                                    }))}
+                                    placeholder="Search item by name or sku..."
+                                    className="h-9 w-full"
+                                  />
+                                </div>
+                                {(() => {
+                                  const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
+                                  const filteredItems = query === ''
+                                    ? items
+                                    : items.filter((item) => {
+                                        const name = item.name?.toLowerCase() || '';
+                                        const sku = item.sku?.toLowerCase() || '';
+                                        return name.includes(query) || sku.includes(query);
+                                      });
+
+                                  if (filteredItems.length === 0) {
+                                    return (
+                                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                                        No item found.
+                                      </div>
+                                    );
+                                  }
+
+                                  return filteredItems.map((item) => (
+                                    <SelectItem value={item._id} key={item._id} textValue={item.name}>
                                       <div className="flex flex-col">
-                                          <span className="font-medium">{item.name}</span>
-                                        <div className="flex gap-3 text-xs text-muted-foreground">
+                                        <span className="font-medium">{item.name}</span>
+                                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                                           {item.sku && <span>SKU: {item.sku}</span>}
-                                          <span>
-                                            {isSaleFlow(mode) ? 'Sell' : 'Buy'}: ₹{getDefaultUnitPrice(item, mode).toFixed(2)}
-                                          </span>
-                                          <span>Stock: {
-                                            typeof item.stock === 'object' 
-                                              ? item.stock?.currentQuantity || 0 
-                                              : (item.stockQuantity || item.stock || 0)
-                                          }</span>
+                                          <span>{isSaleFlow(mode) ? 'Sell' : 'Buy'}: ₹{getDefaultUnitPrice(item, mode).toFixed(2)}</span>
+                                          <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
                                         </div>
                                       </div>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                              <div className="border-t p-1">
-                                <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
-                                  Create item
-                                </CommandCreateButton>
-                              </div>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                                    </SelectItem>
+                                  ));
+                                })()}
+                                <SelectSeparator className="my-1" />
+                                <div className="border-t p-1">
+                                  <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                    Create item
+                                  </CommandCreateButton>
+                                </div>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  </div>
 
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.quantity`}
-                    render={({ field: qtyField }) => (
-                      <FormItem className="m-0">
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            {...qtyField}
-                            className="text-center"
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.quantity`}
+                      render={({ field: qtyField }) => (
+                        <FormItem className="m-0">
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min="0" 
+                              step="0.01" 
+                              {...qtyField}
+                              className="text-center"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.unitPrice`}
+                      render={({ field: priceField }) => (
+                        <FormItem className="m-0">
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min="0" 
+                              step="0.01" 
+                              {...priceField}
+                              className="text-center"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    {(() => {
+                      const itemId = form.watch(`lineItems.${index}.item`);
+                      const currentPrice = Number(form.watch(`lineItems.${index}.unitPrice`) || 0);
+                      const originalPrice = itemId ? originalPrices[itemId] : undefined;
+                      const isDifferent = itemId && originalPrice !== undefined && Math.abs(currentPrice - originalPrice) > 0.001;
+                      return isDifferent ? (
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer mt-0.5 whitespace-nowrap justify-center">
+                          <input
+                            type="checkbox"
+                            checked={!!(itemId && priceUpdateItems[itemId])}
+                            onChange={(e) => {
+                              if (itemId) {
+                                setPriceUpdateItems(prev => ({ ...prev, [itemId]: e.target.checked }));
+                              }
+                            }}
+                            className="h-3 w-3"
                           />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                          Update {isSaleFlow(mode) ? 'selling' : 'purchase'} price
+                        </label>
+                      ) : null;
+                    })()}
+                  </div>
 
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.unitPrice`}
-                    render={({ field: priceField }) => (
-                      <FormItem className="m-0">
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            {...priceField}
-                            className="text-center"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                  <div className="col-span-1">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.discountAmount`}
+                      render={({ field: discField }) => (
+                        <FormItem className="m-0">
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min="0" 
+                              step="0.01" 
+                              {...discField}
+                              className="text-center w-full"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                <div className="col-span-1">
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.discountAmount`}
-                    render={({ field: discField }) => (
-                      <FormItem className="m-0">
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            {...discField}
-                            className="text-center w-full"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                  <div className="col-span-1">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.taxRate`}
+                      render={({ field: taxField }) => (
+                        <FormItem className="m-0">
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min="0" 
+                              max="100"
+                              step="0.01" 
+                              {...taxField}
+                              className="text-center w-full"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                <div className="col-span-1">
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.taxRate`}
-                    render={({ field: taxField }) => (
-                      <FormItem className="m-0">
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            max="100"
-                            step="0.01" 
-                            {...taxField}
-                            className="text-center w-full"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="col-span-1 text-center font-medium">
-                  ₹{roundCurrency(
-                    Number(form.watch(`lineItems.${index}.quantity`) || 0) * 
-                    Number(form.watch(`lineItems.${index}.unitPrice`) || 0) - 
-                    Number(form.watch(`lineItems.${index}.discountAmount`) || 0) + 
-                    ((
+                  <div className="col-span-1 text-center font-medium">
+                    ₹{roundCurrency(
                       Number(form.watch(`lineItems.${index}.quantity`) || 0) * 
                       Number(form.watch(`lineItems.${index}.unitPrice`) || 0) - 
-                      Number(form.watch(`lineItems.${index}.discountAmount`) || 0)
-                    ) * Number(form.watch(`lineItems.${index}.taxRate`) || 0) / 100)
-                  ).toFixed(2)}
+                      Number(form.watch(`lineItems.${index}.discountAmount`) || 0) + 
+                      ((
+                        Number(form.watch(`lineItems.${index}.quantity`) || 0) * 
+                        Number(form.watch(`lineItems.${index}.unitPrice`) || 0) - 
+                        Number(form.watch(`lineItems.${index}.discountAmount`) || 0)
+                      ) * Number(form.watch(`lineItems.${index}.taxRate`) || 0) / 100)
+                    ).toFixed(2)}
+                  </div>
+
+                  <div className="col-span-1 text-right">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 w-8 p-0 text-red-500"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="col-span-1 text-right">
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-8 w-8 p-0 text-red-500"
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                {/* Mobile Line Item Card */}
+                <div className="md:hidden space-y-3 p-3 border-b">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.itemName`}
+                        render={({ field: itemField }) => {
+                          const selectedItemId = form.watch(`lineItems.${index}.item`);
+
+                          return (
+                            <FormItem className="m-0">
+                              <Select
+                                value={selectedItemId || ''}
+                                onValueChange={(value) => {
+                                  const item = items.find((item) => item._id === value);
+                                  if (item) {
+                                    handleItemSelect(index, item);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select item" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white">
+                                  <div className="px-3 py-2">
+                                    <Input
+                                      value={itemSearchQueryByIndex[index] ?? ''}
+                                      onChange={(event) => setItemSearchQueryByIndex(prev => ({
+                                        ...prev,
+                                        [index]: event.target.value,
+                                      }))}
+                                      placeholder="Search item by name or sku..."
+                                      className="h-9 w-full"
+                                    />
+                                  </div>
+                                  {(() => {
+                                    const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
+                                    const filteredItems = query === ''
+                                      ? items
+                                      : items.filter((item) => {
+                                          const name = item.name?.toLowerCase() || '';
+                                          const sku = item.sku?.toLowerCase() || '';
+                                          return name.includes(query) || sku.includes(query);
+                                        });
+
+                                    if (filteredItems.length === 0) {
+                                      return (
+                                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                                          No item found.
+                                        </div>
+                                      );
+                                    }
+
+                                    return filteredItems.map((item) => (
+                                      <SelectItem value={item._id} key={item._id} textValue={item.name}>
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{item.name}</span>
+                                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                            {item.sku && <span>SKU: {item.sku}</span>}
+                                            <span>{isSaleFlow(mode) ? 'Sell' : 'Buy'}: ₹{getDefaultUnitPrice(item, mode).toFixed(2)}</span>
+                                            <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
+                                          </div>
+                                        </div>
+                                      </SelectItem>
+                                    ));
+                                  })()}
+                                  <SelectSeparator className="my-1" />
+                                  <div className="border-t p-1">
+                                    <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                      Create item
+                                    </CommandCreateButton>
+                                  </div>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 w-8 p-0 text-red-500 shrink-0"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
+                      <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.quantity`}
+                        render={({ field: qtyField }) => (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                step="0.01" 
+                                {...qtyField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">{isSaleFlow(mode) ? 'Sell Price' : 'Buy Price'}</label>
+                      <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.unitPrice`}
+                        render={({ field: priceField }) => (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                step="0.01" 
+                                {...priceField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      {(() => {
+                        const itemId = form.watch(`lineItems.${index}.item`);
+                        const currentPrice = Number(form.watch(`lineItems.${index}.unitPrice`) || 0);
+                        const originalPrice = itemId ? originalPrices[itemId] : undefined;
+                        const isDifferent = itemId && originalPrice !== undefined && Math.abs(currentPrice - originalPrice) > 0.001;
+                        return isDifferent ? (
+                          <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer mt-0.5 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={!!(itemId && priceUpdateItems[itemId])}
+                              onChange={(e) => {
+                                if (itemId) {
+                                  setPriceUpdateItems(prev => ({ ...prev, [itemId]: e.target.checked }));
+                                }
+                              }}
+                              className="h-3 w-3"
+                            />
+                            Update {isSaleFlow(mode) ? 'selling' : 'purchase'} price
+                          </label>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Disc</label>
+                      <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.discountAmount`}
+                        render={({ field: discField }) => (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                step="0.01" 
+                                {...discField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Tax %</label>
+                      <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.taxRate`}
+                        render={({ field: taxField }) => (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                min="0" 
+                                max="100"
+                                step="0.01" 
+                                {...taxField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t text-sm">
+                    <span className="text-muted-foreground">Line Total</span>
+                    <span className="font-semibold">₹{roundCurrency(
+                      Number(form.watch(`lineItems.${index}.quantity`) || 0) * 
+                      Number(form.watch(`lineItems.${index}.unitPrice`) || 0) - 
+                      Number(form.watch(`lineItems.${index}.discountAmount`) || 0) + 
+                      ((
+                        Number(form.watch(`lineItems.${index}.quantity`) || 0) * 
+                        Number(form.watch(`lineItems.${index}.unitPrice`) || 0) - 
+                        Number(form.watch(`lineItems.${index}.discountAmount`) || 0)
+                      ) * Number(form.watch(`lineItems.${index}.taxRate`) || 0) / 100)
+                    ).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             ))}

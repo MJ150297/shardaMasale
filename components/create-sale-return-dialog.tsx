@@ -81,6 +81,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
   const [createPartyOpen, setCreatePartyOpen] = useState(false);
+  const [partyPopoverOpen, setPartyPopoverOpen] = useState(false);
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
   const [selectedPartyName, setSelectedPartyName] = useState<string | null>(null);
 
@@ -223,9 +224,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
     if (!selectedPartyId) return null;
     const party = parties.find((p) => p._id === selectedPartyId);
     if (!party) return null;
-    return party.phoneNumber
-      ? `${party.displayName || party.name} (${party.phoneNumber})`
-      : party.displayName || party.name;
+    return party.displayName || party.name;
   }, [selectedPartyId, parties]);
 
   function handleSelectInvoice(invoice: InvoiceOption) {
@@ -323,9 +322,9 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
 
             <div className="space-y-5">
               {/* Party Selector */}
-              <div className="space-y-2">
+              <div className="space-y-2 bg-white">
                 <label className="text-sm font-medium">Customer</label>
-                <Popover>
+                <Popover open={partyPopoverOpen} onOpenChange={setPartyPopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -339,7 +338,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
+                  <PopoverContent className="w-full p-0 bg-white">
                     <Command shouldFilter={false}>
                       <CommandInput
                         placeholder="Search customer by name or phone..."
@@ -364,6 +363,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                                 value={party._id}
                                 key={party._id}
                                 onSelect={() => {
+                                  setPartyPopoverOpen(false);
                                   setSelectedPartyId(party._id);
                                   setSelectedPartyName(party.displayName || party.name || null);
                                   setSelectedInvoiceId(null);

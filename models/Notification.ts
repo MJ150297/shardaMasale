@@ -166,12 +166,10 @@ const notificationSchema = new Schema<INotification, NotificationModel>(
     autoArchiveAt: {
       type: Date,
       default: null,
-      index: true,
     },
     expiresAt: {
       type: Date,
       default: null,
-      index: true,
     },
     scheduledFor: {
       type: Date,

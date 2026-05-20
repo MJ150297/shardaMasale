@@ -183,6 +183,7 @@ export default function CreatePaymentInDialog({
   const [parties, setParties] = useState<PartyOption[]>([]);
   const [partySearchQuery, setPartySearchQuery] = useState('');
   const [createPartyOpen, setCreatePartyOpen] = useState(false);
+  const [partyPopoverOpen, setPartyPopoverOpen] = useState(false);
   const [openInvoices, setOpenInvoices] = useState<OpenInvoiceOption[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
@@ -513,9 +514,9 @@ export default function CreatePaymentInDialog({
                 control={form.control}
                 name="party"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col">
+                  <FormItem className="flex flex-col bg-white">
                     <FormLabel>Customer *</FormLabel>
-                    <Popover>
+                    <Popover open={partyPopoverOpen} onOpenChange={setPartyPopoverOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
@@ -539,22 +540,14 @@ export default function CreatePaymentInDialog({
                                       : initialPartyNameRef.current;
                                   }
 
-                                  const phone =
-                                    party.phoneNumber ||
-                                    party.alternatePhoneNumber ||
-                                    party.mobile ||
-                                    party.phone;
-
-                                  return phone
-                                    ? `${party.displayName || party.name} (${phone})`
-                                    : party.displayName || party.name;
+                                  return party.displayName || party.name;
                                 })()
                               : 'Select customer'}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
+                      <PopoverContent className="w-full p-0 bg-white">
                         <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="Search customer by name or phone..."
@@ -593,6 +586,7 @@ export default function CreatePaymentInDialog({
                                   key={party._id}
                                   onSelect={() => {
                                     field.onChange(party._id);
+                                    setPartyPopoverOpen(false);
                                   }}
                                 >
                                   <Check

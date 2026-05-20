@@ -71,10 +71,10 @@ export default function InvoicePreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-none! w-[90vw] max-h-[90vh] overflow-hidden p-0 flex flex-col">
-        <DialogHeader className="p-4 border-b flex flex-row items-center justify-between shrink-0">
-          <DialogTitle>Invoice Preview: {invoice?.invoiceNumber}</DialogTitle>
-          <div className="flex gap-2">
+      <DialogContent className="max-w-none! w-[95vw] sm:w-[90vw] max-h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogHeader className="p-3 sm:p-4 border-b flex flex-row items-center justify-between shrink-0">
+          <DialogTitle className="text-sm sm:text-base truncate pr-2">Invoice: {invoice?.invoiceNumber}</DialogTitle>
+          <div className="flex gap-1 sm:gap-2 shrink-0">
             <InvoiceShareSheet
               invoice={{
                 id: invoice?.id || invoice?._id || invoice?.invoiceNumber,
@@ -94,20 +94,20 @@ export default function InvoicePreviewModal({
               }}
               variant="button"
             />
-            <Button size="sm" onClick={onDownload}>
-              <Download className="h-4 w-4 mr-2" />
-              Download
+            <Button size="sm" onClick={onDownload} className="px-2 sm:px-3">
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Download</span>
             </Button>
-            <Button size="sm" onClick={onPrint}>
-              <Printer className="h-4 w-4 mr-2" />
-              Print
+            <Button size="sm" onClick={onPrint} className="px-2 sm:px-3">
+              <Printer className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Print</span>
             </Button>
           </div>
         </DialogHeader>
 
-        <div className="overflow-y-auto p-8 bg-gray-100 flex-1">
+        <div className="overflow-y-auto p-4 sm:p-6 md:p-8 bg-gray-100 flex-1">
           <div className="max-w-3xl mx-auto shadow-xl rounded-md">
-            <div className="relative bg-white p-12 rounded-md overflow-hidden" style={{ aspectRatio: '1 / 1.414' }}>
+            <div className="relative bg-white p-4 sm:p-8 md:p-12 rounded-md overflow-hidden sm:aspect-[1/1.414]">
             {/* Watermark Logo */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
               <Image
@@ -122,9 +122,9 @@ export default function InvoicePreviewModal({
             </div>
             
             {/* Header */}
-            <div className="flex justify-between mb-8">
+            <div className="flex flex-col sm:flex-row justify-between mb-6 sm:mb-8 gap-4 sm:gap-0">
               <div>
-                <h2 className="text-2xl font-bold">{businessName}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold">{businessName}</h2>
                 <p className="text-sm text-gray-500">{businessAddress}</p>
                 {business?.gstin && (
                   <p className="text-sm text-gray-500">GSTIN: {business.gstin}</p>
@@ -136,9 +136,9 @@ export default function InvoicePreviewModal({
                   <p className="text-sm text-gray-500">Email: {business.email}</p>
                 )}
               </div>
-              <div className="text-right">
-                <h1 className="text-3xl font-bold text-blue-600">INVOICE</h1>
-                <div className="mt-3 text-sm text-gray-600 space-y-1">
+              <div className="text-left sm:text-right">
+                <h1 className="text-2xl sm:text-3xl font-bold text-blue-600">INVOICE</h1>
+                <div className="mt-2 sm:mt-3 text-sm text-gray-600 space-y-0.5 sm:space-y-1">
                   <p>Invoice #: {invoice?.invoiceNumber}</p>
                   <p>Date: {invoice?.transactionId?.transactionDate ? formatDate(invoice.transactionId.transactionDate) : ''}</p>
                   <p>Due Date: {invoice?.dueDate ? formatDate(invoice.dueDate) : ''}</p>
@@ -174,6 +174,7 @@ export default function InvoicePreviewModal({
             </div>
 
             {/* Items Table */}
+            <div className="overflow-x-auto">
             <table className="w-full text-sm mb-8">
               <thead>
                 <tr className="border-b bg-gray-50">
@@ -194,9 +195,10 @@ export default function InvoicePreviewModal({
                 ))}
               </tbody>
             </table>
+            </div>
 
             {/* Summary */}
-            <div className="ml-auto w-1/3 text-sm">
+            <div className="ml-auto w-full sm:w-1/2 md:w-1/3 text-sm">
               <div className="flex justify-between py-1">
                 <span>Subtotal</span>
                 <span>₹{invoice?.transactionId?.summary?.subtotal?.toFixed(2)}</span>

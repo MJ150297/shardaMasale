@@ -60,7 +60,7 @@ export default function StockAdjustmentDialog({
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       adjustedQuantity: item.stock.currentQuantity,
@@ -150,7 +150,12 @@ export default function StockAdjustmentDialog({
                       <Input 
                         type="number" 
                         step="any"
-                        {...field} 
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                        disabled={field.disabled}
+                        name={field.name}
                       />
                     </FormControl>
                     <FormMessage />

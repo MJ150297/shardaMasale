@@ -232,7 +232,7 @@ export default function InvoicesClient() {
       </div>
 
       <Tabs defaultValue="" value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="w-full overflow-x-auto flex-nowrap">
           <TabsTrigger value="">All</TabsTrigger>
           <TabsTrigger value="draft">Draft</TabsTrigger>
           <TabsTrigger value="sent">Sent</TabsTrigger>

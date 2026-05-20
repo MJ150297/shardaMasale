@@ -167,7 +167,7 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-9 w-full">
+          <TabsList className="w-full overflow-x-auto flex-nowrap justify-start">
             <TabsTrigger value="business">Business</TabsTrigger>
             <TabsTrigger value="localization">Localization</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>

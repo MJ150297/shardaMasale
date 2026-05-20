@@ -24,7 +24,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status, update } = useSession();
   const [activeShopId, setActiveShopId] = useState<string | null>(null);
   const [availableShops, setAvailableShops] = useState<Shop[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasOwnedShops, setHasOwnedShops] = useState(false);
   const hasSyncedFallbackShopRef = useRef(false);
 

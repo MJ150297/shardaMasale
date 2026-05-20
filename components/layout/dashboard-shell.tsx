@@ -29,7 +29,8 @@ import {
   Home,
   Bell,
   Store,
-  Check
+  Check,
+  MoreHorizontal
 } from 'lucide-react';
 
 import {
@@ -210,10 +211,15 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
   // Page Actions State
   const [pageActions, setPageActions] = useState<PageAction[]>([]);
 
-  // Select primary navigation items for mobile footer (max 5)
+  // Select primary navigation items for mobile footer (max 4 direct items + 1 "More" button)
   const mobileNavItems = filteredNavItems.filter(item =>
-    ['/dashboard', '/dashboard/items', '/dashboard/parties', '/dashboard/transactions', '/dashboard/invoices'].includes(item.url)
-  ).slice(0, 5);
+    ['/dashboard', '/dashboard/parties', '/dashboard/items', '/dashboard/invoices'].includes(item.url)
+  );
+
+  // Remaining nav items not shown directly in the mobile bar (shown inside "More" menu)
+  const extraMobileNavItems = filteredNavItems.filter(
+    item => !['/dashboard', '/dashboard/parties', '/dashboard/items', '/dashboard/invoices'].includes(item.url)
+  );
 
   // Calculate bottom padding based on existence of actions
   const mainBottomPadding = isMobile
@@ -523,7 +529,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
             {isMobile && (
               <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background dark:bg-gray-900 dark:border-gray-800 pb-safe">
                 <div className="flex justify-around items-center h-16 px-2">
-                  {mobileNavItems.map((item) => {
+                      {mobileNavItems.map((item) => {
                     const isActive = pathname === item.url;
 
                     // Map to filled icon variants
@@ -531,12 +537,10 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                       switch (item.url) {
                         case '/dashboard':
                           return isActive ? LayoutDashboard : LayoutDashboardOutline;
-                        case '/dashboard/items':
-                          return isActive ? Package : PackageOutline;
                         case '/dashboard/parties':
                           return isActive ? Users : UsersOutline;
-                        case '/dashboard/transactions':
-                          return isActive ? Receipt : ReceiptOutline;
+                        case '/dashboard/items':
+                          return isActive ? Package : PackageOutline;
                         case '/dashboard/invoices':
                           return isActive ? FileText : FileTextOutline;
                         default:
@@ -574,6 +578,54 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                       </Link>
                     );
                   })}
+
+                  {/* "More" button with dropdown for remaining links */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="flex flex-col items-center justify-center w-full h-full min-h-12 gap-0.5 text-xs text-muted-foreground hover:text-foreground hover:scale-[1.02] active:scale-[0.92] transition-all duration-200 ease-out"
+                        style={{
+                          transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        }}
+                      >
+                        <MoreHorizontal className="size-5 transition-all duration-200" strokeWidth={2} />
+                        <span className="text-[10px] font-medium transition-all duration-200">More</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      side="top"
+                      align="end"
+                      sideOffset={8}
+                      className="mb-2 w-56 rounded-xl bg-white"
+                    >
+                      <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                        More Options
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {extraMobileNavItems.map((item) => (
+                        <DropdownMenuItem key={item.url} asChild>
+                          <Link href={item.url} className="flex items-center gap-2">
+                            <item.icon className="size-4" />
+                            <span>{item.title}</span>
+                            {item.comingSoon && (
+                              <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4">
+                                Soon
+                              </Badge>
+                            )}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-red-600 dark:text-red-400"
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
+                      >
+                        <LogOut className="mr-2 size-4" />
+                        {isSigningOut ? 'Signing out...' : 'Sign out'}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </nav>
             )}
