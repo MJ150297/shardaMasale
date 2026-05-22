@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireOwner } from '@/lib/auth';
+import { requireBusinessUser } from '@/lib/auth';
 import connectToDatabase from '@/lib/db';
 import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
@@ -7,63 +7,54 @@ import { roundCurrency } from '@/lib/utils';
 
 export async function GET(request: Request) {
   try {
-    const user = await requireOwner();
+    const user = await requireBusinessUser();
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);
-    const shopId = searchParams.get('shopId');
+    const shopId = searchParams.get('shopId') || user.activeShopId;
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const partyType = searchParams.get('partyType');
 
+    // Filter parties by created-at date range
     const match: any = { owner: user.id, isArchived: false };
     if (shopId) match.shopId = shopId;
     if (partyType && partyType !== 'all') match.partyType = partyType;
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) match.createdAt.$lte = new Date(endDate);
+    }
 
-    // Get all parties with their balances
+    // Get parties within the date range with their balances
     const parties = await Party.find(match)
       .select('displayName partyType status currentBalance creditLimit phoneNumber email')
       .sort({ displayName: 1 })
       .lean();
 
-    // Get transaction volume per party (within date range if specified)
+    // Get transaction volume per party (no date filter — shows lifetime volume for these parties)
+    // Using .find() instead of .aggregate() because Mongoose global plugins (like shopId scoping)
+    // do NOT apply to aggregation pipelines, which can cause incorrect data.
     const txMatch: any = { owner: user.id, status: 'confirmed' };
     if (shopId) txMatch.shopId = shopId;
-    if (startDate || endDate) {
-      txMatch.transactionDate = {};
-      if (startDate) txMatch.transactionDate.$gte = new Date(startDate);
-      if (endDate) txMatch.transactionDate.$lte = new Date(endDate);
+    if (parties.length > 0) {
+      txMatch.party = { $in: parties.map(p => p._id) };
     }
 
-    const transactionVolumes = await Transaction.aggregate([
-      { $match: txMatch },
-      {
-        $group: {
-          _id: '$party',
-          totalSales: {
-            $sum: {
-              $cond: [{ $eq: ['$type', 'sale'] }, '$summary.grandTotal', 0],
-            },
-          },
-          totalPurchases: {
-            $sum: {
-              $cond: [{ $eq: ['$type', 'purchase'] }, '$summary.grandTotal', 0],
-            },
-          },
-          transactionCount: { $sum: 1 },
-        },
-      },
-    ]);
+    const transactions = await Transaction.find(txMatch)
+      .select('type summary.grandTotal party')
+      .lean();
 
+    // Group by party manually
     const volumeMap = new Map<string, { totalSales: number; totalPurchases: number; transactionCount: number }>();
-    for (const v of transactionVolumes) {
-      if (v._id) {
-        volumeMap.set(v._id.toString(), {
-          totalSales: v.totalSales || 0,
-          totalPurchases: v.totalPurchases || 0,
-          transactionCount: v.transactionCount || 0,
-        });
-      }
+    for (const tx of transactions) {
+      const partyId = tx.party?.toString();
+      if (!partyId) continue;
+      const entry = volumeMap.get(partyId) || { totalSales: 0, totalPurchases: 0, transactionCount: 0 };
+      if (tx.type === 'sale') entry.totalSales += (tx.summary?.grandTotal || 0);
+      if (tx.type === 'purchase') entry.totalPurchases += (tx.summary?.grandTotal || 0);
+      entry.transactionCount++;
+      volumeMap.set(partyId, entry);
     }
 
     // Merge transaction volumes into parties

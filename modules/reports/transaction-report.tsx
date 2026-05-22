@@ -153,7 +153,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
               {data.transactions.map((tx: any) => (
                 <TableRow key={tx._id}>
                   <TableCell>{formatDate(tx.createdAt)}</TableCell>
-                  <TableCell>{tx.party?.name || '-'}</TableCell>
+                  <TableCell>{tx.party?.displayName || tx.party?.name || '-'}</TableCell>
                   <TableCell>
                     <Badge variant={tx.type === 'sale' ? 'default' : 'secondary'}>
                       {tx.type}
@@ -164,7 +164,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
                       {tx.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">₹{tx.total?.toLocaleString() || 0}</TableCell>
+                  <TableCell className="text-right font-medium">₹{(tx.summary?.grandTotal || 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

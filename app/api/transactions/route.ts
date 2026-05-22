@@ -40,10 +40,16 @@ const createTransactionSchema = z.object({
     taxRate: z.coerce.number().min(0).max(100).default(0),
     costPrice: z.coerce.number().optional().nullable(),
   })).default([]),
+  additionalCharges: z.array(z.object({
+    name: z.string().min(1, "Charge name is required"),
+    amount: z.coerce.number().min(0, "Amount must be positive"),
+  })).default([]),
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     grandTotal: z.coerce.number().min(0).optional(),
     paidAmount: z.coerce.number().min(0).default(0),
+    totalDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
+    totalDiscountValue: z.coerce.number().min(0).optional().nullable(),
   }).default(() => ({ roundOff: 0, paidAmount: 0 })),
   payment: z.object({
     method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
@@ -435,7 +441,26 @@ export async function POST(request: Request) {
         const taxableAmount = lineSubtotal - Number(item.discountAmount || 0);
         taxTotal += taxableAmount * (Number(item.taxRate || 0) / 100);
       }
-      return roundCurrency(subtotal - discountTotal + taxTotal + (transactionInput.summary.roundOff || 0));
+
+      // Compute total discount (percentage or fixed)
+      const totalDiscountType = transactionInput.summary?.totalDiscountType || null;
+      const totalDiscountValue = Number(transactionInput.summary?.totalDiscountValue) || 0;
+      let totalDiscount = 0;
+      if (totalDiscountType === "percentage") {
+        totalDiscount = roundCurrency((subtotal - discountTotal) * (Math.min(totalDiscountValue, 100) / 100));
+      } else if (totalDiscountType === "fixed") {
+        totalDiscount = roundCurrency(Math.min(totalDiscountValue, Math.max(subtotal - discountTotal, 0)));
+      }
+
+      // Additional charges total
+      const additionalChargesTotal = roundCurrency(
+        (transactionInput.additionalCharges || []).reduce(
+          (total, charge) => total + (Number(charge.amount) || 0),
+          0,
+        ),
+      );
+
+      return roundCurrency(subtotal - discountTotal - totalDiscount + taxTotal + (transactionInput.summary.roundOff || 0) + additionalChargesTotal);
     })();
 
     const paidAmount = transactionInput.summary.paidAmount ?? 0;

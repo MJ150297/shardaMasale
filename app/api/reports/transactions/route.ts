@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
     const query: any = { owner: user.id };
     
-    if (shopId) query.shop = shopId;
+    if (shopId) query.shopId = shopId;
     if (type && type !== 'all') query.type = type;
     if (status && status !== 'all') query.status = status;
     

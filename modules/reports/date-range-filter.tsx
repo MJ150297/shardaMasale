@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -118,7 +118,6 @@ const predefinedRanges = [
 ];
 
 export function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeFilterProps) {
-  const [selectedRange, setSelectedRange] = useState('This Month');
   const [customDialogOpen, setCustomDialogOpen] = useState(false);
   const [tempStartDate, setTempStartDate] = useState<Date | undefined>(startDate);
   const [tempEndDate, setTempEndDate] = useState<Date | undefined>(endDate);
@@ -128,13 +127,33 @@ export function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeF
     setTempEndDate(endDate);
   }, [startDate, endDate]);
 
+  // Derive selectedRange from the actual startDate/endDate props
+  // This ensures the dropdown always reflects what's applied
+  const selectedRange = useMemo(() => {
+    if (!startDate || !endDate) {
+      return 'This Month';
+    }
+
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
+    for (const range of predefinedRanges) {
+      if (range.label === 'Custom') continue;
+      const [s, e] = range.getValue();
+      if (s && e && s.getTime() === startTime && e.getTime() === endTime) {
+        return range.label;
+      }
+    }
+
+    return 'Custom';
+  }, [startDate, endDate]);
+
   const handleRangeSelect = (label: string) => {
     if (label === 'Custom') {
       setCustomDialogOpen(true);
       return;
     }
     
-    setSelectedRange(label);
     const range = predefinedRanges.find(r => r.label === label);
     if (range) {
       const [start, end] = range.getValue();
@@ -144,7 +163,6 @@ export function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeF
 
   const applyCustomDates = () => {
     onDateChange(tempStartDate, tempEndDate);
-    setSelectedRange('Custom');
     setCustomDialogOpen(false);
   };
 
@@ -257,7 +275,6 @@ export function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeF
           size="icon"
           className="h-9 w-9 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
           onClick={() => {
-            setSelectedRange('This Month');
             onDateChange(undefined, undefined);
           }}
         >

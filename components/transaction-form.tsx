@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -45,9 +45,15 @@ const transactionFormSchema = z.object({
     taxRate: z.coerce.number().min(0).max(100).default(0),
     costPrice: z.coerce.number().optional().nullable(),
   })).default([]),
+  additionalCharges: z.array(z.object({
+    name: z.string().min(1, "Charge name is required"),
+    amount: z.coerce.number().min(0, "Amount must be positive"),
+  })).default([]),
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
+    totalDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
+    totalDiscountValue: z.coerce.number().min(0).optional().nullable(),
   }).default(() => ({ roundOff: 0, paidAmount: 0 })),
   payment: z.object({
     method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
@@ -173,6 +179,7 @@ export default function TransactionForm({
   } | null>(null);
   const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
   const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
+  const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
 
   useEffect(() => {
     console.log('Transaction: openItemPopoverIndex changed', openItemPopoverIndex);
@@ -196,12 +203,24 @@ export default function TransactionForm({
     name: "lineItems"
   });
 
+  const {
+    fields: chargeFields,
+    append: appendCharge,
+    remove: removeCharge,
+  } = useFieldArray({
+    control: form.control,
+    name: 'additionalCharges',
+  });
+
   // Calculate summary totals - FULL REACTIVITY FOR ALL OPERATIONS
   const lineItems = form.watch('lineItems') || [];
   const lineItemsCount = fields.length;
   // form.watch('lineItems') on the line above provides full reactivity
   const roundOff = roundCurrency(form.watch('summary.roundOff') || 0);
   const paidAmount = roundCurrency(form.watch('summary.paidAmount') || 0);
+  const totalDiscountType = form.watch('summary.totalDiscountType');
+  const totalDiscountValue = Number(form.watch('summary.totalDiscountValue') || 0);
+  const additionalCharges = form.watch('additionalCharges') || [];
   
   let subtotal = 0;
   let discountTotal = 0;
@@ -216,13 +235,29 @@ export default function TransactionForm({
     taxTotal += taxableAmount * (Number(item.taxRate || 0) / 100);
   });
 
-  const grandTotal = roundCurrency(subtotal - discountTotal + taxTotal + roundOff);
+  // Compute total discount (percentage or fixed)
+  let totalDiscount = 0;
+  if (totalDiscountType === 'percentage') {
+    const baseAmount = subtotal - discountTotal;
+    totalDiscount = roundCurrency(baseAmount * (Math.min(totalDiscountValue, 100) / 100));
+  } else if (totalDiscountType === 'fixed') {
+    totalDiscount = roundCurrency(Math.min(totalDiscountValue, Math.max(subtotal - discountTotal, 0)));
+  }
+
+  // Additional charges total
+  const additionalChargesTotal = roundCurrency(
+    additionalCharges.reduce((total, charge) => total + (Number(charge.amount) || 0), 0)
+  );
+
+  const grandTotal = roundCurrency(subtotal - discountTotal - totalDiscount + taxTotal + roundOff + additionalChargesTotal);
   const dueAmount = Math.max(roundCurrency(grandTotal - paidAmount), 0);
 
   const summary = {
     subtotal: roundCurrency(subtotal),
     discountTotal: roundCurrency(discountTotal),
     taxTotal: roundCurrency(taxTotal),
+    totalDiscount: roundCurrency(totalDiscount),
+    additionalChargesTotal,
     roundOff,
     grandTotal,
     paidAmount,
@@ -1122,14 +1157,191 @@ export default function TransactionForm({
               <span className="font-medium">₹{summary.subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Discount:</span>
+              <span>Line Discount:</span>
               <span className="font-medium text-red-500">-₹{summary.discountTotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span>Tax:</span>
               <span className="font-medium">+₹{summary.taxTotal.toFixed(2)}</span>
             </div>
-            
+
+            {/* Total Discount - Percentage or Fixed */}
+            <div className="flex justify-between text-sm items-center gap-2">
+              <span className="text-xs shrink-0">Total Discount</span>
+              <div className="flex items-center gap-1">
+                <FormField
+                  control={form.control}
+                  name="summary.totalDiscountType"
+                  render={({ field }) => (
+                    <FormItem className="m-0">
+                      <FormControl>
+                        <select
+                          value={field.value || ''}
+                          onChange={(e) => {
+                            const val = e.target.value || null;
+                            field.onChange(val);
+                            form.setValue('summary.totalDiscountValue', 0);
+                          }}
+                          className="h-7 w-10 text-xs border rounded px-1 bg-background"
+                        >
+                          <option value="">-</option>
+                          <option value="percentage">%</option>
+                          <option value="fixed">₹</option>
+                        </select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="summary.totalDiscountValue"
+                  render={({ field }) => (
+                    <FormItem className="m-0">
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          disabled={!totalDiscountType}
+                          placeholder="0"
+                          className="w-16 h-7 text-right text-xs"
+                          value={field.value ?? ''}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+            {totalDiscountType && summary.totalDiscount > 0 && (
+              <div className="flex justify-between text-xs text-destructive">
+                <span></span>
+                <span>- ₹{summary.totalDiscount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {/* Additional Charges Section */}
+            <div className="border rounded-md">
+              <button
+                type="button"
+                onClick={() => {
+                  if (chargeFields.length === 0) {
+                    setAdditionalChargesExpanded(!additionalChargesExpanded);
+                  }
+                }}
+                className="flex items-center justify-between w-full px-2 py-1.5 text-sm hover:bg-muted/50 rounded-md"
+              >
+                <span className="flex items-center gap-1">
+                  {additionalChargesExpanded || chargeFields.length > 0 ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                  <span className={cn(
+                    chargeFields.length > 0 ? "font-medium" : "text-muted-foreground"
+                  )}>
+                    {chargeFields.length > 0
+                      ? `Additional Charges (${chargeFields.length})`
+                      : "+ Additional charges"}
+                  </span>
+                </span>
+                {chargeFields.length > 0 && (
+                  <span className="font-medium">
+                    ₹ {summary.additionalChargesTotal.toFixed(2)}
+                  </span>
+                )}
+              </button>
+
+              {(additionalChargesExpanded || chargeFields.length > 0) && (
+                <div className="px-2 pb-2 space-y-2">
+                  {chargeFields.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-1">No additional charges added.</p>
+                  )}
+                  {chargeFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-1.5">
+                      <FormField
+                        control={form.control}
+                        name={`additionalCharges.${index}.name`}
+                        render={({ field: chargeNameField }) => (
+                          <FormItem className="m-0 flex-1">
+                            <FormControl>
+                              <Input
+                                placeholder="Charge name"
+                                className="h-7 text-xs"
+                                {...chargeNameField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`additionalCharges.${index}.amount`}
+                        render={({ field: chargeAmountField }) => (
+                          <FormItem className="m-0 w-20">
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                className="h-7 text-xs text-right"
+                                {...chargeAmountField}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          removeCharge(index);
+                          if (chargeFields.length === 1) {
+                            setAdditionalChargesExpanded(false);
+                          }
+                        }}
+                        className="h-7 w-7 text-destructive shrink-0"
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendCharge({ name: '', amount: 0 })}
+                    type="button"
+                    className="w-full h-7 text-xs"
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add Charge
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between text-sm items-center">
+              <span>Round Off</span>
+              <FormField
+                control={form.control}
+                name="summary.roundOff"
+                render={({ field }) => (
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="w-24 h-7 text-right"
+                      {...field}
+                    />
+                  </FormControl>
+                )}
+              />
+            </div>
+
             <Separator />
             
             <div className="flex justify-between text-lg font-bold">
@@ -1137,74 +1349,73 @@ export default function TransactionForm({
               <span>₹{summary.grandTotal.toFixed(2)}</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-2">
+            <div className="flex justify-between text-sm items-center pt-1">
+              <span>Paid Amount</span>
               <FormField
                 control={form.control}
                 name="summary.paidAmount"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Paid Amount</FormLabel>
-                    <FormControl>
-                      <Input type="number" min="0" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="summary.roundOff"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Round Off</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="w-24 h-7 text-right"
+                      {...field}
+                    />
+                  </FormControl>
                 )}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-2">
-              <FormField
-                control={form.control}
-                name="payment.method"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Payment Method</FormLabel>
-                    <Select onValueChange={v => field.onChange(v === 'none' ? null : v)} value={field.value || 'none'}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select payment method" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="upi">UPI</SelectItem>
-                        <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
-                        <SelectItem value="cheque">Cheque</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <Separator />
 
+            <div className="flex justify-between font-medium">
+              <span>Balance Due</span>
+              <span className="text-destructive">₹{summary.dueAmount.toFixed(2)}</span>
+            </div>
+
+            <Separator className="mt-2" />
+
+            <div className="space-y-2 pt-1">
+              <div className="flex justify-between text-sm items-center gap-2">
+                <span className="text-xs shrink-0">Payment Method</span>
+                <FormField
+                  control={form.control}
+                  name="payment.method"
+                  render={({ field }) => (
+                    <FormItem className="m-0">
+                      <FormControl>
+                        <select
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(e.target.value || null)}
+                          className="h-7 text-xs border rounded px-1 bg-background w-28"
+                        >
+                          <option value="">Select</option>
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                          <option value="upi">UPI</option>
+                          <option value="bank-transfer">Bank Transfer</option>
+                          <option value="cheque">Cheque</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name="payment.referenceNumber"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reference Number</FormLabel>
+                  <FormItem className="m-0">
                     <FormControl>
-                      <Input {...field} value={field.value || ''} placeholder="Transaction / Cheque number" />
+                      <Input
+                        placeholder="Reference / Transaction ID"
+                        className="h-7 text-xs"
+                        {...field}
+                        value={field.value || ''}
+                      />
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />

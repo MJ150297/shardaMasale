@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       status: 'confirmed'
     };
     
-    if (shopId) query.shop = shopId;
+    if (shopId) query.shopId = shopId;
     
     if (startDate || endDate) {
       query.createdAt = {};
