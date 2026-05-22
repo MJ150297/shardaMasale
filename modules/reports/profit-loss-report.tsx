@@ -54,7 +54,7 @@ export function ProfitLossReport({ shopId }: ProfitLossReportProps) {
 
   if (loading) {
     return <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
       </div>
       <Skeleton className="h-96" />
@@ -67,7 +67,7 @@ export function ProfitLossReport({ shopId }: ProfitLossReportProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
@@ -109,7 +109,7 @@ export function ProfitLossReport({ shopId }: ProfitLossReportProps) {
       </div>
 
       <div className="flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-37.5">
               <SelectValue placeholder="Period" />
@@ -135,7 +135,7 @@ export function ProfitLossReport({ shopId }: ProfitLossReportProps) {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

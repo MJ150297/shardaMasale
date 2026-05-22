@@ -135,10 +135,9 @@ const navItems: NavItem[] = [
   },
   {
     title: 'Reports',
-    url: '/reports',
+    url: '/dashboard/reports',
     icon: BarChart3,
     roles: ['owner', 'admin', 'manager'],
-    comingSoon: true,
   },
   {
     title: 'Settings',
@@ -148,9 +147,9 @@ const navItems: NavItem[] = [
   },
   {
     title: 'Developer',
-    url: '/dashboard/developer',
+    url: '/super/developer',
     icon: Code,
-    roles: ['owner'],
+    roles: ['superOwner'],
   },
 ];
 

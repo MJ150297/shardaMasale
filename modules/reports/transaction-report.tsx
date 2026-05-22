@@ -68,7 +68,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
@@ -100,7 +100,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
       </div>
 
       <div className="flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Type" />
@@ -138,7 +138,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

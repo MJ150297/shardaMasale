@@ -25,9 +25,9 @@ async function calculateFIFOValuation(itemId: string, currentQuantity: number) {
   for (const movement of inMovements) {
     if (remaining <= 0) break;
     
-    const unitCost = movement.metadata?.get('unitCost') as number || 0;
+    const unitCost = (movement.metadata as any)?.unitCost as number || 0;
     const takeQty = Math.min(movement.quantity, remaining);
-    
+
     totalValue += takeQty * unitCost;
     remaining -= takeQty;
   }
@@ -53,7 +53,7 @@ async function calculateAverageCost(itemId: string, currentQuantity: number) {
   let totalCost = 0;
 
   for (const movement of movements) {
-    const unitCost = movement.metadata?.get('unitCost') as number || 0;
+    const unitCost = (movement.metadata as any)?.unitCost as number || 0;
     totalQty += movement.quantity;
     totalCost += movement.quantity * unitCost;
   }

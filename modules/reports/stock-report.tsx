@@ -50,6 +50,22 @@ export function StockReport({ shopId }: StockReportProps) {
     { key: 'pricing.sellingPrice', label: 'Selling Price' },
   ];
 
+  // Get the effective cost price and value for an item based on the selected costing method
+  const getItemCostPrice = (item: any) => {
+    if (costingMethod === 'latest') return item.pricing.costPrice;
+    if (costingMethod === 'fifo') return item.valuation?.averageCost || item.pricing.costPrice;
+    if (costingMethod === 'average') return item.valuation?.averageCost || item.pricing.costPrice;
+    return item.pricing.costPrice;
+  };
+
+  const getItemValue = (item: any) => {
+    const qty = item.stock.currentQuantity || 0;
+    if (costingMethod === 'latest') return qty * item.pricing.costPrice;
+    if (costingMethod === 'fifo') return item.valuation?.fifo || qty * item.pricing.costPrice;
+    if (costingMethod === 'average') return item.valuation?.average || qty * item.pricing.costPrice;
+    return qty * item.pricing.costPrice;
+  };
+
   const movementColumns = [
     { key: 'createdAt', label: 'Date' },
     { key: 'item.name', label: 'Item' },
@@ -60,7 +76,7 @@ export function StockReport({ shopId }: StockReportProps) {
 
   if (loading) {
     return <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
       </div>
       <Skeleton className="h-96" />
@@ -71,7 +87,7 @@ export function StockReport({ shopId }: StockReportProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Items</CardTitle>
@@ -154,7 +170,7 @@ export function StockReport({ shopId }: StockReportProps) {
         
         <TabsContent value="current">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -178,10 +194,10 @@ export function StockReport({ shopId }: StockReportProps) {
                           {item.stock.currentQuantity}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">₹{item.pricing.costPrice}</TableCell>
+                      <TableCell className="text-right">₹{getItemCostPrice(item)}</TableCell>
                       <TableCell className="text-right">₹{item.pricing.sellingPrice}</TableCell>
                       <TableCell className="text-right font-medium">
-                        ₹{(item.stock.currentQuantity * item.pricing.costPrice).toLocaleString()}
+                        ₹{getItemValue(item).toLocaleString()}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -193,7 +209,7 @@ export function StockReport({ shopId }: StockReportProps) {
 
         <TabsContent value="lowstock">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -239,7 +255,7 @@ export function StockReport({ shopId }: StockReportProps) {
 
         <TabsContent value="movements">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
