@@ -1,22 +1,24 @@
 import { NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Shop from "@/models/Shop";
 import User from "@/models/User";
 import { checkUserSubscription } from "@/lib/subscription";
-import type { AuthenticatedToken } from "@/lib/auth";
 
 export async function GET(request: Request) {
   try {
     await connectToDatabase();
 
-    const token = await getToken({ req: request as any }) as AuthenticatedToken;
+    const session = await auth();
 
-    if (!token || !token.sub) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (token.role === 'superOwner') {
+    const userId = session.user.id;
+    const userRole = session.user.role;
+
+    if (userRole === 'superOwner') {
       // Super owner can see all active shops
       const shops = await Shop.find({ isActive: true })
         .select('_id name displayName')
@@ -33,16 +35,16 @@ export async function GET(request: Request) {
       });
     }
 
-    if (token.role === 'customer') {
+    if (userRole === 'customer') {
       // Customers don't get shop access
       return NextResponse.json({ shops: [], hasOwnedShops: false });
     }
 
     // Business users: check allowedShops for access control
-    const user = await User.findById(token.sub).select('allowedShops').lean();
+    const user = await User.findById(userId).select('allowedShops').lean();
 
     // Count shops this user owns via Shop.ownerId (for access-revoked detection)
-    const ownedShopCount = await Shop.countDocuments({ ownerId: token.sub });
+    const ownedShopCount = await Shop.countDocuments({ ownerId: userId });
     const hasOwnedShops = ownedShopCount > 0;
 
     // If allowedShops is explicitly set (non-empty), restrict to those
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
     }
 
     // No allowedShops set — return user's own shops via ownerId (default behavior)
-    const shops = await Shop.find({ ownerId: token.sub, isActive: true })
+    const shops = await Shop.find({ ownerId: userId, isActive: true })
       .select('_id name displayName')
       .sort({ name: 1 })
       .lean();
@@ -90,20 +92,23 @@ export async function POST(request: Request) {
   try {
     await connectToDatabase();
 
-    const token = await getToken({ req: request as any }) as AuthenticatedToken;
+    const session = await auth();
 
-    if (!token || !token.sub) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (token.role === 'customer') {
+    const userId = session.user.id;
+    const userRole = session.user.role;
+
+    if (userRole === 'customer') {
       return NextResponse.json({ error: "Customers cannot create shops" }, { status: 403 });
     }
 
     // Subscription check: ensure user has an active subscription and hasn't hit the shop limit
     // (customer is already ruled out above)
-    if (token.role !== 'superOwner') {
-      const subResult = await checkUserSubscription(token.sub);
+    if (userRole !== 'superOwner') {
+      const subResult = await checkUserSubscription(userId);
 
       if (!subResult.ok) {
         return NextResponse.json(
@@ -116,7 +121,7 @@ export async function POST(request: Request) {
 
       // Check shop limit
       if (features.maxShops !== Infinity) {
-        const currentShopCount = await Shop.countDocuments({ ownerId: token.sub });
+        const currentShopCount = await Shop.countDocuments({ ownerId: userId });
         if (currentShopCount >= features.maxShops) {
           return NextResponse.json(
             {
@@ -147,7 +152,7 @@ export async function POST(request: Request) {
 
     // Check for duplicate name within the same owner
     const existingShop = await Shop.findOne({
-      ownerId: token.sub,
+      ownerId: userId,
       name: { $regex: `^${body.name.trim()}$`, $options: 'i' },
     });
 
@@ -159,7 +164,7 @@ export async function POST(request: Request) {
     }
 
     const shop = await Shop.create({
-      ownerId: token.sub,
+      ownerId: userId,
       name: body.name.trim(),
       displayName: body.displayName?.trim() || null,
       email: body.email?.trim() || null,

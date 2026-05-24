@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth";
 
 import connectToDatabase from "@/lib/db";
 import Shop from "@/models/Shop";
-import { AuthenticatedToken } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
     await connectToDatabase();
     
-    const token = await getToken({ req: request as any }) as AuthenticatedToken;
+    const session = await auth();
     
-    if (!token) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -24,16 +23,13 @@ export async function POST(request: Request) {
     // Verify user has access to this shop
     const shop = await Shop.findOne({
       _id: shopId,
-      ownerId: token.sub,
+      ownerId: session.user.id,
       isActive: true
     });
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found or access denied" }, { status: 404 });
     }
-
-    // Update token with new active shop
-    token.activeShopId = shopId;
 
     return NextResponse.json({
       success: true,

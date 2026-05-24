@@ -2,10 +2,10 @@ import "server-only";
 import mongoose from "mongoose";
 
 import { cache } from "react";
+import NextAuth from "next-auth";
 import type { Session } from "next-auth";
 import type { JWT } from "next-auth/jwt";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { getServerSession, type NextAuthOptions } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -86,6 +86,10 @@ function getAuthSecret(): string {
     return process.env.NEXTAUTH_SECRET;
   }
 
+  if (process.env.AUTH_SECRET?.trim()) {
+    return process.env.AUTH_SECRET;
+  }
+
   if (process.env.NODE_ENV !== "production") {
     return "gsms-development-secret-change-me";
   }
@@ -93,19 +97,31 @@ function getAuthSecret(): string {
   throw new AppError("NEXTAUTH_SECRET must be configured in production.", 500);
 }
 
-export const authOptions: NextAuthOptions = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: getAuthSecret(),
   session: {
     strategy: "jwt",
-    maxAge: 60 * 60 * 8,
-    updateAge: 60 * 15,
+    maxAge: 60 * 60 * 24 * 30,
+  },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 30, // 30 days, matching session.maxAge
+      },
+    },
   },
   pages: {
     signIn: "/signin",
   },
+  trustHost: true,
   providers: [
-    CredentialsProvider({
-      name: "Email and Password",
+    Credentials({
+      name: "credentials",
       credentials: {
         email: {
           label: "Email",
@@ -274,21 +290,21 @@ export const authOptions: NextAuthOptions = {
       return nextSession;
     },
   },
-};
+});
 
 export const getServerAuthSession = cache(async (): Promise<AppSession | null> => {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   return session as AppSession | null;
 });
 
 export const requireUser = cache(async (): Promise<AppSessionUser> => {
-  const session = await getServerAuthSession();
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/signin");
   }
 
-  return session.user;
+  return session.user as AppSessionUser;
 });
 
 export const requireOwner = cache(async (): Promise<AppSessionUser> => {
