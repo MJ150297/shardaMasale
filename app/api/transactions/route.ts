@@ -14,6 +14,50 @@ import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
 import { allocateInvoiceSettlements } from '@/lib/payment-settlement';
 
+async function getNextTransactionSequence(
+  ownerId: string,
+  transactionType: string,
+  prefix: string,
+  startingSequence: number,
+): Promise<number> {
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new AppError('Database connection not available', 500);
+  }
+
+  const initialSequence = Math.max(startingSequence, 1);
+
+  const counter = await db.collection('transaction_counters').findOneAndUpdate(
+    {
+      owner: new mongoose.Types.ObjectId(ownerId),
+      type: transactionType,
+      prefix,
+    },
+    [
+      {
+        $set: {
+          owner: new mongoose.Types.ObjectId(ownerId),
+          type: transactionType,
+          prefix,
+          sequence: {
+            $add: [
+              { $ifNull: ['$sequence', initialSequence - 1] },
+              1,
+            ],
+          },
+        },
+      },
+    ],
+    {
+      upsert: true,
+      returnDocument: 'after',
+      includeResultMetadata: true,
+    },
+  ) as unknown as { value?: { sequence: number } } | null;
+
+  return counter?.value?.sequence ?? initialSequence;
+}
+
 const transactionTypesThatRequireParty = [
   'sale',
   'purchase',
@@ -223,7 +267,60 @@ export async function POST(request: Request) {
       }
     }
 
-    const transactionNumber = await generateTransactionNumber(transactionInput.type, user.id);
+    // Read prefix settings using raw collection to bypass global shop-scoping plugin
+    // The plugin auto-injects activeShopId into every mongoose query, breaking { shopId: null } lookups
+    const db = mongoose.connection.db;
+    if (!db) {
+      throw new AppError('Database connection not available', 500);
+    }
+    const ownerObjectId = new mongoose.Types.ObjectId(user.id);
+    const settingsCollection = db.collection('settings');
+    const shopSettingsDoc = user.activeShopId
+      ? await settingsCollection.findOne({
+          owner: ownerObjectId,
+          shopId: new mongoose.Types.ObjectId(user.activeShopId),
+        })
+      : null;
+    const fallbackSettingsDoc = shopSettingsDoc || await settingsCollection.findOne({
+      owner: ownerObjectId,
+      shopId: null,
+    });
+    const billingSettings = fallbackSettingsDoc?.billing as Record<string, unknown> | undefined;
+    const transactionTypeKeyMap: Record<string, string> = {
+      sale: 'sale',
+      purchase: 'purchase',
+      'payment-in': 'payment',
+      'payment-out': 'payment',
+    };
+    const prefixMap: Record<string, string> = {
+      sale:
+        (billingSettings?.salePrefix as string)
+        || (billingSettings?.quotationPrefix as string)
+        || 'SALE',
+      purchase: (billingSettings?.purchasePrefix as string) || 'PUR',
+      payment: (billingSettings?.paymentPrefix as string) || 'PAY',
+    };
+    const sequenceMap: Record<string, number> = {
+      sale: Number(billingSettings?.nextSaleSequence) || 1,
+      purchase: Number(billingSettings?.nextPurchaseSequence) || 1,
+      payment: Number(billingSettings?.nextPaymentSequence) || 1,
+    };
+    const transactionTypeKey = transactionTypeKeyMap[transactionInput.type];
+    const prefixOverride = transactionTypeKey ? prefixMap[transactionTypeKey] : undefined;
+    const sequenceNumber = transactionTypeKey
+      ? await getNextTransactionSequence(
+          user.id,
+          transactionTypeKey,
+          prefixOverride as string,
+          sequenceMap[transactionTypeKey],
+        )
+      : undefined;
+    const transactionNumber = await generateTransactionNumber(
+      transactionInput.type,
+      user.id,
+      prefixOverride,
+      sequenceNumber,
+    );
 
     let settlementMetadata: Record<string, unknown> = {};
     const invoicesToUpdate = new Map<

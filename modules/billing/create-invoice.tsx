@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import CommandCreateButton from '@/components/command-create-button';
 import CreateItemDialog, { type CreatedItem } from '@/components/create-item-dialog';
 import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
+import { useActiveShop } from '@/components/providers/shop-provider';
 
 const lineItemSchema = z.object({
   item: z.string().optional().nullable(),
@@ -130,6 +131,7 @@ interface CreateInvoiceProps {
 }
 
 export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProps) {
+  const { activeShopId } = useActiveShop();
   const [items, setItems] = useState<Item[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -208,6 +210,26 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
       status: 'draft',
     },
   });
+
+  // Fetch settings to pre-fill default terms & conditions
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
+        const res = await fetch(`/api/settings${queryParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          const terms = data?.billing?.termsAndConditions;
+          if (terms !== undefined && terms !== null) {
+            form.setValue('termsAndConditions', terms);
+          }
+        }
+      } catch {
+        // Silently fail — terms field just stays empty
+      }
+    }
+    loadSettings();
+  }, [form, activeShopId]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,

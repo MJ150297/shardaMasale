@@ -27,7 +27,7 @@ export default function ConsolidatedReportsPage() {
   const [activeTab, setActiveTab] = useState('snapshot');
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
         <p className="text-muted-foreground">
@@ -35,8 +35,8 @@ export default function ConsolidatedReportsPage() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="w-full overflow-x-auto flex-nowrap justify-start">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full min-w-0 space-y-4">
+        <TabsList className="w-full max-w-full overflow-x-auto flex-nowrap justify-start">
           <TabsTrigger value="snapshot">Dashboard</TabsTrigger>
           <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
           <TabsTrigger value="cash-flow">Cash Flow</TabsTrigger>
@@ -59,83 +59,83 @@ export default function ConsolidatedReportsPage() {
           <TabsTrigger value="top-spenders">Top Spenders</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="snapshot" className="space-y-4">
+        <TabsContent value="snapshot" className="w-full min-w-0 space-y-4">
           <SnapshotReport />
         </TabsContent>
 
-        <TabsContent value="balance-sheet" className="space-y-4">
+        <TabsContent value="balance-sheet" className="w-full min-w-0 space-y-4">
           <BalanceSheetReport />
         </TabsContent>
 
-        <TabsContent value="cash-flow" className="space-y-4">
+        <TabsContent value="cash-flow" className="w-full min-w-0 space-y-4">
           <CashFlowReport />
         </TabsContent>
 
-        <TabsContent value="profit-loss" className="space-y-4">
+        <TabsContent value="profit-loss" className="w-full min-w-0 space-y-4">
           <ProfitLossReport />
         </TabsContent>
 
-        <TabsContent value="tax" className="space-y-4">
+        <TabsContent value="tax" className="w-full min-w-0 space-y-4">
           <TaxReport />
         </TabsContent>
 
-        <TabsContent value="invoices" className="space-y-4">
+        <TabsContent value="invoices" className="w-full min-w-0 space-y-4">
           <InvoiceReport />
         </TabsContent>
 
-        <TabsContent value="daily-sales" className="space-y-4">
+        <TabsContent value="daily-sales" className="w-full min-w-0 space-y-4">
           <DailySalesReport />
         </TabsContent>
 
-        <TabsContent value="sales-by-item" className="space-y-4">
+        <TabsContent value="sales-by-item" className="w-full min-w-0 space-y-4">
           <SalesByItemReport />
         </TabsContent>
 
-        <TabsContent value="sales-returns" className="space-y-4">
+        <TabsContent value="sales-returns" className="w-full min-w-0 space-y-4">
           <SalesReturnsReport />
         </TabsContent>
 
-        <TabsContent value="stock" className="space-y-4">
+        <TabsContent value="stock" className="w-full min-w-0 space-y-4">
           <StockReport />
         </TabsContent>
 
-        <TabsContent value="stock-aging" className="space-y-4">
+        <TabsContent value="stock-aging" className="w-full min-w-0 space-y-4">
           <StockAgingReport />
         </TabsContent>
 
-        <TabsContent value="wastage" className="space-y-4">
+        <TabsContent value="wastage" className="w-full min-w-0 space-y-4">
           <WastageReport />
         </TabsContent>
 
-        <TabsContent value="purchase-orders" className="space-y-4">
+        <TabsContent value="purchase-orders" className="w-full min-w-0 space-y-4">
           <PurchaseOrdersReport />
         </TabsContent>
 
-        <TabsContent value="party-aging-payable" className="space-y-4">
+        <TabsContent value="party-aging-payable" className="w-full min-w-0 space-y-4">
           <PayablesAgingReport />
         </TabsContent>
 
-        <TabsContent value="supplier-performance" className="space-y-4">
+        <TabsContent value="supplier-performance" className="w-full min-w-0 space-y-4">
           <SupplierPerformanceReport />
         </TabsContent>
 
-        <TabsContent value="parties" className="space-y-4">
+        <TabsContent value="parties" className="w-full min-w-0 space-y-4">
           <PartyReport />
         </TabsContent>
 
-        <TabsContent value="transactions" className="space-y-4">
+        <TabsContent value="transactions" className="w-full min-w-0 space-y-4">
           <TransactionReport />
         </TabsContent>
 
-        <TabsContent value="receivables-aging" className="space-y-4">
+        <TabsContent value="receivables-aging" className="w-full min-w-0 space-y-4">
           <ReceivablesAgingReport />
         </TabsContent>
 
-        <TabsContent value="customer-ledger" className="space-y-4">
+        <TabsContent value="customer-ledger" className="w-full min-w-0 space-y-4">
           <CustomerLedgerReport />
         </TabsContent>
 
-        <TabsContent value="top-spenders" className="space-y-4">
+        <TabsContent value="top-spenders" className="w-full min-w-0 space-y-4">
           <TopSpendersReport />
         </TabsContent>
       </Tabs>

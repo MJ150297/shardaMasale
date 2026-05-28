@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, Eye, Printer, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Printer, FileText, ChevronLeft, ChevronRight, Phone, Mail, CalendarDays, Tag, CreditCard, IndianRupee, ShoppingCart, Package, Info, BadgeCheck, AlertCircle, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { roundCurrency, debounce } from '@/lib/utils';
 import { formatDate } from '@/lib/date-utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
+import TransactionDetailDialog from '@/components/transaction-detail-dialog';
 import CreateSaleDialog from '@/components/create-sale-dialog';
 import CreatePurchaseDialog from '@/components/create-purchase-dialog';
 import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
@@ -610,43 +611,12 @@ export default function TransactionsClient() {
         )}
       </div>
 
-      {/* View Transaction Dialog */}
-      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-3xl bg-white/80">
-          <DialogHeader>
-            <DialogTitle>Transaction Details</DialogTitle>
-            <DialogDescription>
-              {selectedTransaction?.transactionNumber}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedTransaction && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Type</p>
-                  <p className="font-medium">{selectedTransaction.type}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <p className="font-medium">{selectedTransaction.status}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Party</p>
-                  <p className="font-medium">{getPartyName(selectedTransaction.party)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Date</p>
-                  <p className="font-medium">{formatDate(selectedTransaction.transactionDate)}</p>
-                </div>
-              </div>
-              <div className="border rounded-md p-4">
-                <p className="font-medium mb-2">Total: ₹{selectedTransaction.summary.grandTotal.toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground">{selectedTransaction.lineItems.length} items</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* View Transaction Dialog - shared component */}
+      <TransactionDetailDialog
+        open={viewDialogOpen}
+        onOpenChange={setViewDialogOpen}
+        transaction={selectedTransaction}
+      />
 
       {/* Cancel Transaction Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

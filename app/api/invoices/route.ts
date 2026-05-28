@@ -12,12 +12,30 @@ import Party from '@/models/Party';
 import StockMovement from '@/models/StockMovement';
 
 
-async function generateInvoiceNumber(ownerId: string): Promise<string> {
-  // Get last 2 digits of current year
-  const now = new Date();
-  const shortYear = now.getFullYear().toString().slice(-2);
-  
-  const prefix = `INV-${shortYear}`;
+async function generateInvoiceNumber(ownerId: string, shopId?: string | null): Promise<string> {
+  // Read user's settings using raw collection to bypass global shop-scoping plugin
+  // The plugin auto-injects activeShopId into every mongoose query, breaking { shopId: null } lookups
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new AppError('Database connection not available', 500);
+  }
+  const ownerObjectId = new mongoose.Types.ObjectId(ownerId);
+  const settingsDoc = shopId
+    ? await db.collection('settings').findOne({
+        owner: ownerObjectId,
+        shopId: new mongoose.Types.ObjectId(shopId),
+      })
+    : await db.collection('settings').findOne({
+        owner: ownerObjectId,
+        shopId: null,
+      });
+  const fallbackSettingsDoc = settingsDoc || await db.collection('settings').findOne({
+    owner: ownerObjectId,
+    shopId: null,
+  });
+  const billing = fallbackSettingsDoc?.billing as { invoicePrefix?: string; nextInvoiceSequence?: number } | undefined;
+  const prefixFromSettings = billing?.invoicePrefix || 'INV';
+  const nextSeqFromSettings = billing?.nextInvoiceSequence || 1;
   
   // Atomic counter implementation with database lock
   // This ensures sequential numbering with no gaps even under concurrent load
@@ -26,8 +44,9 @@ async function generateInvoiceNumber(ownerId: string): Promise<string> {
     throw new AppError('Database connection not available', 500);
   }
 
+  // Initialize the counter to the user's configured starting sequence if it doesn't exist yet
   const counter = await mongoose.connection.db.collection('invoice_counters').findOneAndUpdate(
-    { owner: ownerId, prefix },
+    { owner: ownerId, prefix: prefixFromSettings },
     { $inc: { sequence: 1 } },
     { 
       upsert: true, 
@@ -36,14 +55,14 @@ async function generateInvoiceNumber(ownerId: string): Promise<string> {
     }
   ) as unknown as { value?: { sequence: number } } | null;
   
-  let sequenceNumber = 1;
+  let sequenceNumber = nextSeqFromSettings;
   
   if (counter?.value) {
     sequenceNumber = counter.value.sequence;
   }
   
-  // Format as INV-261, INV-262, INV-263 etc.
-  return `${prefix}${sequenceNumber}`;
+  // Format as INV1, INV2, INV3 or CUSTINV1, CUSTINV2 etc. (prefix from settings + sequence)
+  return `${prefixFromSettings}${sequenceNumber}`;
 }
 
 function getSafeStatus(error: unknown): number {
@@ -195,7 +214,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createInvoiceSchema.parse(body);
 
-    const invoiceNumber = await generateInvoiceNumber(user.id);
+    const invoiceNumber = await generateInvoiceNumber(user.id, user.activeShopId);
 
     // First create transaction
     const [transaction] = await Transaction.create([{
@@ -373,7 +392,17 @@ export async function handleGenerateInvoice(request: Request) {
       throw new AppError('Invoice already exists for this transaction', 409);
     }
 
-    const invoiceNumber = await generateInvoiceNumber(user.id);
+    const invoiceNumber = await generateInvoiceNumber(user.id, user.activeShopId);
+
+    const settingsCollection = mongoose.connection.db?.collection('settings');
+    const settingsDoc = settingsCollection
+      ? await settingsCollection.findOne({
+          owner: new mongoose.Types.ObjectId(user.id),
+          shopId: user.activeShopId ? new mongoose.Types.ObjectId(user.activeShopId) : null,
+        })
+      : null;
+    const billing = settingsDoc?.billing as { termsAndConditions?: string | null } | undefined;
+    const defaultTerms = billing?.termsAndConditions || null;
 
     // Create invoice record
     const [invoice] = await Invoice.create([{
@@ -382,7 +411,7 @@ export async function handleGenerateInvoice(request: Request) {
       shopId: user.activeShopId ?? null,
       invoiceNumber,
       dueDate: transaction.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      termsAndConditions: null,
+      termsAndConditions: defaultTerms,
       notes: transaction.notes,
       status: 'sent',
       createdBy: user.id,

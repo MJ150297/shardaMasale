@@ -15,7 +15,7 @@ export interface IShopSettings {
   invoicePrefix: string;
   purchasePrefix: string;
   paymentPrefix: string;
-  quotationPrefix: string;
+  salePrefix: string;
 }
 
 export interface IShop {
@@ -89,9 +89,9 @@ const shopSettingsSchema = new Schema<IShopSettings>({
     trim: true,
     uppercase: true,
   },
-  quotationPrefix: {
+  salePrefix: {
     type: String,
-    default: "QTN",
+    default: "SALE",
     trim: true,
     uppercase: true,
   },

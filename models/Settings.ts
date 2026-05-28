@@ -44,10 +44,11 @@ export interface BillingSettings {
   invoicePrefix: string;
   purchasePrefix: string;
   paymentPrefix: string;
-  quotationPrefix: string;
+  salePrefix: string;
   nextInvoiceSequence: number;
   nextPurchaseSequence: number;
   nextPaymentSequence: number;
+  nextSaleSequence: number;
   autoRoundOff: boolean;
   termsAndConditions?: string | null;
 }
@@ -315,9 +316,9 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             uppercase: true,
             maxlength: 12,
           },
-          quotationPrefix: {
+          salePrefix: {
             type: String,
-            default: "QTN",
+            default: "SALE",
             trim: true,
             uppercase: true,
             maxlength: 12,
@@ -333,6 +334,11 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             min: 1,
           },
           nextPaymentSequence: {
+            type: Number,
+            default: 1,
+            min: 1,
+          },
+          nextSaleSequence: {
             type: Number,
             default: 1,
             min: 1,
@@ -354,10 +360,11 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         invoicePrefix: "INV",
         purchasePrefix: "PUR",
         paymentPrefix: "PAY",
-        quotationPrefix: "QTN",
+        salePrefix: "SALE",
         nextInvoiceSequence: 1,
         nextPurchaseSequence: 1,
         nextPaymentSequence: 1,
+        nextSaleSequence: 1,
         autoRoundOff: true,
         termsAndConditions: null,
       }),
@@ -530,9 +537,7 @@ settingsSchema.pre("validate", function preValidate() {
   this.billing.invoicePrefix = this.billing.invoicePrefix.trim().toUpperCase();
   this.billing.purchasePrefix = this.billing.purchasePrefix.trim().toUpperCase();
   this.billing.paymentPrefix = this.billing.paymentPrefix.trim().toUpperCase();
-  this.billing.quotationPrefix = this.billing.quotationPrefix
-    .trim()
-    .toUpperCase();
+  this.billing.salePrefix = this.billing.salePrefix.trim().toUpperCase();
 });
 
 const Settings =

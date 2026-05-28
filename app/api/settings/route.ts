@@ -1,7 +1,29 @@
 import { NextResponse } from "next/server";
-import { requireOwner, requireUser, requireActiveBusinessSubscription } from "@/lib/auth";
+import mongoose from "mongoose";
+import { requireUser, requireActiveBusinessSubscription } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Settings from "@/models/Settings";
+
+function normalizeBillingSettings(settings: Record<string, unknown> | null | undefined) {
+  if (!settings) {
+    return settings;
+  }
+
+  const billing = (settings.billing as Record<string, unknown> | undefined) || {};
+  const salePrefix = (billing.salePrefix as string | undefined)
+    || (billing.quotationPrefix as string | undefined)
+    || 'SALE';
+  const legacyFreeBilling = { ...billing };
+  delete legacyFreeBilling.quotationPrefix;
+
+  return {
+    ...settings,
+    billing: {
+      ...legacyFreeBilling,
+      salePrefix,
+    },
+  };
+}
 
 export async function GET(request: Request) {
   try {
@@ -18,14 +40,28 @@ export async function GET(request: Request) {
       query.shopId = null;
     }
 
-    let settings = await Settings.findOne(query).lean();
+    // Use raw collection to bypass global shop-scoping plugin that overrides { shopId: null }
+    const db = mongoose.connection.db;
+    if (!db) {
+      return NextResponse.json({ error: "Database connection not available" }, { status: 500 });
+    }
+    const rawQuery: Record<string, unknown> = { owner: new mongoose.Types.ObjectId(user.id) };
+    if (shopId) {
+      rawQuery.shopId = new mongoose.Types.ObjectId(shopId);
+    } else {
+      rawQuery.shopId = null;
+    }
+    let settings = await db.collection('settings').findOne(rawQuery);
 
     if (!settings) {
       if (shopId) {
-        // Cascading: try owner-level settings first (without shopId)
-        const ownerSettings = await Settings.findOne({ owner: user.id, shopId: null }).lean();
+        // Cascading: try owner-level settings first (without shopId) — bypass plugin
+        const ownerSettings = await db.collection('settings').findOne({ 
+          owner: new mongoose.Types.ObjectId(user.id), 
+          shopId: null 
+        });
         if (ownerSettings) {
-          return NextResponse.json({ ...ownerSettings, shopId });
+          return NextResponse.json(normalizeBillingSettings({ ...ownerSettings, shopId }));
         }
       }
 
@@ -47,7 +83,7 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json(settings);
+    return NextResponse.json(normalizeBillingSettings(settings as Record<string, unknown>));
   } catch (error) {
     console.error("Error fetching settings:", error);
     return NextResponse.json(

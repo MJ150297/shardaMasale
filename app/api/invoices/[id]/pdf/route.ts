@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser } from '@/lib/auth';
-import { AppError } from '@/lib/utils';
+import { AppError, numberToWords } from '@/lib/utils';
 import Invoice from '@/models/Invoice';
 import Settings from '@/models/Settings';
 import InvoicePDF from '@/modules/billing/invoice-pdf';
@@ -51,6 +51,7 @@ export async function GET(
     }
 
     const business = settings?.business;
+    const defaultTerms = settings?.billing?.termsAndConditions || null;
 
     // Build a formatted address string
     let businessAddress = '';
@@ -72,6 +73,44 @@ export async function GET(
       // Logo is optional, silently skip if it fails
     }
 
+    // Build enriched line items with HSN codes and descriptions
+    const enrichedLineItems = await Promise.all(transaction.lineItems.map(async (item: any) => {
+      let hsnCode: string | undefined;
+      let description: string | undefined;
+
+      // Try to get HSN code from the Item model if item reference exists
+      if (item.item) {
+        try {
+          const { default: Item } = await import('@/models/Item');
+          const itemDoc = await Item.findById(item.item).lean();
+          if (itemDoc) {
+            hsnCode = (itemDoc as any).hsnCode || undefined;
+          }
+        } catch {
+          // Silently continue
+        }
+      }
+
+      // Use description from transaction line item if available
+      description = item.description || undefined;
+
+      return {
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: item.discountAmount || 0,
+        lineTotal: item.lineTotal,
+        hsnCode,
+        itemHsn: hsnCode,
+        description,
+        taxRate: item.taxRate || 0,
+      };
+    }));
+
+    // Compute amount in words
+    const grandTotal = transaction.summary.grandTotal || 0;
+    const amountInWords = numberToWords(grandTotal);
+
     const invoiceData = {
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: new Date(transaction.transactionDate).toLocaleDateString('en-IN'),
@@ -82,27 +121,38 @@ export async function GET(
         email: transaction.party?.email,
         address: transaction.party?.address,
       },
-      lineItems: transaction.lineItems.map((item: any) => ({
-        itemName: item.itemName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        lineTotal: item.lineTotal,
+      lineItems: enrichedLineItems,
+      additionalCharges: (transaction.additionalCharges || []).map((charge: any) => ({
+        name: charge.name,
+        amount: Number(charge.amount),
       })),
       subtotal: transaction.summary.subtotal,
       discountTotal: transaction.summary.discountTotal,
       taxTotal: transaction.summary.taxTotal,
-      grandTotal: transaction.summary.grandTotal,
-      notes: invoice.notes,
-      termsAndConditions: invoice.termsAndConditions,
+      roundOff: transaction.summary.roundOff,
+      totalDiscount: transaction.summary.totalDiscount,
+      totalDiscountType: transaction.summary.totalDiscountType,
+      totalDiscountValue: transaction.summary.totalDiscountValue,
+      grandTotal,
+      paidAmount: transaction.summary.paidAmount,
+      dueAmount: transaction.summary.dueAmount,
+      payment: transaction.payment ? {
+        method: transaction.payment.method,
+        referenceNumber: transaction.payment.referenceNumber,
+        notes: transaction.payment.notes,
+      } : undefined,
+      termsAndConditions: invoice.termsAndConditions || defaultTerms || null,
       business: {
         displayName: business?.displayName,
         legalName: business?.legalName,
         address: businessAddress,
         gstin: business?.gstin,
+        pan: business?.pan,
         phoneNumber: business?.phoneNumber,
         email: business?.email,
       },
       logoDataUri,
+      amountInWords,
     };
 
     // @ts-ignore - react-pdf types incompatibility

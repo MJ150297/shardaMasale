@@ -24,7 +24,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("business");
 
-  const { register, handleSubmit, reset, formState: { errors }, setValue, watch } = useForm<SettingsFormData>({
+  const { register, handleSubmit, reset, setValue, watch } = useForm<SettingsFormData>({
     defaultValues: {
       business: {
         legalName: "",
@@ -64,10 +64,11 @@ export default function SettingsPage() {
         invoicePrefix: "INV",
         purchasePrefix: "PUR",
         paymentPrefix: "PAY",
-        quotationPrefix: "QTN",
+        salePrefix: "SALE",
         nextInvoiceSequence: 1,
         nextPurchaseSequence: 1,
         nextPaymentSequence: 1,
+        nextSaleSequence: 1,
         autoRoundOff: true,
         termsAndConditions: "",
       },
@@ -430,12 +431,12 @@ export default function SettingsPage() {
           {/* Billing Tab */}
           <TabsContent value="billing" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Billing Settings</CardTitle>
-                <CardDescription>
-                  Invoice numbering and billing preferences
-                </CardDescription>
-              </CardHeader>
+                <CardHeader>
+                  <CardTitle>Billing Settings</CardTitle>
+                  <CardDescription>
+                  Invoice, sale, purchase and payment numbering
+                  </CardDescription>
+                </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
@@ -451,12 +452,12 @@ export default function SettingsPage() {
                     <Input id="billing.paymentPrefix" {...register("billing.paymentPrefix")} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="billing.quotationPrefix">Quotation Prefix</Label>
-                    <Input id="billing.quotationPrefix" {...register("billing.quotationPrefix")} />
+                    <Label htmlFor="billing.salePrefix">Sale Prefix</Label>
+                    <Input id="billing.salePrefix" {...register("billing.salePrefix")} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="billing.nextInvoiceSequence">Next Invoice Number</Label>
                     <Input
@@ -479,6 +480,14 @@ export default function SettingsPage() {
                       id="billing.nextPaymentSequence"
                       type="number"
                       {...register("billing.nextPaymentSequence", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="billing.nextSaleSequence">Next Sale Number</Label>
+                    <Input
+                      id="billing.nextSaleSequence"
+                      type="number"
+                      {...register("billing.nextSaleSequence", { valueAsNumber: true })}
                     />
                   </div>
                 </div>

@@ -116,15 +116,66 @@ export function calculateLineTotal({ quantity, unitPrice, discountAmount, taxAmo
   return roundCurrency((quantity * unitPrice) - discountAmount + taxAmount);
 }
 
-export async function generateTransactionNumber(type: string, ownerId: string): Promise<string> {
-  const prefix = type.substring(0, 3).toUpperCase();
+export async function generateTransactionNumber(
+  type: string,
+  ownerId: string,
+  prefixOverride?: string,
+  sequenceNumber?: number,
+): Promise<string> {
+  const prefix = prefixOverride || type.substring(0, 3).toUpperCase();
+  const normalizedPrefix = prefix.replace(/[-\s]+$/, '');
+
+  if (typeof sequenceNumber === 'number' && Number.isFinite(sequenceNumber)) {
+    return `${prefix}${sequenceNumber}`;
+  }
+
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-  
-  return `${prefix}-${timestamp}-${random}`;
+
+  return `${normalizedPrefix}-${timestamp}-${random}`;
 }
 
+// --- Number to Words (Indian Numbering System) ---
+export function numberToWords(num: number): string {
+  if (num === 0) return 'Zero';
 
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const convertBelow1000 = (n: number): string => {
+    if (n === 0) return '';
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
+    const hundreds = Math.floor(n / 100);
+    const remainder = n % 100;
+    return ones[hundreds] + ' Hundred' + (remainder !== 0 ? ' ' + convertBelow1000(remainder) : '');
+  };
+
+  const whole = Math.floor(num);
+  const fraction = Math.round((num - whole) * 100);
+
+  // Indian numbering: lakh (100,000), crore (10,000,000)
+  const crore = Math.floor(whole / 10000000);
+  const lakh = Math.floor((whole % 10000000) / 100000);
+  const thousand = Math.floor((whole % 100000) / 1000);
+  const remaining = whole % 1000;
+
+  const parts: string[] = [];
+
+  if (crore > 0) parts.push(convertBelow1000(crore) + ' Crore');
+  if (lakh > 0) parts.push(convertBelow1000(lakh) + ' Lakh');
+  if (thousand > 0) parts.push(convertBelow1000(thousand) + ' Thousand');
+  if (remaining > 0) parts.push(convertBelow1000(remaining));
+
+  let result = parts.join(' ');
+
+  if (fraction > 0) {
+    result += ' and ' + convertBelow1000(fraction) + ' Paise';
+  }
+
+  return result + ' Only';
+}
 
 // --- Debounce ---
 export function debounce<T extends (...args: any[]) => any>(

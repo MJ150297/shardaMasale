@@ -360,7 +360,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
           )}
 
           {/* Main Content */}
-          <SidebarInset className="font-sans">
+          <SidebarInset className="min-w-0 font-sans">
 
             {/* Header */}
             <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b dark:border-gray-800 dark:bg-gray-900/50">
@@ -380,7 +380,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                         <ChevronDown className="size-3.5 ml-1 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent align="end" className="w-56 bg-white/90">
                       <DropdownMenuLabel>Select Shop</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {availableShops.length > 0 ? (
@@ -432,7 +432,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
             </header>
 
             {/* Page Content */}
-            <main className={`flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6 dark:bg-gray-950 ${mainBottomPadding}`}>
+            <main className={`flex flex-1 min-w-0 flex-col gap-4 p-4 md:gap-6 md:p-6 dark:bg-gray-950 ${mainBottomPadding}`}>
               {children}
             </main>
 

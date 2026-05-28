@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EditPartyDialog from '@/components/edit-party-dialog';
+import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +18,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import TransactionDetailDialog from '@/components/transaction-detail-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown } from 'lucide-react';
+import { Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown, Eye, Printer } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateSaleDialog from '@/components/create-sale-dialog';
@@ -119,6 +122,18 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicePage, setInvoicePage] = useState(1);
   const [invPagination, setInvPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+
+  // Transaction detail dialog
+  const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
+  const [viewTxnDialogOpen, setViewTxnDialogOpen] = useState(false);
+
+  // Invoice preview modal
+  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  // Invoice preview for transactions tab
+  const [txnInvoicePreview, setTxnInvoicePreview] = useState<any>(null);
+  const [txnInvoicePreviewOpen, setTxnInvoicePreviewOpen] = useState(false);
 
   // Search filters
   const [txnSearchQuery, setTxnSearchQuery] = useState('');
@@ -437,6 +452,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                     <th className="px-4 py-3 text-left font-medium">Amount</th>
                     <th className="px-4 py-3 text-left font-medium">Payment</th>
                     <th className="px-4 py-3 text-left font-medium">Status</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,11 +466,12 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                         <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-8 w-16 ml-auto" /></td>
                       </tr>
                     ))
                   ) : filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center">
+                      <td colSpan={8} className="px-4 py-12 text-center">
                         <Clock className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
                         <h3 className="text-lg font-medium text-gray-500">No transactions found</h3>
                         <p className="text-sm text-gray-400 mt-1">No transactions for this party yet</p>
@@ -489,6 +506,56 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                           <Badge className={getStatusBadgeClass(txn.status)}>
                             {txn.status}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                Actions
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-white/80">
+                              <DropdownMenuItem onClick={() => {
+                                setViewTxn(txn);
+                                setViewTxnDialogOpen(true);
+                              }}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View
+                              </DropdownMenuItem>
+                              {txn.type === 'sale' && txn.status === 'confirmed' && !txn.invoiceId && (
+                                <DropdownMenuItem onClick={async () => {
+                                  try {
+                                    const res = await fetch('/api/invoices/generate', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ transactionId: txn._id || txn.transactionNumber }),
+                                    });
+                                    if (res.ok) {
+                                      toast.success('Invoice generated');
+                                      loadTransactions();
+                                    } else {
+                                      const err = await res.json();
+                                      toast.error(err.message || 'Failed to generate invoice');
+                                    }
+                                  } catch {
+                                    toast.error('Failed to generate invoice');
+                                  }
+                                }}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Generate Invoice
+                                </DropdownMenuItem>
+                              )}
+                              {txn.invoiceId && (
+                                <DropdownMenuItem onClick={() => {
+                                  setTxnInvoicePreview(txn.invoiceId);
+                                  setTxnInvoicePreviewOpen(true);
+                                }}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  View Invoice
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
                       </tr>
                     ))
@@ -546,6 +613,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                     <th className="px-4 py-3 text-left font-medium">Amount</th>
                     <th className="px-4 py-3 text-left font-medium">Payment</th>
                     <th className="px-4 py-3 text-left font-medium">Status</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -558,11 +626,12 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                         <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-8 w-16 ml-auto" /></td>
                       </tr>
                     ))
                   ) : filteredInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center">
+                      <td colSpan={7} className="px-4 py-12 text-center">
                         <FileText className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
                         <h3 className="text-lg font-medium text-gray-500">No invoices found</h3>
                         <p className="text-sm text-gray-400 mt-1">No invoices for this party yet</p>
@@ -592,6 +661,34 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
                           <Badge className={getInvoiceStatusBadgeClass(inv.status)}>
                             {inv.status}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                Actions
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-white/80">
+                              <DropdownMenuItem onClick={() => {
+                                window.open(`/api/invoices/${inv._id}/pdf`, '_blank');
+                              }}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                View PDF
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setPreviewInvoice(inv);
+                                setPreviewOpen(true);
+                              }}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Preview
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Printer className="mr-2 h-4 w-4" />
+                                Print
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
                       </tr>
                     ))
@@ -626,6 +723,43 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
             )}
           </div>
         </div>
+      )}
+
+      {/* Transaction Detail Dialog - shared component */}
+      <TransactionDetailDialog
+        open={viewTxnDialogOpen}
+        onOpenChange={setViewTxnDialogOpen}
+        transaction={viewTxn ? (viewTxn as any) : null}
+      />
+
+      {/* Invoice Preview Modal for Transactions tab */}
+      {txnInvoicePreview && (
+        <InvoicePreviewModal
+          open={txnInvoicePreviewOpen}
+          onOpenChange={setTxnInvoicePreviewOpen}
+          invoice={txnInvoicePreview}
+          onDownload={() => {
+            window.open(`/api/invoices/${txnInvoicePreview._id}/pdf`, '_blank');
+          }}
+          onPrint={() => {
+            window.open(`/api/invoices/${txnInvoicePreview._id}/pdf`, '_blank');
+          }}
+        />
+      )}
+
+      {/* Invoice Preview Modal */}
+      {previewInvoice && (
+        <InvoicePreviewModal
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          invoice={previewInvoice}
+          onDownload={() => {
+            window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank');
+          }}
+          onPrint={() => {
+            window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank');
+          }}
+        />
       )}
 
       {/* === OVERVIEW TAB === */}
