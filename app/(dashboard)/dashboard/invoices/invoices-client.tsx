@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { CheckCircle, Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2 } from 'lucide-react';
+import { CheckCircle, Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/date-utils';
 import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import DataTableToolbar from '@/components/data-table-toolbar';
-import CreateInvoice from '@/modules/billing/create-invoice';
+import CreateInvoice, { type InvoiceFormValues } from '@/modules/billing/create-invoice';
 import InvoiceShareSheet from '@/components/invoice-share-sheet';
 import RequireShopGuard from '@/components/require-shop-guard';
 
@@ -21,17 +21,25 @@ interface TransactionSummary {
   grandTotal: number;
   paidAmount: number;
   dueAmount: number;
+  roundOff?: number;
+  totalDiscountType?: 'percentage' | 'fixed' | null;
+  totalDiscountValue?: number | null;
 }
 
 interface Transaction {
   paymentStatus: 'unpaid' | 'partial' | 'paid' | 'void' | 'not-applicable';
-  lineItems: any[];
+  lineItems: unknown[];
+  additionalCharges?: Array<{ name: string; amount: number }>;
   summary: TransactionSummary;
   party?: {
-    id: string;
+    _id: string;
     displayName?: string;
     name?: string;
   } | null;
+  transactionDate?: string | Date;
+  dueDate?: string | Date | null;
+  notes?: string | null;
+  tags?: string[];
 }
 
 interface Invoice {
@@ -47,6 +55,8 @@ interface Invoice {
     displayName?: string;
     name?: string;
   } | null;
+  notes?: string | null;
+  termsAndConditions?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -78,6 +88,8 @@ export default function InvoicesClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [invoiceToEdit, setInvoiceToEdit] = useState<Invoice | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -137,6 +149,78 @@ export default function InvoicesClient() {
       setActionLoading(null);
     }
   }
+
+  async function handleConfirmDraftInvoice(invoice: Invoice) {
+    const invoiceId = getInvoiceId(invoice);
+    setActionLoading(invoiceId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm' }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(data.message || 'Invoice confirmed successfully');
+        loadInvoices();
+      } else {
+        toast.error(data.error || 'Failed to confirm invoice');
+      }
+    } catch (error) {
+      toast.error('Failed to confirm invoice');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  function mapInvoiceToInitialValues(invoice: Invoice): Partial<InvoiceFormValues> {
+    const transaction = invoice.transactionId;
+
+    return {
+      party: (transaction.party as { _id?: string } | null)?._id || (invoice.party as { _id?: string } | null)?._id || '',
+      transactionDate: transaction.transactionDate ? new Date(transaction.transactionDate) : new Date(),
+      dueDate: transaction.dueDate ? new Date(transaction.dueDate) : new Date(invoice.dueDate),
+      lineItems: (transaction.lineItems || []).map((item) => ({
+        item: (item as { item?: string | null }).item ?? null,
+        itemName: (item as { itemName: string }).itemName,
+        sku: (item as { sku?: string | null }).sku ?? null,
+        description: (item as { description?: string | null }).description ?? null,
+        unit: (item as { unit: string }).unit,
+        quantity: (item as { quantity: number }).quantity,
+        unitPrice: (item as { unitPrice: number }).unitPrice,
+        discountAmount: (item as { discountAmount?: number }).discountAmount ?? 0,
+        taxRate: (item as { taxRate?: number }).taxRate ?? 0,
+        costPrice: (item as { costPrice?: number | null }).costPrice ?? null,
+      })),
+      additionalCharges: transaction.additionalCharges ?? [],
+      summary: {
+        roundOff: transaction.summary.roundOff ?? 0,
+        paidAmount: transaction.summary.paidAmount ?? 0,
+        totalDiscountType: (transaction.summary as TransactionSummary & {
+          totalDiscountType?: 'percentage' | 'fixed' | null;
+        }).totalDiscountType ?? null,
+        totalDiscountValue: (transaction.summary as TransactionSummary & {
+          totalDiscountValue?: number | null;
+        }).totalDiscountValue ?? 0,
+      },
+      payment: null,
+      notes: invoice.notes ?? transaction.notes ?? '',
+      termsAndConditions: invoice.termsAndConditions ?? '',
+      status: 'draft' as const,
+    };
+  }
+
+  function handleEditDraftInvoice(invoice: Invoice) {
+    setInvoiceToEdit(invoice);
+    setEditDialogOpen(true);
+  }
+
+  const draftInvoiceInitialValues = useMemo(
+    () => (invoiceToEdit ? mapInvoiceToInitialValues(invoiceToEdit) : null),
+    [invoiceToEdit],
+  );
 
   async function loadInvoices() {
     try {
@@ -334,6 +418,18 @@ export default function InvoicesClient() {
                             <Printer className="mr-2 h-4 w-4" />
                             Print
                           </DropdownMenuItem>
+                          {invoice.status === 'draft' && (
+                            <DropdownMenuItem onClick={() => handleEditDraftInvoice(invoice)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Draft
+                            </DropdownMenuItem>
+                          )}
+                          {invoice.status === 'draft' && (
+                            <DropdownMenuItem onClick={() => handleConfirmDraftInvoice(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Confirm Draft
+                            </DropdownMenuItem>
+                          )}
                           {(invoice.status === 'sent' || invoice.status === 'overdue') && (
                             <>
                               <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
@@ -417,6 +513,33 @@ export default function InvoicesClient() {
             }}
             onCancel={() => setCreateDialogOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Draft Invoice Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex justify-between items-center">
+              <DialogTitle>Edit Draft Invoice</DialogTitle>
+            </div>
+          </DialogHeader>
+          {invoiceToEdit && (
+            <CreateInvoice
+              editingInvoiceId={getInvoiceId(invoiceToEdit)}
+              initialValues={draftInvoiceInitialValues}
+              onSuccess={() => {
+                setEditDialogOpen(false);
+                setInvoiceToEdit(null);
+                loadInvoices();
+                toast.success('Invoice updated successfully');
+              }}
+              onCancel={() => {
+                setEditDialogOpen(false);
+                setInvoiceToEdit(null);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

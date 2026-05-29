@@ -3,16 +3,130 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
-import { AppError } from '@/lib/utils';
+import {
+  AppError,
+  generateTransactionNumber,
+} from '@/lib/utils';
 import {
   applyConfirmedTransactionInventory,
   releaseDraftSaleInventory,
   reverseConfirmedTransactionInventory,
 } from '@/lib/transaction-inventory';
+import { getNextCounterSequence } from '@/lib/document-numbering';
 import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
 import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
+
+type TransactionNumberingConfig = {
+  prefixMap: Record<string, string>;
+  sequenceMap: Record<string, number>;
+};
+
+async function loadTransactionNumberingConfig(
+  ownerId: string,
+  shopId?: string | null,
+): Promise<TransactionNumberingConfig> {
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new AppError('Database connection not available', 500);
+  }
+
+  const ownerObjectId = new mongoose.Types.ObjectId(ownerId);
+  const settingsCollection = db.collection('settings');
+  const shopSettingsDoc = shopId
+    ? await settingsCollection.findOne({
+        owner: ownerObjectId,
+        shopId: new mongoose.Types.ObjectId(shopId),
+      })
+    : null;
+  const fallbackSettingsDoc = shopSettingsDoc || await settingsCollection.findOne({
+    owner: ownerObjectId,
+    shopId: null,
+  });
+  const billingSettings = fallbackSettingsDoc?.billing as Record<string, unknown> | undefined;
+
+  return {
+    prefixMap: {
+      sale:
+        (billingSettings?.salePrefix as string)
+        || (billingSettings?.quotationPrefix as string)
+        || 'SALE',
+      purchase: (billingSettings?.purchasePrefix as string) || 'PUR',
+      payment: (billingSettings?.paymentPrefix as string) || 'PAY',
+      invoice: (billingSettings?.invoicePrefix as string) || 'INV',
+    },
+    sequenceMap: {
+      sale: Number(billingSettings?.nextSaleSequence) || 1,
+      purchase: Number(billingSettings?.nextPurchaseSequence) || 1,
+      payment: Number(billingSettings?.nextPaymentSequence) || 1,
+      invoice: Number(billingSettings?.nextInvoiceSequence) || 1,
+    },
+  };
+}
+
+async function buildFinalTransactionNumber({
+  ownerId,
+  shopId,
+  transactionType,
+}: {
+  ownerId: string;
+  shopId?: string | null;
+  transactionType: string;
+}): Promise<string> {
+  const { prefixMap, sequenceMap } = await loadTransactionNumberingConfig(ownerId, shopId);
+  const transactionTypeKeyMap: Record<string, keyof typeof prefixMap> = {
+    sale: 'sale',
+    purchase: 'purchase',
+    'payment-in': 'payment',
+    'payment-out': 'payment',
+  };
+
+  const transactionTypeKey = transactionTypeKeyMap[transactionType];
+  const prefixOverride = transactionTypeKey ? prefixMap[transactionTypeKey] : undefined;
+
+  if (!transactionTypeKey) {
+    return generateTransactionNumber(transactionType, ownerId, prefixOverride);
+  }
+
+  const sequenceNumber = await getNextCounterSequence(
+    'transaction_counters',
+    {
+      owner: new mongoose.Types.ObjectId(ownerId),
+      type: transactionTypeKey,
+      prefix: prefixOverride,
+    },
+    sequenceMap[transactionTypeKey],
+  );
+
+  return generateTransactionNumber(
+    transactionType,
+    ownerId,
+    prefixOverride,
+    sequenceNumber,
+  );
+}
+
+async function buildFinalInvoiceNumber({
+  ownerId,
+  shopId,
+}: {
+  ownerId: string;
+  shopId?: string | null;
+}): Promise<string> {
+  const { prefixMap, sequenceMap } = await loadTransactionNumberingConfig(ownerId, shopId);
+  const prefixOverride = prefixMap.invoice;
+  const sequenceNumber = await getNextCounterSequence(
+    'invoice_counters',
+    {
+      owner: new mongoose.Types.ObjectId(ownerId),
+      prefix: prefixOverride,
+    },
+    sequenceMap.invoice,
+  );
+
+  return generateTransactionNumber('invoice', ownerId, prefixOverride, sequenceNumber);
+}
 
 const updateTransactionSchema = z.object({
   type: z.enum(["sale", "purchase", "sale-return", "purchase-return", "payment-in", "payment-out", "adjustment", "opening-balance"]).optional(),
@@ -34,6 +148,11 @@ const updateTransactionSchema = z.object({
   summary: z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
+    totalDiscountType: z.enum(['percentage', 'fixed']).optional().nullable(),
+    totalDiscountValue: z.preprocess(
+      (val) => (val === null || val === undefined ? null : Number(val)),
+      z.number().min(0).nullable().optional(),
+    ),
   }).optional(),
   payment: z.object({
     method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
@@ -91,10 +210,18 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({
       data: transaction,
     });
-  } catch (error: any) {
-    const status = Number(error.status) || 500;
+  } catch (error: unknown) {
+    const status =
+      typeof error === 'object' &&
+      error !== null &&
+      'status' in error
+        ? Number((error as { status?: number }).status) || 500
+        : 500;
     const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: validStatus });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: validStatus },
+    );
   }
 }
 
@@ -109,16 +236,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     const body = await request.json();
     const validated = updateTransactionSchema.parse(body);
-    const hasNonStatusUpdates = Object.entries(validated).some(
-      ([key, value]) => key !== 'status' && value !== undefined,
-    );
-
-    if (hasNonStatusUpdates) {
-      throw new AppError(
-        'Transaction editing is not implemented yet. You can confirm, cancel, or delete drafts for now.',
-        400,
-      );
-    }
+    const updatePayload = Object.fromEntries(
+      Object.entries(validated).filter(([key, value]) => key !== 'status' && value !== undefined),
+    ) as Record<string, unknown>;
 
     const transaction = await Transaction.findOne({
       _id: id,
@@ -130,6 +250,20 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     const nextStatus = validated.status ?? transaction.status;
+    const hasEditableUpdates = Object.keys(updatePayload).length > 0;
+
+    if (transaction.status !== 'draft' && hasEditableUpdates) {
+      throw new AppError(
+        'Only draft transactions can be edited. Confirmed transactions can only be cancelled.',
+        400,
+      );
+    }
+
+    if (hasEditableUpdates) {
+      Object.assign(transaction, updatePayload);
+      transaction.updatedBy = new mongoose.Types.ObjectId(user.id);
+      await transaction.save({ session });
+    }
 
     if (nextStatus === transaction.status) {
       await session.commitTransaction();
@@ -145,6 +279,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     if (transaction.status === 'draft' && nextStatus === 'confirmed') {
+      transaction.transactionNumber = await buildFinalTransactionNumber({
+        ownerId: user.id,
+        shopId: user.activeShopId ?? null,
+        transactionType: transaction.type,
+      });
+
       if (
         transaction.party &&
         (transaction.type === 'sale' || transaction.type === 'purchase-return') &&
@@ -157,7 +297,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
         if (party && party.creditLimit > 0) {
           const delta = getBalanceDelta(
-            transaction.type as any,
+            transaction.type as Parameters<typeof getBalanceDelta>[0],
             transaction.summary.grandTotal,
             transaction.summary.paidAmount,
           );
@@ -175,7 +315,10 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         }
       }
 
-      if (transaction.type === 'sale') {
+      if (
+        transaction.type === 'sale' &&
+        transaction.metadata?.draftInventoryReserved !== false
+      ) {
         await releaseDraftSaleInventory(
           {
             ownerId: user.id,
@@ -185,6 +328,24 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           transaction.lineItems,
           session,
         );
+      }
+
+      if (transaction.invoiceId) {
+        const linkedInvoice = await Invoice.findOne({
+          _id: transaction.invoiceId,
+          owner: user.id,
+        }).session(session);
+
+        if (linkedInvoice && linkedInvoice.status === 'draft') {
+          linkedInvoice.invoiceNumber = await buildFinalInvoiceNumber({
+            ownerId: user.id,
+            shopId: user.activeShopId ?? null,
+          });
+          linkedInvoice.status = 'sent';
+          linkedInvoice.sentAt = new Date();
+          linkedInvoice.updatedBy = new mongoose.Types.ObjectId(user.id);
+          await linkedInvoice.save({ session });
+        }
       }
 
       await applyConfirmedTransactionInventory(
@@ -203,14 +364,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       if (transaction.party) {
         const partyId = transaction.party.toString();
         const delta = getBalanceDelta(
-          transaction.type as any,
+          transaction.type as Parameters<typeof getBalanceDelta>[0],
           transaction.summary.grandTotal,
           transaction.summary.paidAmount,
         );
         await updatePartyBalance(partyId, delta, user.id, session);
       }
     } else if (transaction.status === 'draft' && nextStatus === 'cancelled') {
-      if (transaction.type === 'sale') {
+      if (
+        transaction.type === 'sale' &&
+        transaction.metadata?.draftInventoryReserved !== false
+      ) {
         await releaseDraftSaleInventory(
           {
             ownerId: user.id,
@@ -238,7 +402,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       if (transaction.party) {
         const partyId = transaction.party.toString();
         const delta = getBalanceDelta(
-          transaction.type as any,
+          transaction.type as Parameters<typeof getBalanceDelta>[0],
           transaction.summary.grandTotal,
           transaction.summary.paidAmount,
         );
@@ -269,14 +433,15 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       { _id: id, owner: user.id },
       {
         status: nextStatus,
+        transactionNumber: transaction.transactionNumber,
         paymentStatus: derivePaymentStatus({
           status: nextStatus,
           grandTotal: transaction.summary.grandTotal,
           paidAmount: transaction.summary.paidAmount,
         }),
-        updatedBy: user.id,
+        updatedBy: new mongoose.Types.ObjectId(user.id),
       },
-      { new: true, runValidators: true, session }
+      { new: true, runValidators: true, session },
     );
 
     await session.commitTransaction();
@@ -285,13 +450,22 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       data: updatedTransaction,
       message: 'Transaction status updated successfully',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     await session.abortTransaction();
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', details: error.issues }, { status: 400 });
     }
-    const status = error.status || error.statusCode || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    const status =
+      typeof error === 'object' &&
+      error !== null &&
+      ('status' in error || 'statusCode' in error)
+        ? Number((error as { status?: number; statusCode?: number }).status ?? (error as { status?: number; statusCode?: number }).statusCode) || 500
+        : 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: validStatus },
+    );
   } finally {
     session.endSession();
   }
@@ -319,7 +493,10 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       throw new AppError('Only draft transactions can be deleted. Cancel confirmed transactions instead.', 400);
     }
 
-    if (transaction.type === 'sale') {
+    if (
+      transaction.type === 'sale' &&
+      transaction.metadata?.draftInventoryReserved !== false
+    ) {
       await releaseDraftSaleInventory(
         {
           ownerId: user.id,
@@ -341,10 +518,19 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     return NextResponse.json({
       message: 'Transaction deleted successfully',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     await session.abortTransaction();
-    const status = error.status || error.statusCode || 500;
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status });
+    const status =
+      typeof error === 'object' &&
+      error !== null &&
+      ('status' in error || 'statusCode' in error)
+        ? Number((error as { status?: number; statusCode?: number }).status ?? (error as { status?: number; statusCode?: number }).statusCode) || 500
+        : 500;
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: validStatus },
+    );
   } finally {
     session.endSession();
   }

@@ -22,6 +22,7 @@ import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
 import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateSaleReturnDialog from '@/components/create-sale-return-dialog';
 import CreatePurchaseReturnDialog from '@/components/create-purchase-return-dialog';
+import TransactionForm from '@/components/transaction-form';
 import RequireShopGuard from '@/components/require-shop-guard';
 
 interface TransactionLineItem {
@@ -69,7 +70,13 @@ interface Transaction {
   transactionDate: string | Date;
   dueDate?: string | Date | null;
   lineItems: TransactionLineItem[];
+  additionalCharges?: Array<{ name: string; amount: number }>;
   summary: TransactionSummary;
+  payment?: {
+    method?: 'cash' | 'card' | 'upi' | 'bank-transfer' | 'cheque' | 'other' | null;
+    referenceNumber?: string | null;
+    notes?: string | null;
+  } | null;
   notes?: string | null;
   tags: string[];
   createdAt: string | Date;
@@ -146,6 +153,8 @@ export default function TransactionsClient() {
   
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [draftTransactionToEdit, setDraftTransactionToEdit] = useState<Transaction | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
@@ -244,6 +253,82 @@ export default function TransactionsClient() {
         error instanceof Error ? error.message : 'Failed to update transaction status',
       );
     }
+  }
+
+  function getTransactionEditMode(type: Transaction['type']) {
+    switch (type) {
+      case 'sale':
+      case 'purchase':
+      case 'sale-return':
+      case 'purchase-return':
+        return type;
+      default:
+        return null;
+    }
+  }
+
+  function mapTransactionToFormValues(transaction: Transaction) {
+    // Narrow type to only the TransactionForm-compatible types (sale, purchase, sale-return, purchase-return)
+    const narrowType = (
+      transaction.type === 'sale' || transaction.type === 'purchase' ||
+      transaction.type === 'sale-return' || transaction.type === 'purchase-return'
+    ) ? transaction.type : 'sale';
+
+    return {
+      type: narrowType,
+      party: (transaction.party as { _id?: string } | null)?._id || transaction.party?.id || '',
+      transactionDate: transaction.transactionDate ? new Date(transaction.transactionDate) : new Date(),
+      dueDate: transaction.dueDate ? new Date(transaction.dueDate) : null,
+      lineItems: transaction.lineItems.map((item) => ({
+        item: item.item ?? null,
+        itemName: item.itemName,
+        sku: item.sku ?? null,
+        description: item.description ?? null,
+        unit: item.unit,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: item.discountAmount,
+        taxRate: item.taxRate,
+        costPrice: item.costPrice ?? null,
+      })),
+      additionalCharges: transaction.additionalCharges ?? [],
+      summary: {
+        roundOff: transaction.summary.roundOff ?? 0,
+        paidAmount: transaction.summary.paidAmount ?? 0,
+        totalDiscountType: (transaction as Transaction & {
+          summary: TransactionSummary & {
+            totalDiscountType?: 'percentage' | 'fixed' | null;
+            totalDiscountValue?: number | null;
+          };
+        }).summary.totalDiscountType ?? null,
+        totalDiscountValue: (transaction as Transaction & {
+          summary: TransactionSummary & {
+            totalDiscountType?: 'percentage' | 'fixed' | null;
+            totalDiscountValue?: number | null;
+          };
+        }).summary.totalDiscountValue ?? null,
+      },
+      payment: transaction.payment ?? null,
+      notes: transaction.notes ?? null,
+      tags: transaction.tags ?? [],
+      status: transaction.status,
+    };
+  }
+
+  const draftTransactionInitialValues = useMemo(
+    () => (draftTransactionToEdit ? mapTransactionToFormValues(draftTransactionToEdit) : null),
+    [draftTransactionToEdit],
+  );
+
+  function handleEditDraft(transaction: Transaction) {
+    const editMode = getTransactionEditMode(transaction.type);
+    if (!editMode) {
+      toast.info('Editing this draft type is not wired yet');
+      return;
+    }
+
+    setDraftTransactionToEdit(transaction);
+    setEditDialogOpen(true);
   }
 
   function handleCancelClick(transaction: Transaction) {
@@ -546,6 +631,12 @@ export default function TransactionsClient() {
                              </DropdownMenuItem>
                            )}
                           {transaction.status === 'draft' && (
+                            <DropdownMenuItem onClick={() => handleEditDraft(transaction)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Draft
+                            </DropdownMenuItem>
+                          )}
+                          {transaction.status === 'draft' && (
                             <DropdownMenuItem onClick={() => handleStatusUpdate(transaction, 'confirmed')}>
                               <Edit className="mr-2 h-4 w-4" />
                               Confirm Draft
@@ -610,6 +701,35 @@ export default function TransactionsClient() {
           </div>
         )}
       </div>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-white/90 max-w-none! w-[95vw] max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Draft Transaction</DialogTitle>
+            <DialogDescription>
+              Update the draft details, then save or confirm it from this form.
+            </DialogDescription>
+          </DialogHeader>
+          {draftTransactionToEdit && (
+            <TransactionForm
+              mode={getTransactionEditMode(draftTransactionToEdit.type) ?? 'sale'}
+              isOpen={editDialogOpen}
+              editingTransactionId={getTransactionId(draftTransactionToEdit)}
+              initialValues={draftTransactionInitialValues}
+              onSuccess={() => {
+                setEditDialogOpen(false);
+                setDraftTransactionToEdit(null);
+                loadTransactions();
+                toast.success('Draft updated successfully');
+              }}
+              onCancel={() => {
+                setEditDialogOpen(false);
+                setDraftTransactionToEdit(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View Transaction Dialog - shared component */}
       <TransactionDetailDialog

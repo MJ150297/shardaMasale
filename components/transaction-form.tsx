@@ -135,6 +135,8 @@ interface TransactionFormProps {
   isOpen: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
+  editingTransactionId?: string | null;
+  initialValues?: Partial<TransactionFormValues> | null;
   initialLineItems?: Array<{
     item?: string | null;
     itemName: string;
@@ -157,6 +159,8 @@ export default function TransactionForm({
   isOpen,
   onSuccess,
   onCancel,
+  editingTransactionId,
+  initialValues,
   initialLineItems,
   initialParty,
   disablePartySelection,
@@ -181,9 +185,6 @@ export default function TransactionForm({
   const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
   const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
 
-  useEffect(() => {
-    console.log('Transaction: openItemPopoverIndex changed', openItemPopoverIndex);
-  }, [openItemPopoverIndex]);
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema) as any,
     defaultValues: {
@@ -197,6 +198,8 @@ export default function TransactionForm({
       status: 'confirmed',
     }
   });
+
+  const isEditing = Boolean(editingTransactionId);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -269,7 +272,7 @@ export default function TransactionForm({
     async function loadItems() {
       setLoadingItems(true);
       try {
-        const res = await fetch('/api/items?limit=100');
+        const res = await fetch('/api/items?limit=5000');
         const data = await res.json();
         
         if (res.ok) {
@@ -290,7 +293,7 @@ export default function TransactionForm({
     async function loadParties() {
       setLoadingParties(true);
       try {
-        const res = await fetch('/api/parties?limit=1000');
+        const res = await fetch('/api/parties?limit=5000');
         const data = await res.json();
         
         if (res.ok) {
@@ -341,26 +344,137 @@ export default function TransactionForm({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (initialLineItems && initialLineItems.length > 0) {
-      const lineItemsToSet = initialLineItems.map((item) => ({
-        item: item.item || null,
-        itemName: item.itemName,
-        sku: item.sku || null,
-        description: item.description || null,
-        unit: item.unit || 'pcs',
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discountAmount: item.discountAmount || 0,
-        taxRate: item.taxRate || 0,
-        costPrice: item.costPrice || null,
-      }));
-      form.setValue('lineItems', lineItemsToSet);
+    if (initialValues) {
+      form.reset({
+        type: mode,
+        party: initialValues.party ?? initialParty ?? '',
+        transactionDate: initialValues.transactionDate ? new Date(initialValues.transactionDate as Date | string) : new Date(),
+        dueDate: initialValues.dueDate ?? null,
+        lineItems: (initialValues.lineItems || initialLineItems || []).map((item) => ({
+          item: item.item || null,
+          itemName: item.itemName,
+          sku: item.sku || null,
+          description: item.description || null,
+          unit: item.unit || 'pcs',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount || 0,
+          taxRate: item.taxRate || 0,
+          costPrice: item.costPrice || null,
+        })),
+        additionalCharges: initialValues.additionalCharges || [],
+        summary: {
+          roundOff: initialValues.summary?.roundOff ?? 0,
+          paidAmount: initialValues.summary?.paidAmount ?? 0,
+          totalDiscountType: initialValues.summary?.totalDiscountType ?? null,
+          totalDiscountValue: initialValues.summary?.totalDiscountValue ?? null,
+        },
+        payment: initialValues.payment ?? null,
+        notes: initialValues.notes ?? null,
+        tags: initialValues.tags ?? [],
+        status: initialValues.status ?? 'draft',
+      });
+      setOriginalPrices({});
+      setPriceUpdateItems({});
+      return;
     }
 
-    if (initialParty) {
-      form.setValue('party', initialParty);
+    const lineItemsToSet = (initialLineItems || []).map((item) => ({
+      item: item.item || null,
+      itemName: item.itemName,
+      sku: item.sku || null,
+      description: item.description || null,
+      unit: item.unit || 'pcs',
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discountAmount: item.discountAmount || 0,
+      taxRate: item.taxRate || 0,
+      costPrice: item.costPrice || null,
+    }));
+
+    form.reset({
+      type: mode,
+      party: initialParty ?? '',
+      transactionDate: new Date(),
+      dueDate: null,
+      lineItems: lineItemsToSet,
+      additionalCharges: [],
+      summary: {
+        roundOff: 0,
+        paidAmount: 0,
+        totalDiscountType: null,
+        totalDiscountValue: null,
+      },
+      payment: null,
+      notes: null,
+      tags: [],
+      status: 'confirmed',
+    });
+    setOriginalPrices({});
+    setPriceUpdateItems({});
+  }, [isOpen, initialValues, initialLineItems, initialParty, form, mode]);
+
+  // After parties load, re-assert the party field value to ensure Select shows it
+  useEffect(() => {
+    if (!editingTransactionId || !initialValues?.party) return;
+
+    const partyId = initialValues.party;
+
+    if (parties.length > 0) {
+      const partyExists = parties.some((p: any) => p._id === partyId);
+      
+      if (!partyExists) {
+        // Fetch the missing party by ID directly
+        fetch(`/api/parties/${partyId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            const missingParty = data?.data ?? data?.party ?? data ?? null;
+            if (missingParty && missingParty._id) {
+              setParties((current: any[]) => {
+                if (current.some((p: any) => p._id === partyId)) return current;
+                return [missingParty, ...current];
+              });
+            }
+          })
+          .catch(() => {});
+      }
+
+      // Re-assert the form value after parties are available to sync Select
+      form.setValue('party', partyId, { shouldDirty: true });
     }
-  }, [isOpen, initialLineItems, initialParty, form]);
+  }, [parties, editingTransactionId, initialValues?.party, form, isOpen]);
+
+  // After items load, ensure line item Select values sync with loaded items
+  useEffect(() => {
+    if (!editingTransactionId || !initialValues?.lineItems || items.length === 0) return;
+    
+    const currentLineItems = form.getValues('lineItems') || [];
+    let needsUpdate = false;
+    
+    const updated = currentLineItems.map((li: any) => {
+      if (li.item && !items.some((i: any) => i._id === li.item)) {
+        // Try to find item by name as fallback
+        const matchedItem = items.find((i: any) => 
+          i.name?.toLowerCase() === li.itemName?.toLowerCase()
+        );
+        if (matchedItem) {
+          needsUpdate = true;
+          return {
+            ...li,
+            item: matchedItem._id,
+            unitPrice: getDefaultUnitPrice(matchedItem, mode),
+            taxRate: getDefaultTaxRate(matchedItem, mode),
+            unit: getItemUnit(matchedItem),
+          };
+        }
+      }
+      return li;
+    });
+    
+    if (needsUpdate) {
+      form.setValue('lineItems', updated, { shouldDirty: true });
+    }
+  }, [items, editingTransactionId, initialValues?.lineItems, form, mode, isOpen]);
 
   // Only load data when dialog is actually open
   if (!isOpen) return null;
@@ -405,8 +519,8 @@ export default function TransactionForm({
     setLoading(true);
     setSubmitStatus(status);
     try {
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
+      const res = await fetch(editingTransactionId ? `/api/transactions/${editingTransactionId}` : '/api/transactions', {
+        method: editingTransactionId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...values,
@@ -419,15 +533,19 @@ export default function TransactionForm({
         throw new Error(error.error || error.message || 'Failed to create transaction');
       }
 
-      // Update item prices for checked items on confirmed transactions
+      // Update item prices for checked items — only on confirmation
       if (status === 'confirmed') {
         await updateItemPrices(values);
       }
 
       toast.success(
-        status === 'draft'
-          ? `${getModeLabel(mode)} saved as draft`
-          : `${getModeLabel(mode)} created successfully`,
+        editingTransactionId
+          ? status === 'draft'
+            ? `${getModeLabel(mode)} draft updated`
+            : `${getModeLabel(mode)} draft confirmed`
+          : status === 'draft'
+            ? `${getModeLabel(mode)} saved as draft`
+            : `${getModeLabel(mode)} created successfully`,
       );
       form.reset();
       onSuccess?.();
@@ -703,9 +821,6 @@ export default function TransactionForm({
             </Button>
           </div>
 
-          <div className="rounded-md border border-dashed border-slate-400 px-3 py-2 text-sm text-slate-700">
-            Debug open item popover index: {openItemPopoverIndex === null ? 'null' : openItemPopoverIndex}
-          </div>
 
           <div className="border rounded-md">
             {/* Desktop Header */}
@@ -1463,7 +1578,7 @@ export default function TransactionForm({
                 Saving Draft...
               </>
             ) : (
-              'Save as Draft'
+              isEditing ? 'Update Draft' : 'Save as Draft'
             )}
           </Button>
           <Button type="submit" disabled={loading}>

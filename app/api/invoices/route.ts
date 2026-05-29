@@ -3,7 +3,13 @@ import { z } from 'zod';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
-import { AppError, roundCurrency } from '@/lib/utils';
+import {
+  AppError,
+  generateDraftNumber,
+  generateTransactionNumber,
+  roundCurrency,
+} from '@/lib/utils';
+import { getNextCounterSequence } from '@/lib/document-numbering';
 import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
@@ -11,14 +17,26 @@ import Item from '@/models/Item';
 import Party from '@/models/Party';
 import StockMovement from '@/models/StockMovement';
 
+type InvoiceNumberingConfig = {
+  prefixMap: {
+    invoice: string;
+    sale: string;
+  };
+  sequenceMap: {
+    invoice: number;
+    sale: number;
+  };
+};
 
-async function generateInvoiceNumber(ownerId: string, shopId?: string | null): Promise<string> {
-  // Read user's settings using raw collection to bypass global shop-scoping plugin
-  // The plugin auto-injects activeShopId into every mongoose query, breaking { shopId: null } lookups
+async function loadInvoiceNumberingConfig(
+  ownerId: string,
+  shopId?: string | null,
+): Promise<InvoiceNumberingConfig> {
   const db = mongoose.connection.db;
   if (!db) {
     throw new AppError('Database connection not available', 500);
   }
+
   const ownerObjectId = new mongoose.Types.ObjectId(ownerId);
   const settingsDoc = shopId
     ? await db.collection('settings').findOne({
@@ -33,36 +51,60 @@ async function generateInvoiceNumber(ownerId: string, shopId?: string | null): P
     owner: ownerObjectId,
     shopId: null,
   });
-  const billing = fallbackSettingsDoc?.billing as { invoicePrefix?: string; nextInvoiceSequence?: number } | undefined;
-  const prefixFromSettings = billing?.invoicePrefix || 'INV';
-  const nextSeqFromSettings = billing?.nextInvoiceSequence || 1;
-  
-  // Atomic counter implementation with database lock
-  // This ensures sequential numbering with no gaps even under concurrent load
-  
-  if (!mongoose.connection.db) {
-    throw new AppError('Database connection not available', 500);
-  }
 
-  // Initialize the counter to the user's configured starting sequence if it doesn't exist yet
-  const counter = await mongoose.connection.db.collection('invoice_counters').findOneAndUpdate(
-    { owner: ownerId, prefix: prefixFromSettings },
-    { $inc: { sequence: 1 } },
-    { 
-      upsert: true, 
-      returnDocument: 'after',
-      includeResultMetadata: true
-    }
-  ) as unknown as { value?: { sequence: number } } | null;
-  
-  let sequenceNumber = nextSeqFromSettings;
-  
-  if (counter?.value) {
-    sequenceNumber = counter.value.sequence;
-  }
-  
-  // Format as INV1, INV2, INV3 or CUSTINV1, CUSTINV2 etc. (prefix from settings + sequence)
-  return `${prefixFromSettings}${sequenceNumber}`;
+  const billing = fallbackSettingsDoc?.billing as {
+    invoicePrefix?: string;
+    salePrefix?: string;
+    quotationPrefix?: string;
+    nextInvoiceSequence?: number;
+    nextSaleSequence?: number;
+  } | undefined;
+
+  return {
+    prefixMap: {
+      invoice: billing?.invoicePrefix || 'INV',
+      sale: billing?.salePrefix || billing?.quotationPrefix || 'SALE',
+    },
+    sequenceMap: {
+      invoice: billing?.nextInvoiceSequence || 1,
+      sale: billing?.nextSaleSequence || 1,
+    },
+  };
+}
+
+async function buildFinalInvoiceNumber(
+  ownerId: string,
+  shopId?: string | null,
+): Promise<string> {
+  const { prefixMap, sequenceMap } = await loadInvoiceNumberingConfig(ownerId, shopId);
+  const sequenceNumber = await getNextCounterSequence(
+    'invoice_counters',
+    {
+      owner: new mongoose.Types.ObjectId(ownerId),
+      prefix: prefixMap.invoice,
+    },
+    sequenceMap.invoice,
+  );
+
+  return generateTransactionNumber('invoice', ownerId, prefixMap.invoice, sequenceNumber);
+}
+
+async function buildFinalSaleTransactionNumber(
+  ownerId: string,
+  shopId?: string | null,
+): Promise<string> {
+  const { prefixMap, sequenceMap } = await loadInvoiceNumberingConfig(ownerId, shopId);
+  const sequenceNumber = await getNextCounterSequence(
+    'transaction_counters',
+    {
+      owner: new mongoose.Types.ObjectId(ownerId),
+      type: 'sale',
+      prefix: prefixMap.sale,
+    },
+    sequenceMap.sale,
+  );
+
+  return generateTransactionNumber('sale', ownerId, prefixMap.sale, sequenceNumber);
 }
 
 function getSafeStatus(error: unknown): number {
@@ -104,7 +146,10 @@ const createInvoiceSchema = z.object({
     roundOff: z.coerce.number().default(0),
     paidAmount: z.coerce.number().min(0).default(0),
     totalDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
-    totalDiscountValue: z.coerce.number().min(0).optional().nullable(),
+    totalDiscountValue: z.preprocess(
+      (val) => (val === null || val === undefined ? null : Number(val)),
+      z.number().min(0).nullable().optional(),
+    ),
   }).default(() => ({ roundOff: 0, paidAmount: 0 })),
   payment: z.object({
     method: z.enum(["cash", "card", "upi", "bank-transfer", "cheque", "other"]).optional().nullable(),
@@ -214,16 +259,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createInvoiceSchema.parse(body);
 
-    const invoiceNumber = await generateInvoiceNumber(user.id, user.activeShopId);
+    const invoiceNumber = validated.status === 'draft'
+      ? generateDraftNumber('INVOICE')
+      : await buildFinalInvoiceNumber(user.id, user.activeShopId);
+    const transactionNumber = validated.status === 'draft'
+      ? generateDraftNumber('SALE')
+      : await buildFinalSaleTransactionNumber(user.id, user.activeShopId);
 
     // First create transaction
     const [transaction] = await Transaction.create([{
       type: "sale",
       ...validated,
       owner: user.id,
-      transactionNumber: invoiceNumber,
+      transactionNumber,
       createdBy: user.id,
       updatedBy: user.id,
+      metadata: {
+        draftMode: validated.status === 'draft' ? 'classic' : 'posted',
+        draftInventoryReserved: false,
+      },
     }], { session });
 
     // Create invoice record
@@ -236,6 +290,7 @@ export async function POST(request: Request) {
       termsAndConditions: validated.termsAndConditions,
       notes: validated.notes,
       status: validated.status === "confirmed" ? "sent" : "draft",
+      sentAt: validated.status === "confirmed" ? new Date() : null,
       createdBy: user.id,
       updatedBy: user.id,
     }], { session });
@@ -392,7 +447,7 @@ export async function handleGenerateInvoice(request: Request) {
       throw new AppError('Invoice already exists for this transaction', 409);
     }
 
-    const invoiceNumber = await generateInvoiceNumber(user.id, user.activeShopId);
+    const invoiceNumber = await buildFinalInvoiceNumber(user.id, user.activeShopId);
 
     const settingsCollection = mongoose.connection.db?.collection('settings');
     const settingsDoc = settingsCollection

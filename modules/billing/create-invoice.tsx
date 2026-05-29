@@ -80,7 +80,7 @@ const createInvoiceSchema = z.object({
   status: z.enum(["draft", "confirmed"]).default("draft"),
 });
 
-type InvoiceFormValues = z.infer<typeof createInvoiceSchema>;
+export type InvoiceFormValues = z.infer<typeof createInvoiceSchema>;
 
 interface Item {
   _id: string;
@@ -128,9 +128,11 @@ function getDefaultTaxRate(item: Item | CreatedItem) {
 interface CreateInvoiceProps {
   onSuccess?: () => void;
   onCancel?: () => void;
+  editingInvoiceId?: string | null;
+  initialValues?: Partial<InvoiceFormValues> | null;
 }
 
-export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProps) {
+export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, initialValues }: CreateInvoiceProps) {
   const { activeShopId } = useActiveShop();
   const [items, setItems] = useState<Item[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
@@ -143,14 +145,15 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
   const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
   const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
+  const isEditing = Boolean(editingInvoiceId);
 
   useEffect(() => {
     async function loadData() {
       try {
         console.log('🔍 Loading parties and items...');
 
-        // Load Parties (Customers)
-        const partiesRes = await fetch('/api/parties');
+        // Load Parties (Customers) - use high limit to get all
+        const partiesRes = await fetch('/api/parties?limit=5000');
         console.log('✅ Parties response status:', partiesRes.status);
 
         if (partiesRes.ok) {
@@ -172,7 +175,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
         }
 
         // Load Items
-        const itemsRes = await fetch('/api/items');
+        const itemsRes = await fetch('/api/items?limit=5000');
         console.log('✅ Items response status:', itemsRes.status);
 
         if (itemsRes.ok) {
@@ -205,6 +208,8 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
       summary: {
         roundOff: 0,
         paidAmount: 0,
+        totalDiscountType: null,
+        totalDiscountValue: 0,
       },
       payment: null,
       status: 'draft',
@@ -215,6 +220,9 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   useEffect(() => {
     async function loadSettings() {
       try {
+        if (editingInvoiceId) {
+          return;
+        }
         const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
         const res = await fetch(`/api/settings${queryParam}`);
         if (res.ok) {
@@ -229,7 +237,62 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
       }
     }
     loadSettings();
-  }, [form, activeShopId]);
+  }, [form, activeShopId, editingInvoiceId]);
+
+  useEffect(() => {
+    if (!initialValues) return;
+
+    form.reset({
+      party: initialValues.party ?? '',
+      transactionDate: initialValues.transactionDate ?? new Date(),
+      dueDate: initialValues.dueDate ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      lineItems: initialValues.lineItems ?? [],
+      additionalCharges: initialValues.additionalCharges ?? [],
+      summary: {
+        roundOff: initialValues.summary?.roundOff ?? 0,
+        paidAmount: initialValues.summary?.paidAmount ?? 0,
+        totalDiscountType: initialValues.summary?.totalDiscountType ?? null,
+        totalDiscountValue: initialValues.summary?.totalDiscountValue ?? 0,
+      },
+      payment: initialValues.payment ?? null,
+      notes: initialValues.notes ?? '',
+      termsAndConditions: initialValues.termsAndConditions ?? '',
+      status: initialValues.status ?? 'draft',
+    });
+    setOriginalPrices({});
+    setPriceUpdateItems({});
+  }, [form, initialValues]);
+
+  // After parties load, re-assert the party field value to ensure Select shows it
+  // Also ensure the selected party is in the parties list even if not returned by the API
+  useEffect(() => {
+    if (!editingInvoiceId || !initialValues?.party) return;
+
+    const partyId = initialValues.party;
+
+    if (parties.length > 0) {
+      const partyExists = parties.some((p: any) => p._id === partyId);
+
+      if (!partyExists) {
+        // Fetch the missing party by ID directly
+        fetch(`/api/parties/${partyId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            const missingParty = data?.data ?? data?.party ?? data ?? null;
+            if (missingParty && missingParty._id) {
+              setParties(current => {
+                if (current.some(p => p._id === partyId)) return current;
+                return [missingParty, ...current];
+              });
+            }
+          })
+          .catch(() => {});
+      }
+
+      // Re-assert the form value after parties are available to sync Select
+      form.setValue('party', partyId, { shouldDirty: true });
+    }
+  }, [parties, editingInvoiceId, initialValues?.party, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -390,37 +453,73 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
   const onSubmit = async (data: InvoiceFormValues, confirm: boolean = false) => {
     setIsSubmitting(true);
     try {
-      const payload = {
-        ...data,
-        status: confirm ? 'confirmed' : 'draft',
-      };
+      // When editing and confirming, first save the draft via PUT, then confirm via PATCH
+      if (editingInvoiceId && confirm) {
+        // Step 1: Save draft changes
+        const savePayload = { ...data, status: 'draft' };
+        const saveResponse = await fetch(`/api/invoices/${editingInvoiceId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(savePayload),
+        });
 
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Update item prices for checked items
-        if (confirm) {
-          await updateItemPrices(data);
+        if (!saveResponse.ok) {
+          const saveError = await saveResponse.json();
+          throw new Error(saveError.error || 'Failed to save draft before confirmation');
         }
 
-        toast.success('Invoice created successfully');
+        // Step 2: Confirm via PATCH
+        const confirmResponse = await fetch(`/api/invoices/${editingInvoiceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'confirm' }),
+        });
+
+        if (!confirmResponse.ok) {
+          const confirmError = await confirmResponse.json();
+          throw new Error(confirmError.error || 'Failed to confirm invoice');
+        }
+
+        await updateItemPrices(data);
+        toast.success('Invoice confirmed successfully');
         form.reset();
         if (onSuccess) {
           onSuccess();
         }
       } else {
-        const error = await response.json();
-        toast.error(error.error || error.message || 'Failed to create invoice');
+        // Normal create or draft-only edit
+        const payload = {
+          ...data,
+          status: confirm ? 'confirmed' : 'draft',
+        };
+
+        const response = await fetch(editingInvoiceId ? `/api/invoices/${editingInvoiceId}` : '/api/invoices', {
+          method: editingInvoiceId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+
+          // Update item prices for checked items — only on confirmation
+          if (confirm) {
+            await updateItemPrices(data);
+          }
+
+          toast.success(editingInvoiceId ? 'Invoice updated successfully' : 'Invoice created successfully');
+          form.reset();
+          if (onSuccess) {
+            onSuccess();
+          }
+        } else {
+          const error = await response.json();
+          throw new Error(error.error || error.message || 'Failed to create invoice');
+        }
       }
     } catch (error) {
       console.error('Error creating invoice:', error);
-      toast.error('Failed to create invoice');
+      toast.error(error instanceof Error ? error.message : 'Failed to create invoice');
     } finally {
       setIsSubmitting(false);
     }
@@ -1464,7 +1563,7 @@ export default function CreateInvoice({ onSuccess, onCancel }: CreateInvoiceProp
                   type="button"
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  Confirm Invoice
+                  {isEditing ? 'Save & Confirm' : 'Confirm Invoice'}
                 </Button>
               </div>
 
