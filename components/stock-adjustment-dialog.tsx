@@ -118,7 +118,7 @@ export default function StockAdjustmentDialog({
       <DialogTrigger asChild>
         {children || <Button variant="default" size="sm">Adjust Stock</Button>}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="max-w-[425px] bg-white/80" onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle>Adjust Stock</DialogTitle>
         </DialogHeader>

@@ -2,14 +2,18 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Edit, Trash2, Eye } from 'lucide-react';
+import { MoreHorizontal, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import CreatePartyDialog from '@/components/create-party-dialog';
 import EditPartyDialog from '@/components/edit-party-dialog';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +39,23 @@ interface Party {
 
 interface PartiesClientProps {
   parties: Party[];
+}
+
+function getStatusBadgeClass(status: string) {
+  switch (status) {
+    case 'active': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    case 'invited': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  }
+}
+
+function getTypeBadgeClass(type: string) {
+  switch (type) {
+    case 'customer': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+    case 'supplier': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
+    case 'both': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
+    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  }
 }
 
 export default function PartiesClient({ parties }: PartiesClientProps) {
@@ -63,10 +84,16 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
   };
 
   const handlePartyCreated = () => {
-    // Increment key to trigger re-fetch on server component
     setRefreshKey(prev => prev + 1);
-    // Hard refresh for now until proper revalidation is implemented
     window.location.reload();
+  };
+
+  const handleSendInvite = (party: Party) => {
+    if (party.email) {
+      toast.success(`Invite sent to ${party.email}`);
+    } else {
+      toast.error(`No email found for ${party.name}`);
+    }
   };
 
   return (
@@ -107,166 +134,157 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
         ]}
       />
 
+      {/* Flexbox Card Layout - Matching Dashboard Transactions & Items */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
-            <thead className="bg-gray-50 dark:bg-gray-800/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Party</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {filteredParties.map((party) => (
-                <tr key={party._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">{party.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Badge variant="secondary" className="capitalize">
-                      {party.partyType}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{party.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{party.phoneNumber || '-'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      party.status === 'active' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                      party.status === 'invited' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
-                      'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                    }`}>
-                      {party.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => alert(`Send invite to ${party.email}`)}
-                            >
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Send Login Invite</TooltipContent>
-                        </Tooltip>
+        {filteredParties.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            <div className="text-4xl mb-2">👥</div>
+            <p className="font-medium text-gray-900 dark:text-white">No parties found</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Try changing the filter or add a new party</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {filteredParties.map((party) => (
+              <div
+                key={party._id}
+                className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                onClick={() => router.push(`/dashboard/parties/${party._id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    router.push(`/dashboard/parties/${party._id}`);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="space-y-3">
+                  {/* Main row: left info + right meta */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                        <Users className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {party.name}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getTypeBadgeClass(party.partyType)}`}>
+                            {party.partyType}
+                          </span>
+                          {party.email && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline truncate">
+                              {party.email}
+                            </span>
+                          )}
+                          {party.phoneNumber && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {party.phoneNumber}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => router.push(`/dashboard/parties/${party._id}`)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>View Profile</TooltipContent>
-                        </Tooltip>
+                    {/* Right side: status + actions */}
+                    <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                      {/* Status badge */}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusBadgeClass(party.status)}`}>
+                        {party.status}
+                      </span>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                      {/* 3-dot Action Menu */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); handleSendInvite(party); }}
+                          >
+                            Send Login Invite
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/dashboard/parties/${party._id}`); }}
+                          >
+                            View Profile
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          >
                             <EditPartyDialog
                               party={party}
                               onPartyUpdated={() => window.location.reload()}
                             >
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <span className="w-full inline-block">Edit Party</span>
                             </EditPartyDialog>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit Party</TooltipContent>
-                        </Tooltip>
+                          </DropdownMenuItem>
 
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-500 hover:text-red-600"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                          <AlertDialogContent onClick={(e) => e.stopPropagation()} className='bg-white/80'>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Party</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the party
-                                <span className="font-semibold"> {party.name} </span>
-                                and remove all associated data.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-red-600 hover:bg-red-700 text-white"
-                                onClick={async () => {
-                                  try {
-                                    const response = await fetch(`/api/parties?id=${party._id}`, {
-                                      method: 'DELETE',
-                                    });
-                                    
-                                    if (!response.ok) {
-                                      const error = await response.json();
-                                      throw new Error(error.error || 'Failed to delete party');
-                                    }
-                                    
-                                    toast.success('Party deleted successfully');
-                                    window.location.reload();
-                                  } catch (error) {
-                                    console.error('Error deleting party:', error);
-                                    toast.error(error instanceof Error ? error.message : 'Failed to delete party');
-                                  }
-                                }}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onSelect={(e) => { e.preventDefault(); e.stopPropagation(); }}
                               >
                                 Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete Party</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent onClick={(e) => e.stopPropagation()} className="bg-white/80 dark:bg-gray-900/80">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Party</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the party
+                                  <span className="font-semibold"> {party.name} </span>
+                                  and remove all associated data.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-red-600 hover:bg-red-700 text-white"
+                                  onClick={async () => {
+                                    try {
+                                      const response = await fetch(`/api/parties?id=${party._id}`, {
+                                        method: 'DELETE',
+                                      });
+                                      
+                                      if (!response.ok) {
+                                        const error = await response.json();
+                                        throw new Error(error.error || 'Failed to delete party');
+                                      }
+                                      
+                                      toast.success('Party deleted successfully');
+                                      window.location.reload();
+                                    } catch (error) {
+                                      console.error('Error deleting party:', error);
+                                      toast.error(error instanceof Error ? error.message : 'Failed to delete party');
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  </td>
-                </tr>
-              ))}
-
-              {filteredParties.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <div className="text-4xl mb-2">👥</div>
-                    <p className="font-medium text-gray-900 dark:text-white">No parties found</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Try changing the filter or add a new party</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

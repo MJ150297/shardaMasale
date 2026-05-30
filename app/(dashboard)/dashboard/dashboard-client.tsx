@@ -27,8 +27,9 @@ import { useTheme } from 'next-themes';
 import { DateRangeFilter } from '@/modules/reports/date-range-filter';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { getPartyId, getPartyName, getPartyPhone, type PartyLike } from '@/lib/party-helpers';
+import { getPartyId, getPartyName, getPartyPhone, getInvoiceId, type PartyLike } from '@/lib/party-helpers';
 import { cn } from '@/lib/utils';
+import TransactionDetailDialog, { TransactionDialogData } from '@/components/transaction-detail-dialog';
 import { useActiveShop } from '@/components/providers/shop-provider';
 import OnboardingBanner from '@/components/onboarding-banner';
 
@@ -57,6 +58,56 @@ interface RecentTransaction {
   time: string;
 }
 
+interface DetailedTransactionRecord {
+  _id: string;
+  transactionNumber: string;
+  type: string;
+  status: string;
+  paymentStatus: string;
+  party?: PartyLike | null;
+  transactionDate: string | Date;
+  dueDate?: string | Date | null;
+  lineItems: Array<{
+    item?: string | null;
+    itemName: string;
+    sku?: string | null;
+    description?: string | null;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    discountAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    lineTotal: number;
+    costPrice?: number | null;
+    itemType?: string;
+  }>;
+  additionalCharges?: Array<{ name: string; amount: number }>;
+  summary: {
+    subtotal: number;
+    discountTotal: number;
+    taxTotal: number;
+    roundOff: number;
+    grandTotal: number;
+    paidAmount: number;
+    dueAmount: number;
+  };
+  payment?: {
+    method?: string | null;
+    referenceNumber?: string | null;
+    notes?: string | null;
+  } | null;
+  notes?: string | null;
+  tags: string[];
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  invoiceId?: {
+    _id: string;
+    invoiceNumber: string;
+    status: string;
+  } | null;
+}
+
 interface DashboardTransactionRecord {
   _id: string;
   transactionNumber: string;
@@ -79,26 +130,6 @@ interface DashboardTransactionsResponse {
   };
 }
 
-function getInvoiceId(
-  invoice?: string | { _id?: string | { toString(): string }; id?: string | null } | null,
-): string | null {
-  if (!invoice) {
-    return null;
-  }
-
-  if (typeof invoice === 'string') {
-    return invoice;
-  }
-
-  const invoiceId = invoice._id ?? invoice.id;
-
-  if (!invoiceId) {
-    return null;
-  }
-
-  return typeof invoiceId === 'string' ? invoiceId : invoiceId.toString();
-}
-
 interface DashboardClientProps {
   userName: string;
   stats: {
@@ -112,7 +143,7 @@ interface DashboardClientProps {
 }
 
 
-export default function DashboardClient({ userName, stats, lowStockItems, recentTransactions }: DashboardClientProps) {
+export default function DashboardClient({ userName, stats, lowStockItems, recentTransactions: initialTransactions }: DashboardClientProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const { setActions } = usePageActions();
@@ -130,6 +161,8 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   // Dialog open states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [selectedDetailTransaction, setSelectedDetailTransaction] = useState<TransactionDialogData | null>(null);
 
   // Set page action buttons
   useEffect(() => {
@@ -176,6 +209,12 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
 
   const PAGE_SIZE = 4;
 
+  // Format SSR initial transactions as fallback for SWR
+  const initialFallback: DashboardTransactionsResponse = {
+    data: [],
+    pagination: { totalPages: 0, total: 0 },
+  };
+
   const getKey = () => {
     let url = `/api/transactions?page=${page}&limit=${PAGE_SIZE}&status=confirmed`;
     if (startDate) url += `&startDate=${startDate.toISOString()}`;
@@ -187,7 +226,9 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
     (url) => fetch(url).then(res => res.json()),
     {
       revalidateOnFocus: false,
-      revalidateOnMount: false,
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      fallbackData: initialFallback,
     }
   );
 
@@ -219,11 +260,68 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const transactions = data
-    ? data.data.map(formatTransaction)
-    : recentTransactions;
-  const totalPages = data?.pagination?.totalPages || 0;
-  const total = data?.pagination?.total || 0;
+  const handleViewTransaction = async (transaction: RecentTransaction) => {
+    try {
+      // Fetch the full transaction details from the API
+      const url = transaction.transactionId
+        ? `/api/transactions/${transaction.transactionId}`
+        : null;
+      if (!url) return;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch transaction details');
+
+      const fullTransaction: DetailedTransactionRecord = await res.json().then(r => r.data || r);
+
+      // Map to TransactionDialogData
+      const dialogData: TransactionDialogData = {
+        _id: fullTransaction._id,
+        transactionNumber: fullTransaction.transactionNumber,
+        type: fullTransaction.type as TransactionDialogData['type'],
+        status: fullTransaction.status as TransactionDialogData['status'],
+        paymentStatus: fullTransaction.paymentStatus as TransactionDialogData['paymentStatus'],
+        party: fullTransaction.party
+          ? {
+              id: getPartyId(fullTransaction.party) || '',
+              name: getPartyName(fullTransaction.party),
+              phone: getPartyPhone(fullTransaction.party) || undefined,
+            }
+          : null,
+        transactionDate: fullTransaction.transactionDate,
+        dueDate: fullTransaction.dueDate,
+        lineItems: fullTransaction.lineItems.map((item) => ({
+          ...item,
+          itemType: item.itemType as 'product' | 'service' | undefined,
+        })),
+        summary: fullTransaction.summary,
+        notes: fullTransaction.notes,
+        tags: fullTransaction.tags,
+        createdAt: fullTransaction.createdAt,
+        updatedAt: fullTransaction.updatedAt,
+        invoiceId: fullTransaction.invoiceId
+          ? {
+              _id: fullTransaction.invoiceId._id,
+              invoiceNumber: fullTransaction.invoiceId.invoiceNumber,
+              status: fullTransaction.invoiceId.status as 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled',
+            }
+          : null,
+      };
+
+      setSelectedDetailTransaction(dialogData);
+      setDetailDialogOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch transaction details:', error);
+      toast.error('Could not load transaction details');
+    }
+  };
+
+  const recordData = data ?? initialFallback;
+  // Use SSR data as initial display, SWR updates seamlessly
+  const transactions = recordData.data && recordData.data.length > 0
+    ? recordData.data.map(formatTransaction)
+    : initialTransactions;
+  const totalPages = recordData.pagination?.totalPages || 0;
+  const total = recordData.pagination?.total || 0;
 
   const statsCards = [
     {
@@ -375,7 +473,14 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
         </div>
         <div className="divide-y divide-gray-50 dark:divide-gray-800">
           {transactions.map((transaction: RecentTransaction, index: number) => (
-            <div key={index} className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            <div
+              key={index}
+              className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+              onClick={() => handleViewTransaction(transaction)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleViewTransaction(transaction); } }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 md:gap-4">
@@ -383,7 +488,9 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
                       <Receipt className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
                     </div>
                     <div>
-                      <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white">{transaction.id} - {transaction.customer}</p>
+                      <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white">
+                        <span className="hidden sm:inline">{transaction.id} - </span>{transaction.customer}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${transaction.type === 'sale' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                           transaction.type === 'purchase' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
@@ -600,6 +707,13 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
           />
         </DialogContent>
       </Dialog>
+
+      {/* Transaction Detail Dialog */}
+      <TransactionDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        transaction={selectedDetailTransaction}
+      />
     </div>
   );
 }

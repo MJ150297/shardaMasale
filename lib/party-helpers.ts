@@ -51,6 +51,26 @@ export function getPartyName(
   );
 }
 
+export function getInvoiceId(
+  invoice?: string | { _id?: string | { toString(): string }; id?: string | null } | null,
+): string | null {
+  if (!invoice) {
+    return null;
+  }
+
+  if (typeof invoice === 'string') {
+    return invoice;
+  }
+
+  const invoiceId = invoice._id ?? invoice.id;
+
+  if (!invoiceId) {
+    return null;
+  }
+
+  return typeof invoiceId === 'string' ? invoiceId : invoiceId.toString();
+}
+
 export function getPartyPhone(party?: PartyLike | string | null): string | null {
   if (!party || typeof party === 'string') {
     return null;

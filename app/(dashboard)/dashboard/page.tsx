@@ -3,7 +3,7 @@ import dbConnect from '@/lib/db';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
 import DashboardClient from './dashboard-client';
-import { getPartyId, getPartyName, getPartyPhone, type PartyLike } from '@/lib/party-helpers';
+import { getPartyId, getPartyName, getPartyPhone, getInvoiceId, type PartyLike } from '@/lib/party-helpers';
 
 interface RecentTransactionRecord {
   _id: string | { toString(): string };
@@ -17,26 +17,6 @@ interface RecentTransactionRecord {
   paymentStatus: string;
   transactionDate: string | Date;
   createdAt: string | Date;
-}
-
-function getInvoiceId(
-  invoice?: string | { _id?: string | { toString(): string }; id?: string | null } | null,
-): string | null {
-  if (!invoice) {
-    return null;
-  }
-
-  if (typeof invoice === 'string') {
-    return invoice;
-  }
-
-  const invoiceId = invoice._id ?? invoice.id;
-
-  if (!invoiceId) {
-    return null;
-  }
-
-  return typeof invoiceId === 'string' ? invoiceId : invoiceId.toString();
 }
 
 export default async function DashboardPage() {
@@ -83,7 +63,7 @@ export default async function DashboardPage() {
       {
         $group: {
           _id: null,
-          total: { $sum: "$summary.totalAmount" }
+          total: { $sum: "$summary.grandTotal" }
         }
       }
     ])

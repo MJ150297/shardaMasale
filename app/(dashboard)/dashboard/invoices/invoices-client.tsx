@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { CheckCircle, Download, Eye, FileText, ChevronLeft, ChevronRight, X, Share2, Printer, Trash2, Edit } from 'lucide-react';
+import { CheckCircle, Download, Eye, FileText, ChevronLeft, ChevronRight, Printer, Trash2, Edit, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -78,6 +78,25 @@ function getPartyName(invoice: Invoice) {
       || invoice.party?.displayName 
       || invoice.party?.name 
       || '-';
+}
+
+function getStatusBadgeClass(status: string) {
+  switch (status) {
+    case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    case 'sent': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+    case 'draft': return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+    case 'overdue': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+    case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  }
+}
+
+function getPaymentBadgeClass(status: string) {
+  switch (status) {
+    case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    case 'partial': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  }
 }
 
 export default function InvoicesClient() {
@@ -297,25 +316,6 @@ export default function InvoicesClient() {
     }
   }
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-      case 'sent': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
-      case 'draft': return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-      case 'overdue': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-    }
-  };
-
-  const getPaymentBadgeClass = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-      case 'partial': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-    }
-  };
-
   const filteredInvoices = invoices.filter(invoice => {
     if (searchQuery === '') return true;
     const query = searchQuery.toLowerCase();
@@ -357,129 +357,179 @@ export default function InvoicesClient() {
         searchPlaceholder="Search invoices by number, party name..."
       />
 
-      {/* Table */}
+      {/* Flexbox Card Layout */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="relative overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left font-medium">Date</th>
-                <th className="px-4 py-3 text-left font-medium">Invoice #</th>
-                <th className="px-4 py-3 text-left font-medium">Party</th>
-                <th className="px-4 py-3 text-left font-medium">Due Date</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-left font-medium">Payment</th>
-                <th className="px-4 py-3 text-left font-medium">Amount</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b">
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                    <td className="px-4 py-3 text-right"><Skeleton className="h-8 w-24 ml-auto" /></td>
-                  </tr>
-                ))
-              ) : filteredInvoices.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
-                      <FileText className="h-6 w-6 opacity-50" />
+        {loading ? (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="px-4 md:px-6 py-3 md:py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <Skeleton className="h-8 w-8 md:h-10 md:w-10 rounded-full" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
                     </div>
-                    <h3 className="text-lg font-medium">No invoices found</h3>
-                    <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first invoice to get started</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredInvoices.map((invoice) => (
-                  <tr key={getInvoiceId(invoice)} className="border-b hover:bg-muted/50">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDate(invoice.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap font-medium">
-                      {invoice.invoiceNumber}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {getPartyName(invoice)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge className={getStatusBadgeClass(invoice.status)}>
-                        {invoice.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge className={getPaymentBadgeClass(invoice.transactionId?.paymentStatus)}>
-                        {invoice.transactionId?.paymentStatus || '-'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap font-medium">
-                      ₹{(invoice.totalAmount || invoice.transactionId?.summary?.grandTotal || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredInvoices.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
+              <FileText className="h-6 w-6 opacity-50" />
+            </div>
+            <h3 className="text-lg font-medium">No invoices found</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">Create your first invoice to get started</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {filteredInvoices.map((invoice) => (
+              <div
+                key={getInvoiceId(invoice)}
+                className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                onClick={() => viewInvoice(invoice)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    viewInvoice(invoice);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    {/* Left: Icon + Info */}
+                    <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <span className="hidden sm:inline">{invoice.invoiceNumber} - </span>{getPartyName(invoice)}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getStatusBadgeClass(invoice.status)}`}>
+                            {invoice.status}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
+                            Due: {formatDate(invoice.dueDate)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Amount + Badges + Actions */}
+                    <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                      {/* Amount - desktop only */}
+                      <div className="text-right hidden sm:block">
+                        <p className="text-xs md:text-sm font-semibold text-gray-900 dark:text-white">
+                          ₹{(invoice.totalAmount || invoice.transactionId?.summary?.grandTotal || 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      {/* Payment status badge - desktop only */}
+                      {invoice.transactionId?.paymentStatus && invoice.transactionId.paymentStatus !== 'not-applicable' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium hidden sm:inline ${getPaymentBadgeClass(invoice.transactionId.paymentStatus)}`}>
+                          {invoice.transactionId.paymentStatus}
+                        </span>
+                      )}
+
+                      {/* Mobile compact amount */}
+                      <div className="sm:hidden text-right">
+                        <p className="text-[10px] font-semibold text-gray-900 dark:text-white">
+                          ₹{(invoice.totalAmount || invoice.transactionId?.summary?.grandTotal || 0).toFixed(2)}
+                        </p>
+                        {invoice.transactionId?.paymentStatus && invoice.transactionId.paymentStatus !== 'not-applicable' && (
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                            {invoice.transactionId.paymentStatus}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* 3-dot Action Menu */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            Actions
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className='bg-white/80'>
-                          <DropdownMenuItem onClick={() => viewInvoice(invoice)}>
+                        <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); viewInvoice(invoice); }}
+                          >
                             <Eye className="mr-2 h-4 w-4" />
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => downloadInvoice(invoice)}>
+
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); downloadInvoice(invoice); }}
+                          >
                             <Download className="mr-2 h-4 w-4" />
                             Download
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => printInvoice(invoice)}>
+
+                          <DropdownMenuItem
+                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); printInvoice(invoice); }}
+                          >
                             <Printer className="mr-2 h-4 w-4" />
                             Print
                           </DropdownMenuItem>
+
                           {invoice.status === 'draft' && (
-                            <DropdownMenuItem onClick={() => handleEditDraftInvoice(invoice)}>
+                            <DropdownMenuItem
+                              onSelect={(e) => { e.preventDefault(); e.stopPropagation(); handleEditDraftInvoice(invoice); }}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
                               Edit Draft
                             </DropdownMenuItem>
                           )}
+
                           {invoice.status === 'draft' && (
-                            <DropdownMenuItem onClick={() => handleConfirmDraftInvoice(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
+                            <DropdownMenuItem
+                              onSelect={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirmDraftInvoice(invoice); }}
+                              disabled={actionLoading === getInvoiceId(invoice)}
+                            >
                               <CheckCircle className="mr-2 h-4 w-4" />
                               Confirm Draft
                             </DropdownMenuItem>
                           )}
+
                           {invoice.status === 'draft' && (
                             <DropdownMenuItem
                               className="text-red-600"
-                              onClick={() => {
-                                setSelectedInvoice(invoice);
-                                setDeleteDialogOpen(true);
-                              }}
+                              onSelect={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedInvoice(invoice); setDeleteDialogOpen(true); }}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete Draft
                             </DropdownMenuItem>
                           )}
+
                           {(invoice.status === 'sent' || invoice.status === 'overdue') && (
                             <>
-                              <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
+                              <DropdownMenuItem
+                                onSelect={(e) => { e.preventDefault(); e.stopPropagation(); handleMarkAsPaid(invoice); }}
+                                disabled={actionLoading === getInvoiceId(invoice)}
+                              >
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Mark as Paid
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-red-600"
-                                onClick={() => {
-                                  setSelectedInvoice(invoice);
-                                  setCancelDialogOpen(true);
-                                }}
+                                onSelect={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedInvoice(invoice); setCancelDialogOpen(true); }}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Cancel Invoice
@@ -488,17 +538,17 @@ export default function InvoicesClient() {
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-gray-100 dark:border-gray-800">
             <p className="text-sm text-muted-foreground">
               Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
             </p>
