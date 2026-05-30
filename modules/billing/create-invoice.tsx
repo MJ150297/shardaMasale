@@ -286,7 +286,7 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
               });
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
 
       // Re-assert the form value after parties are available to sync Select
@@ -669,8 +669,8 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                               </SelectItem>
                             ));
                           })()}
-                          <SelectSeparator className="my-1" />
-                          <div className="border-t p-1">
+                          <SelectSeparator className="my-1" key="party-separator" />
+                          <div key="party-create-btn" className="border-t p-1">
                             <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
                               Create customer
                             </CommandCreateButton>

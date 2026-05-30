@@ -317,8 +317,23 @@ export async function POST(request: Request) {
       }
     }
 
+    // Load draft prefix from settings for draft documents
+    let draftPrefix: string | undefined;
+    if (transactionInput.status === 'draft') {
+      const db = mongoose.connection.db;
+      const settingsDoc = db
+        ? await db.collection('settings').findOne({
+            owner: new mongoose.Types.ObjectId(user.id),
+            shopId: user.activeShopId
+              ? new mongoose.Types.ObjectId(user.activeShopId)
+              : null,
+          })
+        : null;
+      draftPrefix = (settingsDoc?.billing as { draftPrefix?: string })?.draftPrefix;
+    }
+
     const transactionNumber = transactionInput.status === 'draft'
-      ? generateDraftNumber(`TRANSACTION-${transactionInput.type}`)
+      ? generateDraftNumber(`TXN-${transactionInput.type}`, draftPrefix)
       : await buildFinalTransactionNumber({
           ownerId: user.id,
           shopId: user.activeShopId ?? null,

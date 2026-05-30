@@ -135,13 +135,12 @@ export async function generateTransactionNumber(
   return `${normalizedPrefix}-${timestamp}-${random}`;
 }
 
-export function generateDraftNumber(scope: string): string {
-  const year = new Date().getFullYear();
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+export function generateDraftNumber(scope: string, prefix?: string): string {
+  const normalizedPrefix = (prefix || 'DRAFT').replace(/[-\s]+$/, '').toUpperCase();
   const normalizedScope = scope.replace(/[^A-Z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
 
-  return `DRAFT-${year}-${normalizedScope}-${timestamp}-${random}`;
+  return `${normalizedPrefix}-${normalizedScope}-${random}`;
 }
 
 // --- Number to Words (Indian Numbering System) ---

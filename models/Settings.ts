@@ -45,6 +45,7 @@ export interface BillingSettings {
   purchasePrefix: string;
   paymentPrefix: string;
   salePrefix: string;
+  draftPrefix: string;
   nextInvoiceSequence: number;
   nextPurchaseSequence: number;
   nextPaymentSequence: number;
@@ -323,6 +324,13 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             uppercase: true,
             maxlength: 12,
           },
+          draftPrefix: {
+            type: String,
+            default: "DRAFT",
+            trim: true,
+            uppercase: true,
+            maxlength: 12,
+          },
           nextInvoiceSequence: {
             type: Number,
             default: 1,
@@ -356,11 +364,12 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         },
         { _id: false },
       ),
-      default: () => ({
+        default: () => ({
         invoicePrefix: "INV",
         purchasePrefix: "PUR",
         paymentPrefix: "PAY",
         salePrefix: "SALE",
+        draftPrefix: "DRAFT",
         nextInvoiceSequence: 1,
         nextPurchaseSequence: 1,
         nextPaymentSequence: 1,
@@ -538,6 +547,7 @@ settingsSchema.pre("validate", function preValidate() {
   this.billing.purchasePrefix = this.billing.purchasePrefix.trim().toUpperCase();
   this.billing.paymentPrefix = this.billing.paymentPrefix.trim().toUpperCase();
   this.billing.salePrefix = this.billing.salePrefix.trim().toUpperCase();
+  this.billing.draftPrefix = this.billing.draftPrefix.trim().toUpperCase();
 });
 
 const Settings =

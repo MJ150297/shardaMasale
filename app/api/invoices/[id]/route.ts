@@ -557,3 +557,51 @@ export async function PATCH(
     session.endSession();
   }
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { user } = await requireActiveBusinessSubscription();
+    await connectToDatabase();
+    const { id } = await context.params;
+
+    const invoice = await Invoice.findOne({ _id: id, owner: user.id }).session(session);
+
+    if (!invoice) {
+      throw new AppError('Invoice not found', 404);
+    }
+
+    if (invoice.status !== 'draft') {
+      throw new AppError('Only draft invoices can be deleted', 400);
+    }
+
+    // Delete linked transaction
+    await Transaction.deleteOne({ _id: invoice.transactionId, owner: user.id }).session(session);
+
+    // Delete the invoice
+    await Invoice.deleteOne({ _id: invoice._id, owner: user.id }).session(session);
+
+    await session.commitTransaction();
+
+    return NextResponse.json({
+      message: 'Draft invoice deleted successfully',
+    });
+
+  } catch (error: unknown) {
+    await session.abortTransaction();
+
+    const status = getSafeStatus(error);
+    const validStatus = Math.min(Math.max(Math.trunc(status), 200), 599);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete draft invoice' },
+      { status: validStatus },
+    );
+  } finally {
+    session.endSession();
+  }
+}

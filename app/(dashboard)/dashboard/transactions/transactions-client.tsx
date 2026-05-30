@@ -23,6 +23,7 @@ import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateSaleReturnDialog from '@/components/create-sale-return-dialog';
 import CreatePurchaseReturnDialog from '@/components/create-purchase-return-dialog';
 import TransactionForm from '@/components/transaction-form';
+import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import RequireShopGuard from '@/components/require-shop-guard';
 
 interface TransactionLineItem {
@@ -88,6 +89,25 @@ interface Transaction {
   } | null;
 }
 
+interface Invoice {
+  id?: string;
+  _id?: string;
+  invoiceNumber: string;
+  transactionId: Transaction;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  dueDate: string | Date;
+  totalAmount?: number;
+  party?: {
+    id: string;
+    displayName?: string;
+    name?: string;
+  } | null;
+  notes?: string | null;
+  termsAndConditions?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
 interface Pagination {
   page: number;
   limit: number;
@@ -107,10 +127,10 @@ function getTransactionItemType(transaction: Transaction) {
   if (!transaction.lineItems || transaction.lineItems.length === 0) {
     return '-';
   }
-  
+
   let hasProduct = false;
   let hasService = false;
-  
+
   for (const item of transaction.lineItems) {
     // @ts-ignore - itemType populated from API nested populate
     const itemType = item.item?.itemType || item.itemType;
@@ -120,7 +140,7 @@ function getTransactionItemType(transaction: Transaction) {
       hasProduct = true;
     }
   }
-  
+
   if (hasProduct && hasService) {
     return 'Mixed';
   } else if (hasService) {
@@ -137,11 +157,13 @@ export default function TransactionsClient() {
   const [filters, setFilters] = useState({ type: '', status: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState<'payment-in' | 'payment-out' | null>(null);
+  const [invoiceToPreview, setInvoiceToPreview] = useState<Invoice | null>(null);
+
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
       if (searchQuery === '') return true;
-      
+
       const query = searchQuery.toLowerCase();
       return (
         transaction.transactionNumber.toLowerCase().includes(query) ||
@@ -150,18 +172,22 @@ export default function TransactionsClient() {
       );
     });
   }, [transactions, searchQuery]);
-  
+
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [draftTransactionToEdit, setDraftTransactionToEdit] = useState<Transaction | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [transactionToCancel, setTransactionToCancel] = useState<Transaction | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [paymentInEditOpen, setPaymentInEditOpen] = useState(false);
+  const [paymentInEditTransaction, setPaymentInEditTransaction] = useState<Transaction | null>(null);
+  const [paymentOutEditOpen, setPaymentOutEditOpen] = useState(false);
+  const [paymentOutEditTransaction, setPaymentOutEditTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     loadTransactions();
@@ -179,7 +205,7 @@ export default function TransactionsClient() {
 
       const res = await fetch(`/api/transactions?${params}`);
       const data = await res.json();
-      
+
       if (res.ok) {
         setTransactions(
           (data.data || []).map((transaction: Transaction) => ({
@@ -198,7 +224,7 @@ export default function TransactionsClient() {
 
   async function handleDeleteTransaction() {
     if (!transactionToDelete) return;
-    
+
     try {
       setIsDeleting(true);
       const transactionId = getTransactionId(transactionToDelete);
@@ -261,6 +287,8 @@ export default function TransactionsClient() {
       case 'purchase':
       case 'sale-return':
       case 'purchase-return':
+      case 'payment-in':
+      case 'payment-out':
         return type;
       default:
         return null;
@@ -321,6 +349,18 @@ export default function TransactionsClient() {
   );
 
   function handleEditDraft(transaction: Transaction) {
+    if (transaction.type === 'payment-in') {
+      setPaymentInEditTransaction(transaction);
+      setPaymentInEditOpen(true);
+      return;
+    }
+
+    if (transaction.type === 'payment-out') {
+      setPaymentOutEditTransaction(transaction);
+      setPaymentOutEditOpen(true);
+      return;
+    }
+
     const editMode = getTransactionEditMode(transaction.type);
     if (!editMode) {
       toast.info('Editing this draft type is not wired yet');
@@ -435,6 +475,34 @@ export default function TransactionsClient() {
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
     }
   };
+
+  async function handleViewInvoice(invoiceId: string) {
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`);
+      if (!res.ok) throw new Error('Failed to load invoice');
+      const data = await res.json();
+      setInvoiceToPreview(data.data || data); // adjust based on your API response shape
+    } catch (error) {
+      toast.error('Could not load invoice details');
+      console.error(error);
+    }
+  }
+
+  function downloadInvoice(invoice: Invoice) {
+    toast.info('Downloading invoice...');
+    window.open(`/api/invoices/${invoice._id}/pdf`, '_blank');
+  }
+
+  function printInvoice(invoice: Invoice) {
+    toast.info('Preparing invoice for print...');
+    const printWindow = window.open(`/api/invoices/${invoice._id}/pdf#toolbar=0`, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -551,7 +619,7 @@ export default function TransactionsClient() {
                 ))
               ) : filteredTransactions.length === 0 ? (
                 <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-4">
                       <span className="text-2xl">📋</span>
                     </div>
@@ -610,26 +678,24 @@ export default function TransactionsClient() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className='bg-white/80'>
-                           <DropdownMenuItem onClick={() => viewTransaction(transaction)}>
-                             <Eye className="mr-2 h-4 w-4" />
-                             View
-                           </DropdownMenuItem>
-                           
-                           {transaction.type === 'sale' && transaction.status === 'confirmed' && !transaction.invoiceId && (
-                             <DropdownMenuItem onClick={() => generateInvoiceForTransaction(transaction)}>
-                               <FileText className="mr-2 h-4 w-4" />
-                               Generate Invoice
-                             </DropdownMenuItem>
-                           )}
+                          <DropdownMenuItem onClick={() => viewTransaction(transaction)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View
+                          </DropdownMenuItem>
 
-                           {transaction.invoiceId && (
-                             <DropdownMenuItem onClick={() => {
-                               window.open(`/api/invoices/${transaction.invoiceId!._id}/pdf`, '_blank');
-                             }}>
-                               <FileText className="mr-2 h-4 w-4" />
-                               View Invoice
-                             </DropdownMenuItem>
-                           )}
+                          {transaction.type === 'sale' && transaction.status === 'confirmed' && !transaction.invoiceId && (
+                            <DropdownMenuItem onClick={() => generateInvoiceForTransaction(transaction)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Generate Invoice
+                            </DropdownMenuItem>
+                          )}
+
+                          {transaction.invoiceId && (
+                            <DropdownMenuItem onClick={() => handleViewInvoice(transaction.invoiceId!._id)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              View Invoice
+                            </DropdownMenuItem>
+                          )}
                           {transaction.status === 'draft' && (
                             <DropdownMenuItem onClick={() => handleEditDraft(transaction)}>
                               <Edit className="mr-2 h-4 w-4" />
@@ -656,7 +722,7 @@ export default function TransactionsClient() {
                             Print
                           </DropdownMenuItem>
                           {transaction.status === 'draft' && (
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="text-red-600"
                               onClick={() => confirmDelete(transaction)}
                             >
@@ -712,7 +778,7 @@ export default function TransactionsClient() {
           </DialogHeader>
           {draftTransactionToEdit && (
             <TransactionForm
-              mode={getTransactionEditMode(draftTransactionToEdit.type) ?? 'sale'}
+              mode={(getTransactionEditMode(draftTransactionToEdit.type) as 'sale' | 'purchase' | 'sale-return' | 'purchase-return') ?? 'sale'}
               isOpen={editDialogOpen}
               editingTransactionId={getTransactionId(draftTransactionToEdit)}
               initialValues={draftTransactionInitialValues}
@@ -772,6 +838,55 @@ export default function TransactionsClient() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Payment In Edit Dialog */}
+      {paymentInEditTransaction && (
+        <CreatePaymentInDialog
+          open={paymentInEditOpen}
+          onOpenChange={(open) => {
+            setPaymentInEditOpen(open);
+            if (!open) setPaymentInEditTransaction(null);
+          }}
+          editingTransactionId={getTransactionId(paymentInEditTransaction)}
+          initialValues={{
+            party: (paymentInEditTransaction.party as { _id?: string } | null)?._id || paymentInEditTransaction.party?.id || '',
+            transactionDate: new Date(paymentInEditTransaction.transactionDate),
+            amount: paymentInEditTransaction.summary.grandTotal || 0,
+            settlementDiscount: 0,
+            payment: paymentInEditTransaction.payment || null,
+            notes: paymentInEditTransaction.notes || null,
+          }}
+          onCreated={() => {
+            setPaymentInEditOpen(false);
+            setPaymentInEditTransaction(null);
+            loadTransactions();
+          }}
+        />
+      )}
+
+      {/* Payment Out Edit Dialog */}
+      {paymentOutEditTransaction && (
+        <CreatePaymentOutDialog
+          open={paymentOutEditOpen}
+          onOpenChange={(open) => {
+            setPaymentOutEditOpen(open);
+            if (!open) setPaymentOutEditTransaction(null);
+          }}
+          editingTransactionId={getTransactionId(paymentOutEditTransaction)}
+          initialValues={{
+            party: (paymentOutEditTransaction.party as { _id?: string } | null)?._id || paymentOutEditTransaction.party?.id || '',
+            transactionDate: new Date(paymentOutEditTransaction.transactionDate),
+            amount: paymentOutEditTransaction.summary.grandTotal || 0,
+            payment: paymentOutEditTransaction.payment || null,
+            notes: paymentOutEditTransaction.notes || null,
+          }}
+          onCreated={() => {
+            setPaymentOutEditOpen(false);
+            setPaymentOutEditTransaction(null);
+            loadTransactions();
+          }}
+        />
+      )}
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -796,6 +911,18 @@ export default function TransactionsClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {invoiceToPreview && (
+        <InvoicePreviewModal
+          open={!!invoiceToPreview}
+          onOpenChange={(open) => {
+            if (!open) setInvoiceToPreview(null);
+          }}
+          invoice={invoiceToPreview}
+          onDownload={() => downloadInvoice(invoiceToPreview)}
+          onPrint={() => printInvoice(invoiceToPreview)}
+        />
+      )}
     </div>
   );
 }

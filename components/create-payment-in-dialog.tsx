@@ -134,6 +134,19 @@ interface CreatePaymentInDialogProps {
   initialPartyName?: string | null;
   initialPartyPhone?: string | null;
   initialSelectedInvoiceIds?: string[];
+  editingTransactionId?: string | null;
+  initialValues?: {
+    party: string;
+    transactionDate: Date;
+    amount: number;
+    settlementDiscount: number;
+    payment: {
+      method?: string | null;
+      referenceNumber?: string | null;
+      notes?: string | null;
+    } | null;
+    notes?: string | null;
+  } | null;
 }
 
 function getDefaultPaymentValues(
@@ -170,6 +183,8 @@ export default function CreatePaymentInDialog({
   initialPartyName,
   initialPartyPhone,
   initialSelectedInvoiceIds,
+  editingTransactionId,
+  initialValues,
 }: CreatePaymentInDialogProps) {
   const initialPartyIdRef = useRef(initialPartyId);
   const initialPartyNameRef = useRef(initialPartyName);
@@ -207,18 +222,36 @@ export default function CreatePaymentInDialog({
     }
   }, [controlledOnOpenChange, onCreated]);
 
+  const isEditing = !!editingTransactionId;
+
   useEffect(() => {
     if (open) {
-      form.reset(
-        getDefaultPaymentValues(
-          initialPartyIdRef.current,
-          initialSelectedInvoiceIdsRef.current,
-        ),
-      );
+      if (initialValues) {
+        form.reset({
+          party: initialValues.party,
+          transactionDate: initialValues.transactionDate,
+          amount: initialValues.amount,
+          settlementDiscount: initialValues.settlementDiscount,
+          appliedInvoiceIds: [],
+          payment: {
+            method: (initialValues.payment?.method as PaymentMethod) || null,
+            referenceNumber: initialValues.payment?.referenceNumber || null,
+            notes: initialValues.payment?.notes || null,
+          },
+          notes: initialValues.notes || null,
+        });
+      } else {
+        form.reset(
+          getDefaultPaymentValues(
+            initialPartyIdRef.current,
+            initialSelectedInvoiceIdsRef.current,
+          ),
+        );
+      }
       setPartySearchQuery('');
       setOpenInvoices([]);
     }
-  }, [open, form]);
+  }, [open, form, initialValues]);
 
   const selectedPartyId = form.watch('party');
   const enteredAmount = Number(form.watch('amount') || 0);
@@ -423,38 +456,47 @@ export default function CreatePaymentInDialog({
     setSubmitStatus(status);
 
     try {
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
+      const payload = {
+        type: 'payment-in',
+        party: values.party,
+        transactionDate: values.transactionDate,
+        lineItems: [],
+        summary: {
+          roundOff: 0,
+          grandTotal: amount,
+          paidAmount: amount,
+        },
+        payment: values.payment,
+        appliedInvoiceIds: values.appliedInvoiceIds,
+        appliedTransactionIds: [],
+        paymentDiscountAmount: discount,
+        notes: values.notes,
+        tags: [],
+        status,
+      };
+
+      const url = isEditing
+        ? `/api/transactions/${editingTransactionId}`
+        : '/api/transactions';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'payment-in',
-          party: values.party,
-          transactionDate: values.transactionDate,
-          lineItems: [],
-          summary: {
-            roundOff: 0,
-            grandTotal: amount,
-            paidAmount: amount,
-          },
-          payment: values.payment,
-          appliedInvoiceIds: values.appliedInvoiceIds,
-          appliedTransactionIds: [],
-          paymentDiscountAmount: discount,
-          notes: values.notes,
-          tags: [],
-          status,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || error.message || 'Failed to create payment transaction');
+        throw new Error(error.error || error.message || 'Failed to save payment transaction');
       }
 
       toast.success(
-        status === 'draft'
-          ? 'Payment in saved as draft'
-          : 'Payment in recorded successfully',
+        isEditing
+          ? 'Payment in updated successfully'
+          : status === 'draft'
+            ? 'Payment in saved as draft'
+            : 'Payment in recorded successfully',
       );
       form.reset(
         getDefaultPaymentValues(
@@ -465,9 +507,9 @@ export default function CreatePaymentInDialog({
       handleOpenChange(false);
       onCreated?.();
     } catch (error) {
-      console.error('Failed to create payment transaction:', error);
+      console.error('Failed to save payment transaction:', error);
       toast.error(
-        error instanceof Error ? error.message : 'Failed to create payment transaction',
+        error instanceof Error ? error.message : 'Failed to save payment transaction',
       );
     } finally {
       setLoading(false);
@@ -495,9 +537,9 @@ export default function CreatePaymentInDialog({
           showTrigger={false}
         />
         <DialogHeader>
-          <DialogTitle>Record Payment In</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit Payment In' : 'Record Payment In'}</DialogTitle>
           <DialogDescription>
-            Record money received from a customer or party.
+            {isEditing ? 'Update the draft payment details.' : 'Record money received from a customer or party.'}
           </DialogDescription>
         </DialogHeader>
 

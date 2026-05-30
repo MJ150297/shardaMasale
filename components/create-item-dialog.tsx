@@ -195,16 +195,23 @@ export default function CreateItemDialog({
         body: JSON.stringify(data),
       });
 
-      const item = (await response.json()) as CreatedItem | { error?: string };
+      const rawItem = (await response.json()) as Record<string, unknown> & { error?: string };
 
-      if (!response.ok) {
-        throw new Error('error' in item ? item.error || 'Failed to create item' : 'Failed to create item');
+      if ('error' in rawItem) {
+        toast.error(rawItem.error || 'Failed to create item');
+        return;
       }
 
-      toast.success('Item created successfully!');
-      handleOpenChange(false);
+      // Ensure _id is always present (API may return 'id' instead of '_id' due to mongooseDocumentTransform)
+      const item: CreatedItem = {
+        ...rawItem,
+        _id: (rawItem._id as string) || (rawItem.id as string) || '',
+        name: (rawItem.name as string) || '',
+      } as CreatedItem;
+
+      toast.success('Item created successfully');
       form.reset();
-      onItemCreated?.(item as CreatedItem);
+      onItemCreated?.(item);
     } catch (error) {
       console.error('Error creating item:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create item');

@@ -65,6 +65,7 @@ export default function SettingsPage() {
         purchasePrefix: "PUR",
         paymentPrefix: "PAY",
         salePrefix: "SALE",
+        draftPrefix: "DRAFT",
         nextInvoiceSequence: 1,
         nextPurchaseSequence: 1,
         nextPaymentSequence: 1,
@@ -438,7 +439,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-5 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="billing.invoicePrefix">Invoice Prefix</Label>
                     <Input id="billing.invoicePrefix" {...register("billing.invoicePrefix")} />
@@ -454,6 +455,10 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="billing.salePrefix">Sale Prefix</Label>
                     <Input id="billing.salePrefix" {...register("billing.salePrefix")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="billing.draftPrefix">Draft Prefix</Label>
+                    <Input id="billing.draftPrefix" {...register("billing.draftPrefix")} />
                   </div>
                 </div>
 

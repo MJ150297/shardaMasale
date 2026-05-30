@@ -865,8 +865,8 @@ export default function TransactionForm({
                               <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select item" className="truncate" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white">
-                                <div className="px-3 py-2">
+                               <SelectContent className="bg-white">
+                                <div key="item-search" className="px-3 py-2">
                                   <Input
                                     value={itemSearchQueryByIndex[index] ?? ''}
                                     onChange={(event) => setItemSearchQueryByIndex(prev => ({
@@ -889,7 +889,7 @@ export default function TransactionForm({
 
                                   if (filteredItems.length === 0) {
                                     return (
-                                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                                      <div key="item-empty" className="px-3 py-2 text-sm text-muted-foreground">
                                         No item found.
                                       </div>
                                     );
@@ -908,8 +908,8 @@ export default function TransactionForm({
                                     </SelectItem>
                                   ));
                                 })()}
-                                <SelectSeparator className="my-1" />
-                                <div className="border-t p-1">
+                                <SelectSeparator key="item-separator" className="my-1" />
+                                <div key="item-create" className="border-t p-1">
                                   <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
                                     Create item
                                   </CommandCreateButton>
@@ -1076,7 +1076,7 @@ export default function TransactionForm({
                                   <SelectValue placeholder="Select item" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white">
-                                  <div className="px-3 py-2">
+                                  <div key="mob-item-search" className="px-3 py-2">
                                     <Input
                                       value={itemSearchQueryByIndex[index] ?? ''}
                                       onChange={(event) => setItemSearchQueryByIndex(prev => ({
@@ -1099,7 +1099,7 @@ export default function TransactionForm({
 
                                     if (filteredItems.length === 0) {
                                       return (
-                                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                                        <div key="mob-item-empty" className="px-3 py-2 text-sm text-muted-foreground">
                                           No item found.
                                         </div>
                                       );
@@ -1118,8 +1118,8 @@ export default function TransactionForm({
                                       </SelectItem>
                                     ));
                                   })()}
-                                  <SelectSeparator className="my-1" />
-                                  <div className="border-t p-1">
+                                  <SelectSeparator key="mob-item-separator" className="my-1" />
+                                  <div key="mob-item-create" className="border-t p-1">
                                     <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
                                       Create item
                                     </CommandCreateButton>

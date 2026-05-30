@@ -259,11 +259,26 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createInvoiceSchema.parse(body);
 
+    // Load draft prefix from settings for draft documents
+    let draftPrefix: string | undefined;
+    if (validated.status === 'draft') {
+      const db = mongoose.connection.db;
+      const settingsDoc = db
+        ? await db.collection('settings').findOne({
+            owner: new mongoose.Types.ObjectId(user.id),
+            shopId: user.activeShopId
+              ? new mongoose.Types.ObjectId(user.activeShopId)
+              : null,
+          })
+        : null;
+      draftPrefix = (settingsDoc?.billing as { draftPrefix?: string })?.draftPrefix;
+    }
+
     const invoiceNumber = validated.status === 'draft'
-      ? generateDraftNumber('INVOICE')
+      ? generateDraftNumber('INV', draftPrefix)
       : await buildFinalInvoiceNumber(user.id, user.activeShopId);
     const transactionNumber = validated.status === 'draft'
-      ? generateDraftNumber('SALE')
+      ? generateDraftNumber('SALE', draftPrefix)
       : await buildFinalSaleTransactionNumber(user.id, user.activeShopId);
 
     // First create transaction

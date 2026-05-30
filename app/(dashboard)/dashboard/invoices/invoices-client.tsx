@@ -93,6 +93,8 @@ export default function InvoicesClient() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -147,6 +149,30 @@ export default function InvoicesClient() {
       toast.error('Failed to mark invoice as paid');
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function handleDeleteDraftInvoice(invoice: Invoice) {
+    const invoiceId = getInvoiceId(invoice);
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(data.message || 'Draft invoice deleted successfully');
+        setDeleteDialogOpen(false);
+        loadInvoices();
+      } else {
+        toast.error(data.error || 'Failed to delete draft invoice');
+      }
+    } catch (error) {
+      toast.error('Failed to delete draft invoice');
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -430,6 +456,18 @@ export default function InvoicesClient() {
                               Confirm Draft
                             </DropdownMenuItem>
                           )}
+                          {invoice.status === 'draft' && (
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => {
+                                setSelectedInvoice(invoice);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Draft
+                            </DropdownMenuItem>
+                          )}
                           {(invoice.status === 'sent' || invoice.status === 'overdue') && (
                             <>
                               <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice)} disabled={actionLoading === getInvoiceId(invoice)}>
@@ -567,6 +605,35 @@ export default function InvoicesClient() {
               }}
             >
               {cancelLoading ? 'Cancelling...' : 'Yes, Cancel Invoice'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Draft Invoice Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Draft Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete draft invoice <strong>{selectedInvoice?.invoiceNumber}</strong>?
+              This will remove the invoice and its linked transaction entirely.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Keep Invoice</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleteLoading}
+              onClick={(e) => {
+                e.preventDefault();
+                if (selectedInvoice) {
+                  handleDeleteDraftInvoice(selectedInvoice);
+                }
+              }}
+            >
+              {deleteLoading ? 'Deleting...' : 'Yes, Delete Draft'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
