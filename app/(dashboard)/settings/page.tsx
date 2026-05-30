@@ -35,7 +35,6 @@ export default function SettingsPage() {
         pan: "",
         address: {
           line1: "",
-          line2: "",
           city: "",
           state: "",
           postalCode: "",
@@ -228,7 +227,6 @@ export default function SettingsPage() {
                   <Label>Business Address</Label>
                   <div className="space-y-3">
                     <Input placeholder="Address Line 1" {...register("business.address.line1")} />
-                    <Input placeholder="Address Line 2" {...register("business.address.line2")} />
                     <div className="grid grid-cols-3 gap-4">
                       <Input placeholder="City" {...register("business.address.city")} />
                       <Input placeholder="State" {...register("business.address.state")} />

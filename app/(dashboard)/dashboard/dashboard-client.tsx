@@ -32,15 +32,6 @@ import { cn } from '@/lib/utils';
 import { useActiveShop } from '@/components/providers/shop-provider';
 import OnboardingBanner from '@/components/onboarding-banner';
 
-const salesData = [
-  { name: 'Jan', sales: 4000, orders: 240 },
-  { name: 'Feb', sales: 3000, orders: 198 },
-  { name: 'Mar', sales: 5000, orders: 300 },
-  { name: 'Apr', sales: 2780, orders: 189 },
-  { name: 'May', sales: 4890, orders: 278 },
-  { name: 'Jun', sales: 5390, orders: 349 },
-];
-
 interface LowStockItem {
   _id: string;
   name: string;
@@ -163,6 +154,25 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [page, setPage] = useState(1);
+
+  // Chart date range and data
+  const [chartStartDate, setChartStartDate] = useState<Date | undefined>();
+  const [chartEndDate, setChartEndDate] = useState<Date | undefined>();
+
+  const getChartKey = () => {
+    let url = '/api/reports/dashboard-charts';
+    if (chartStartDate) url += `?startDate=${chartStartDate.toISOString()}`;
+    if (chartEndDate) url += `${chartStartDate ? '&' : '?'}endDate=${chartEndDate.toISOString()}`;
+    return url;
+  };
+
+  const { data: chartResponse } = useSWR<{ data: Array<{ name: string; sales: number; orders: number }> }>(
+    getChartKey(),
+    (url) => fetch(url).then(res => res.json()),
+    { revalidateOnFocus: false }
+  );
+
+  const chartData = chartResponse?.data || [];
 
   const PAGE_SIZE = 4;
 
@@ -481,18 +491,35 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
         </div>
       </div>
 
+      {/* Charts - Date Range Filter */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Charts</h2>
+        <DateRangeFilter
+          startDate={chartStartDate}
+          endDate={chartEndDate}
+          onDateChange={(start, end) => {
+            setChartStartDate(start);
+            setChartEndDate(end);
+          }}
+        />
+      </div>
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Sales Overview</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Monthly sales performance</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {chartStartDate && chartEndDate
+                  ? `${chartStartDate.toLocaleDateString('en-IN')} - ${chartEndDate.toLocaleDateString('en-IN')}`
+                  : 'Monthly sales performance'}
+              </p>
             </div>
           </div>
           <div className="h-72 w-full min-w-72">
             <ResponsiveContainer width="100%" height={280} minWidth={300}>
-              <AreaChart data={salesData}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -520,12 +547,16 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Orders Trend</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Last 6 months</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {chartStartDate && chartEndDate
+                  ? `${chartStartDate.toLocaleDateString('en-IN')} - ${chartEndDate.toLocaleDateString('en-IN')}`
+                  : 'Monthly order count'}
+              </p>
             </div>
           </div>
           <div className="h-72 w-full min-w-72">
             <ResponsiveContainer width="100%" height={280} minWidth={200}>
-              <BarChart data={salesData}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#f0f0f0'} vertical={false} />
                 <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />

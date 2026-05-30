@@ -8,7 +8,6 @@ import {
 
 export interface SettingsAddress {
   line1: string;
-  line2?: string | null;
   city: string;
   state: string;
   postalCode: string;
@@ -118,12 +117,6 @@ const addressSchema = new Schema<SettingsAddress>(
     line1: {
       type: String,
       default: "",
-      trim: true,
-      maxlength: 200,
-    },
-    line2: {
-      type: String,
-      default: null,
       trim: true,
       maxlength: 200,
     },

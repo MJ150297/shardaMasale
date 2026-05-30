@@ -612,7 +612,7 @@ export default function InvoicesClient() {
 
       {/* Delete Draft Invoice Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className='bg-white/80'>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Draft Invoice</AlertDialogTitle>
             <AlertDialogDescription>
