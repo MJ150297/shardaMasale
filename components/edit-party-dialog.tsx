@@ -57,14 +57,27 @@ interface EditPartyDialogProps {
   party: Party;
   onPartyUpdated?: () => void;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export default function EditPartyDialog({
   party,
   onPartyUpdated,
-  children
+  children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: EditPartyDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  }
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm({
@@ -103,7 +116,7 @@ export default function EditPartyDialog({
       }
 
       toast.success('Party updated successfully!');
-      setOpen(false);
+      handleOpenChange(false);
       onPartyUpdated?.();
     } catch (error) {
       console.error('Error updating party:', error);
@@ -114,11 +127,13 @@ export default function EditPartyDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || <Button variant="default" size="sm">Edit Party</Button>}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl bg-white/80" onClick={(e) => e.stopPropagation()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {children ? (
+        <DialogTrigger asChild>
+          {children}
+        </DialogTrigger>
+      ) : null}
+      <DialogContent className="sm:max-w-2xl bg-white/80">
         <DialogHeader>
           <DialogTitle>Edit Party</DialogTitle>
           <DialogDescription>
@@ -288,7 +303,7 @@ export default function EditPartyDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={isSubmitting}
               >
                 Cancel

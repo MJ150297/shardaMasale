@@ -57,6 +57,12 @@ export default function ItemsClient({ items }: ItemsClientProps) {
   const [selectedItem, setSelectedItem] = useState<(IItem & { _id: string }) | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  // Separate state for dialogs triggered from dropdown
+  const [editItemOpen, setEditItemOpen] = useState(false);
+  const [editItemTarget, setEditItemTarget] = useState<(IItem & { _id: string }) | null>(null);
+  const [stockAdjustOpen, setStockAdjustOpen] = useState(false);
+  const [stockAdjustTarget, setStockAdjustTarget] = useState<(IItem & { _id: string }) | null>(null);
+
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchesSearch = searchQuery === '' || 
@@ -141,13 +147,6 @@ export default function ItemsClient({ items }: ItemsClientProps) {
                   onClick={() => {
                     setSelectedItem(item);
                     setPreviewOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedItem(item);
-                      setPreviewOpen(true);
-                    }
                   }}
                   role="button"
                   tabIndex={0}
@@ -244,25 +243,25 @@ export default function ItemsClient({ items }: ItemsClientProps) {
                           <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
                             {item.itemType === 'product' && (
                               <DropdownMenuItem
-                                onSelect={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setStockAdjustTarget(item);
+                                  setStockAdjustOpen(true);
+                                }}
                               >
-                                <StockAdjustmentDialog
-                                  item={item}
-                                  onAdjustmentComplete={() => window.location.reload()}
-                                >
-                                  <span className="w-full inline-block">Adjust Stock</span>
-                                </StockAdjustmentDialog>
+                                Adjust Stock
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              onSelect={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditItemTarget(item);
+                                setEditItemOpen(true);
+                              }}
                             >
-                              <EditItemDialog
-                                item={item}
-                                onItemUpdated={() => window.location.reload()}
-                              >
-                                <span className="w-full inline-block">Edit</span>
-                              </EditItemDialog>
+                              Edit
                             </DropdownMenuItem>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -321,6 +320,34 @@ export default function ItemsClient({ items }: ItemsClientProps) {
           </div>
         )}
       </div>
+
+      {/* Edit Item Dialog - rendered outside dropdown */}
+      {editItemTarget && (
+        <EditItemDialog
+          key={"edit-" + editItemTarget._id}
+          item={editItemTarget}
+          open={editItemOpen}
+          onOpenChange={(open) => {
+            setEditItemOpen(open);
+            if (!open) setEditItemTarget(null);
+          }}
+          onItemUpdated={() => window.location.reload()}
+        />
+      )}
+
+      {/* Stock Adjustment Dialog - rendered outside dropdown */}
+      {stockAdjustTarget && (
+        <StockAdjustmentDialog
+          key={"adjust-" + stockAdjustTarget._id}
+          item={stockAdjustTarget}
+          open={stockAdjustOpen}
+          onOpenChange={(open) => {
+            setStockAdjustOpen(open);
+            if (!open) setStockAdjustTarget(null);
+          }}
+          onAdjustmentComplete={() => window.location.reload()}
+        />
+      )}
 
       <ItemPreviewDialog
         item={selectedItem}

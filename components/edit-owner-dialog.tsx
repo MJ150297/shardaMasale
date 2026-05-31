@@ -224,7 +224,7 @@ export default function EditOwnerDialog({
       <DialogTrigger asChild>
         {children || <Button variant="default" size="sm">Edit Owner</Button>}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl bg-white/80 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <DialogContent className="sm:max-w-2xl bg-white/80 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCog className="h-5 w-5" />

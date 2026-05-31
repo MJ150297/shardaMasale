@@ -477,7 +477,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
               key={index}
               className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
               onClick={() => handleViewTransaction(transaction)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleViewTransaction(transaction); } }}
+              onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); handleViewTransaction(transaction); } }}
               role="button"
               tabIndex={0}
             >

@@ -65,6 +65,10 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [partyTypeFilter, setPartyTypeFilter] = useState('all');
 
+  // Separate state for edit party dialog triggered from dropdown
+  const [editPartyOpen, setEditPartyOpen] = useState(false);
+  const [editPartyTarget, setEditPartyTarget] = useState<Party | null>(null);
+
   const filteredParties = useMemo(() => {
     return parties.filter(party => {
       const matchesSearch = searchQuery === '' || 
@@ -150,7 +154,7 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
                 className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 onClick={() => router.push(`/dashboard/parties/${party._id}`)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
                     e.preventDefault();
                     router.push(`/dashboard/parties/${party._id}`);
                   }
@@ -220,14 +224,14 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
-                            onSelect={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditPartyTarget(party);
+                              setEditPartyOpen(true);
+                            }}
                           >
-                            <EditPartyDialog
-                              party={party}
-                              onPartyUpdated={() => window.location.reload()}
-                            >
-                              <span className="w-full inline-block">Edit Party</span>
-                            </EditPartyDialog>
+                            Edit Party
                           </DropdownMenuItem>
 
                           <AlertDialog>
@@ -286,6 +290,17 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
           </div>
         )}
       </div>
+
+      {/* Edit Party Dialog - rendered outside dropdown */}
+      {editPartyTarget && (
+        <EditPartyDialog
+          key={editPartyTarget._id}
+          party={editPartyTarget}
+          open={editPartyOpen}
+          onOpenChange={setEditPartyOpen}
+          onPartyUpdated={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

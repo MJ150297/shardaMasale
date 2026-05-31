@@ -50,14 +50,27 @@ interface StockAdjustmentDialogProps {
   };
   onAdjustmentComplete: () => void;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export default function StockAdjustmentDialog({ 
   item, 
   onAdjustmentComplete,
-  children 
+  children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: StockAdjustmentDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  }
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm({
@@ -97,7 +110,7 @@ export default function StockAdjustmentDialog({
         throw new Error(data.error || 'Failed to adjust stock');
       }
 
-      setOpen(false);
+      handleOpenChange(false);
       form.reset();
       onAdjustmentComplete();
     } catch (error: any) {
@@ -114,11 +127,13 @@ export default function StockAdjustmentDialog({
   const difference = currentQuantity - item.stock.currentQuantity;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || <Button variant="default" size="sm">Adjust Stock</Button>}
-      </DialogTrigger>
-      <DialogContent className="max-w-[425px] bg-white/80" onClick={(e) => e.stopPropagation()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {children ? (
+        <DialogTrigger asChild>
+          {children}
+        </DialogTrigger>
+      ) : null}
+      <DialogContent className="max-w-[425px] bg-white/80">
         <DialogHeader>
           <DialogTitle>Adjust Stock</DialogTitle>
         </DialogHeader>
@@ -197,7 +212,7 @@ export default function StockAdjustmentDialog({
                 <Button 
                   type="button" 
                   variant="secondary" 
-                  onClick={() => setOpen(false)}
+                  onClick={() => handleOpenChange(false)}
                   disabled={isLoading}
                 >
                   Cancel

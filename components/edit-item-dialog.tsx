@@ -82,14 +82,27 @@ interface EditItemDialogProps {
   item: (IItem & { _id: string });
   onItemUpdated?: () => void;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export default function EditItemDialog({
   item,
   onItemUpdated,
-  children
+  children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: EditItemDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (controlledOnOpenChange) {
+      controlledOnOpenChange(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tagInput, setTagInput] = useState('');
 
@@ -165,7 +178,7 @@ export default function EditItemDialog({
       }
 
       toast.success('Item updated successfully!');
-      setOpen(false);
+      handleOpenChange(false);
       onItemUpdated?.();
     } catch (error) {
       console.error('Error updating item:', error);
@@ -201,11 +214,13 @@ export default function EditItemDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children || <Button variant="default" size="sm">Edit Item</Button>}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-white" onClick={(e) => e.stopPropagation()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {children ? (
+        <DialogTrigger asChild>
+          {children}
+        </DialogTrigger>
+      ) : null}
+      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Edit Item</DialogTitle>
           <DialogDescription>
@@ -880,7 +895,7 @@ export default function EditItemDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isSubmitting}
             >
               Cancel
