@@ -21,7 +21,8 @@ The project includes 30+ UI primitives under `components/ui/`:
 | `form.tsx` | Form wrapper with react-hook-form integration |
 | `input.tsx` | Text input with variants |
 | `select.tsx` | Native select with custom styling |
-| `combobox.tsx` | Searchable dropdown with autocomplete |
+| `combobox.tsx` | Searchable dropdown with autocomplete (alternative to SearchableSelect) |
+| `searchable-select.tsx` | Advanced searchable dropdown with cmdk, scrollbar, fixed action button |
 | `tooltip.tsx` | Hover tooltips |
 | `sheet.tsx` | Slide-out panels (side drawers) |
 | `tabs.tsx` | Tabbed content panels |
@@ -86,6 +87,91 @@ const { activeShopId, availableShops, currentShop, switchShop } = useActiveShop(
 ### ThemeProvider (`components/providers/theme-provider.tsx`)
 
 Enables dark/light/system theme switching using `next-themes`.
+
+## SearchableSelect (`components/ui/searchable-select.tsx`)
+
+A searchable dropdown component used extensively throughout the app for selecting items, customers, suppliers, and other entities from large lists.
+
+### Why cmdk?
+
+The component is built on the **cmdk** (Command) library, the same library powering shadcn/ui's combobox pattern. cmdk provides:
+
+- **Built-in search/filter** — type to instantly filter through hundreds of options
+- **Keyboard navigation** — arrow keys to move up/down, Enter to select
+- **Consistent UX** — matches standard shadcn combobox behavior
+
+### Features
+
+- **Searchable** — type to filter options in real-time
+- **Scrollable** — `max-h-[260px]` with visible scrollbar when options overflow
+- **Fixed action button** — "Create item" / "Create customer" stays pinned at the bottom while items scroll independently
+- **Custom item rendering** — supports rich item content (e.g. inline badges for item types like **PB**, **P**, **S**)
+- **Background** — semi-transparent white (`bg-white/90`) for modern overlay look
+- **Wheel & touch scrolling** — cmdk normally captures wheel events for keyboard navigation; a custom `onWheel` handler detects boundaries and stops propagation only when scrolling within the list, allowing native mouse/trackpad scrolling
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `value` | `string` | — | Currently selected value |
+| `onValueChange` | `(value: string) => void` | — | Called when selection changes |
+| `options` | `SearchableSelectOption[]` | — | Array of `{ value, label, data? }` |
+| `placeholder` | `string` | `'Select...'` | Placeholder text when no selection |
+| `searchPlaceholder` | `string` | `'Search...'` | Search input placeholder |
+| `triggerClassName` | `string` | — | Additional classes for the trigger button |
+| `emptyMessage` | `string` | `'No results found.'` | Text when no options match search |
+| `renderItem` | `(option) => ReactNode` | — | Custom render for each option |
+| `disabled` | `boolean` | `false` | Disables the dropdown |
+| `actionSlot` | `ReactNode` | — | Slot rendered at the bottom (e.g. "Create new" button) |
+
+### Usage
+
+```tsx
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+
+<SearchableSelect
+  value={selectedId}
+  onValueChange={(value) => setSelectedId(value)}
+  options={items.map((item): SearchableSelectOption => ({
+    value: item._id,
+    label: item.name,
+    data: item,
+  }))}
+  placeholder="Select item"
+  searchPlaceholder="Search by name or SKU..."
+  renderItem={(option) => {
+    const item = option.data;
+    return (
+      <span className="font-medium">
+        {item.itemType === 'product' && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 mr-1.5 uppercase">
+            P
+          </span>
+        )}
+        {item.name}
+      </span>
+    );
+  }}
+  actionSlot={
+    <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+      Create item
+    </CommandCreateButton>
+  }
+/>
+```
+
+### Implementation Details
+
+The component resolves a key tension between cmdk and native scrolling:
+
+1. **cmdk's default behavior:** cmdk uses `overflow-hidden` and captures mouse wheel events for its internal keyboard navigation system. This prevents native scroll from working.
+2. **The fix:** The component uses `CommandPrimitive.List` directly (instead of the shadcn `CommandList` wrapper which forces `no-scrollbar`), with `overflow-y-auto` for a visible scrollbar. The parent `Command` gets `overflow-visible`. A custom `handleWheel` callback uses a ref to check if the list can scroll in the wheel's direction — if not at a boundary, it stops propagation so cmdk doesn't intercept the event.
+3. **Fixed action slot:** The `actionSlot` is rendered **outside** `CommandPrimitive.List` but still inside `Command`, keeping it pinned at the bottom regardless of how many items are in the list.
+
+### Files using SearchableSelect
+
+- `components/transaction-form.tsx` — Customer and item selection in transaction dialogs
+- `modules/billing/create-invoice.tsx` — Customer and item selection in invoice creation
 
 ## Domain Components
 

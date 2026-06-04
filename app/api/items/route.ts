@@ -5,11 +5,13 @@ import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/au
 import { AppError } from '@/lib/utils';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
+import { validateQuantityForUnit } from '@/lib/unit-utils';
 
 const createItemSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().optional(),
-  itemType: z.enum(['product', 'service']).default('product'),
+  itemType: z.enum(['product', 'service', 'compound']).default('product'),
+  bundleType: z.enum(['product', 'service']).nullable().optional(),
   category: z.string().optional(),
   brand: z.string().optional(),
   unitOfMeasure: z.string().min(1).max(20).default('pcs'),
@@ -40,6 +42,10 @@ const createItemSchema = z.object({
   expiryDate: z.coerce.date().optional(),
   tags: z.array(z.string()).default([]),
   status: z.enum(['draft', 'active', 'discontinued', 'archived']).default('active'),
+  components: z.array(z.object({
+    item: z.string(),
+    quantity: z.coerce.number().min(0.01),
+  })).optional(),
 });
 
 function normalizeItemTaxRates<T extends {
@@ -66,11 +72,20 @@ function normalizeItemTaxRates<T extends {
 
 export async function POST(request: Request) {
   try {
-    const { user } = await requireActiveBusinessSubscription();
+    const { user, features } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
     const validatedData = createItemSchema.parse(body);
+
+    // Check subscription item limit
+    const currentItemCount = await Item.countDocuments({ owner: user.id });
+    if (currentItemCount >= features.maxItems) {
+      throw new AppError(
+        `You've reached the maximum limit of ${features.maxItems} items on your ${features.maxItems === Infinity ? 'current' : ''} plan. Please upgrade to add more items.`,
+        403
+      );
+    }
 
     // Check for duplicate SKU if provided
     if (validatedData.sku) {
@@ -97,6 +112,45 @@ export async function POST(request: Request) {
     // Require an active shop for creating items
     if (!user.activeShopId) {
       throw new AppError('Please select or create a shop before adding items', 400);
+    }
+
+    // For compound items, validate that component items exist and belong to same owner
+    if (validatedData.itemType === 'compound' && validatedData.components) {
+      if (validatedData.components.length === 0) {
+        throw new AppError('Compound items must have at least one component', 400);
+      }
+
+      const componentIds = validatedData.components.map(c => c.item);
+      const componentItems = await Item.find({
+        _id: { $in: componentIds },
+        owner: user.id,
+      });
+
+      if (componentItems.length !== componentIds.length) {
+        throw new AppError('One or more component items not found', 400);
+      }
+
+      // Validate no nesting
+      const hasNestedCompound = componentItems.some(
+        (ci: any) => ci.itemType === 'compound',
+      );
+      if (hasNestedCompound) {
+        throw new AppError('Compound items cannot contain other compound items', 400);
+      }
+
+      // Validate component quantities against their units
+      for (const comp of validatedData.components) {
+        const componentItem = componentItems.find(
+          (ci: any) => ci._id.toString() === comp.item,
+        );
+        if (componentItem) {
+          const unit = componentItem.unitOfMeasure || 'pcs';
+          const validationError = validateQuantityForUnit(comp.quantity, unit, componentItem.name);
+          if (validationError) {
+            throw new AppError(validationError, 400);
+          }
+        }
+      }
     }
 
     // Create the item
@@ -152,7 +206,7 @@ export async function GET(request: Request) {
       query.shopId = user.activeShopId;
     }
 
-    if (type && ['product', 'service'].includes(type)) {
+    if (type && ['product', 'service', 'compound'].includes(type)) {
       query.itemType = type;
     }
 
@@ -284,12 +338,40 @@ export async function PUT(request: Request) {
       }
     }
 
+    // If updating itemType to compound, or components changed, validate
+    const itemType = validatedData.itemType || item.itemType;
+    const components = validatedData.components ?? (rawData.components !== undefined ? [] : undefined);
+
+    if (itemType === 'compound' && components !== undefined) {
+      if (components.length === 0) {
+        throw new AppError('Compound items must have at least one component', 400);
+      }
+
+      const componentIds = components.map((c: { item: string }) => c.item);
+      const componentItems = await Item.find({
+        _id: { $in: componentIds },
+        owner: user.id,
+      });
+
+      if (componentItems.length !== componentIds.length) {
+        throw new AppError('One or more component items not found', 400);
+      }
+
+      const hasNestedCompound = componentItems.some(
+        (ci: any) => ci.itemType === 'compound',
+      );
+      if (hasNestedCompound) {
+        throw new AppError('Compound items cannot contain other compound items', 400);
+      }
+    }
+
     // Build $set for targeted partial updates — only fields actually present in raw request data
     const setFields: Record<string, any> = {};
 
     if ('name' in rawData) setFields.name = validatedData.name;
     if ('description' in rawData) setFields.description = validatedData.description;
     if ('itemType' in rawData) setFields.itemType = validatedData.itemType;
+    if ('bundleType' in rawData) setFields.bundleType = validatedData.bundleType ?? null;
     if ('category' in rawData) setFields.category = validatedData.category;
     if ('brand' in rawData) setFields.brand = validatedData.brand;
     if ('unitOfMeasure' in rawData) setFields.unitOfMeasure = validatedData.unitOfMeasure;
@@ -307,6 +389,11 @@ export async function PUT(request: Request) {
     if ('batchNumber' in rawData) setFields.batchNumber = validatedData.batchNumber;
     if ('expiryDate' in rawData) setFields.expiryDate = validatedData.expiryDate;
     if ('tags' in rawData) setFields.tags = validatedData.tags;
+
+    // Handle components
+    if (components !== undefined) {
+      setFields.components = components;
+    }
 
     // Handle pricing subdocument fields — check raw pricing data for individual field presence
     const rawPricing = rawData.pricing as Record<string, unknown> | undefined;

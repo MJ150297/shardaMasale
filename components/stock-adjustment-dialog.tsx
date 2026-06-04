@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { getQuantityStep, isIntegerUnit } from '@/lib/unit-utils';
 
 const formSchema = z.object({
   adjustedQuantity: z.number().min(0, "Quantity must be at least 0"),
@@ -164,7 +165,7 @@ export default function StockAdjustmentDialog({
                     <FormControl>
                       <Input 
                         type="number" 
-                        step="any"
+                        step={getQuantityStep(item.unitOfMeasure)}
                         value={field.value ?? ''}
                         onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                         onBlur={field.onBlur}

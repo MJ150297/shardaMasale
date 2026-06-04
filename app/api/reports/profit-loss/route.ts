@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
-import { requireOwner } from '@/lib/auth';
+import { requireOwner, requireActiveBusinessSubscription } from '@/lib/auth';
+import { isAdvancedReport } from '@/lib/subscription-features';
 import connectToDatabase from '@/lib/db';
 import Transaction from '@/models/Transaction';
 
 export async function GET(request: Request) {
   try {
     const user = await requireOwner();
+    const { features } = await requireActiveBusinessSubscription();
+    if (!features.advancedReports || !isAdvancedReport('profit-loss')) {
+      return NextResponse.json(
+        { error: 'Advanced reports are not available on your plan. Upgrade to access this report.' },
+        { status: 403 }
+      );
+    }
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);

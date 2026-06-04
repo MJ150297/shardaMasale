@@ -14,10 +14,12 @@ import {
 } from '@/lib/transaction-inventory';
 import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
 import { getNextCounterSequence } from '@/lib/document-numbering';
+import Item from '@/models/Item';
 import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
 import { allocateInvoiceSettlements } from '@/lib/payment-settlement';
+import { validateQuantityForUnit } from '@/lib/unit-utils';
 
 type TransactionNumberingConfig = {
   prefixMap: Record<string, string>;
@@ -249,7 +251,7 @@ export async function POST(request: Request) {
   session.startTransaction();
 
   try {
-    const { user } = await requireActiveBusinessSubscription();
+    const { user, features } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
@@ -261,9 +263,49 @@ export async function POST(request: Request) {
       ...transactionInput
     } = validated;
 
+    // Check monthly transaction limit
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+    const currentMonthTransactionCount = await Transaction.countDocuments({
+      owner: user.id,
+      createdAt: { $gte: currentMonthStart },
+    });
+    if (currentMonthTransactionCount >= features.maxMonthlyTransactions) {
+      throw new AppError(
+        `You've reached the maximum limit of ${features.maxMonthlyTransactions} transactions this month on your plan. Please upgrade to continue.`,
+        403
+      );
+    }
+
     // Require an active shop for creating transactions
     if (!user.activeShopId) {
       throw new AppError('Please select or create a shop before creating transactions', 400);
+    }
+
+    // Validate line item quantities against item units
+    const lineItemsToCheck = transactionInput.lineItems.filter((li: any) => li.item);
+    if (lineItemsToCheck.length > 0) {
+      const itemIds = lineItemsToCheck.map((li: any) => li.item);
+      const dbItems = await Item.find({
+        _id: { $in: itemIds },
+        owner: user.id,
+      }).lean();
+
+      for (const lineItem of lineItemsToCheck) {
+        const dbItem = dbItems.find((i: any) => i._id.toString() === lineItem.item);
+        if (dbItem) {
+          const unit = dbItem.unitOfMeasure || 'pcs';
+          const error = validateQuantityForUnit(
+            lineItem.quantity,
+            unit,
+            dbItem.name,
+          );
+          if (error) {
+            throw new AppError(error, 400);
+          }
+        }
+      }
     }
 
     const cashAmount = roundCurrency(

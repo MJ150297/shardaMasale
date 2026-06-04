@@ -7,10 +7,12 @@ import {
 } from "@/lib/utils";
 import StockMovement from "./StockMovement";
 
-export const ITEM_TYPES = ["product", "service"] as const;
+export const ITEM_TYPES = ["product", "service", "compound"] as const;
+export const BUNDLE_TYPES = ["product", "service"] as const;
 export const ITEM_STATUSES = ["draft", "active", "discontinued", "archived"] as const;
 
 export type ItemType = (typeof ITEM_TYPES)[number];
+export type BundleType = (typeof BUNDLE_TYPES)[number];
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
 export interface ItemPricing {
@@ -30,6 +32,11 @@ export interface ItemStock {
   location?: string | null;
 }
 
+export interface ItemComponent {
+  item: Types.ObjectId;
+  quantity: number;
+}
+
 export interface IItem {
   owner: Types.ObjectId;
   shopId?: Types.ObjectId | null;
@@ -40,6 +47,7 @@ export interface IItem {
   batchNumber?: string | null;
   expiryDate?: Date | null;
   itemType: ItemType;
+  bundleType?: BundleType | null;
   status: ItemStatus;
   description?: string | null;
   category?: string | null;
@@ -57,6 +65,8 @@ export interface IItem {
   trackExpiry: boolean;
   tags: string[];
   metadata: Record<string, unknown>;
+  components: ItemComponent[];
+  priceCalculation: "auto-sum";
 }
 
 type ItemModel = Model<IItem>;
@@ -126,6 +136,22 @@ const stockSchema = new Schema<ItemStock>(
   { _id: false },
 );
 
+const componentSchema = new Schema<ItemComponent>(
+  {
+    item: {
+      type: Schema.Types.ObjectId,
+      ref: "Item",
+      required: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+  },
+  { _id: false },
+);
+
 const itemSchema = new Schema<IItem, ItemModel>(
   {
     owner: {
@@ -170,6 +196,12 @@ const itemSchema = new Schema<IItem, ItemModel>(
       enum: ITEM_TYPES,
       default: "product",
       index: true,
+    },
+    bundleType: {
+      type: String,
+      enum: BUNDLE_TYPES,
+      default: null,
+      sparse: true,
     },
     status: {
       type: String,
@@ -287,6 +319,15 @@ const itemSchema = new Schema<IItem, ItemModel>(
       type: Schema.Types.Mixed,
       default: {},
     },
+    components: {
+      type: [componentSchema],
+      default: [],
+    },
+    priceCalculation: {
+      type: String,
+      enum: ["auto-sum"],
+      default: "auto-sum",
+    },
   },
   {
     timestamps: true,
@@ -332,7 +373,7 @@ itemSchema.virtual("availableQuantity").get(function availableQuantity() {
   return roundCurrency(this.stock.currentQuantity - this.stock.reservedQuantity);
 });
 
-itemSchema.pre("validate", function preValidate() {
+itemSchema.pre("validate", async function preValidate() {
   if (!this.slug) {
     this.slug = slugify(this.name);
   } else {
@@ -358,11 +399,84 @@ itemSchema.pre("validate", function preValidate() {
     this.stock.currentQuantity = this.stock.openingQuantity;
   }
 
+  // Clear bundleType for non-compound items
+  if (this.itemType !== "compound") {
+    this.bundleType = null;
+  }
+
   if (this.itemType === "service") {
     this.trackInventory = false;
     this.stock.currentQuantity = 0;
     this.stock.openingQuantity = 0;
     this.stock.reservedQuantity = 0;
+  }
+
+  // Compound item defaults
+  if (this.itemType === "compound") {
+    // Default bundleType to "service" if not set
+    if (!this.bundleType) {
+      this.bundleType = "service";
+    }
+
+    if (this.bundleType === "service") {
+      // Service bundles: no inventory tracking
+      this.trackInventory = false;
+      this.stock.currentQuantity = 0;
+      this.stock.openingQuantity = 0;
+      this.stock.reservedQuantity = 0;
+    } else {
+      // Product bundles: allow inventory tracking like regular products
+      if (this.isNew && this.stock.currentQuantity === 0) {
+        this.stock.currentQuantity = this.stock.openingQuantity;
+      }
+    }
+
+    this.priceCalculation = "auto-sum";
+
+    // Validate components: no nesting, at least 1 component
+    if (!this.components || this.components.length === 0) {
+      throw new Error("Compound items must have at least one component");
+    }
+
+    // Fetch all component items to validate and auto-calculate pricing
+    const componentIds = this.components.map((c) => c.item);
+    const componentItems = await mongoose.model("Item").find({
+      _id: { $in: componentIds },
+      owner: this.owner,
+    });
+
+    if (componentItems.length !== componentIds.length) {
+      throw new Error("One or more component items not found");
+    }
+
+    // Validate no nesting
+    const hasNestedCompound = componentItems.some(
+      (ci: any) => ci.itemType === "compound",
+    );
+    if (hasNestedCompound) {
+      throw new Error("Compound items cannot contain other compound items");
+    }
+
+    // Auto-calculate pricing from components
+    let totalCostPrice = 0;
+    let totalSellingPrice = 0;
+    let totalPurchasePrice = 0;
+
+    for (const comp of this.components) {
+      const componentItem = componentItems.find(
+        (ci: any) => ci._id.toString() === comp.item.toString(),
+      );
+      if (!componentItem) continue;
+
+      totalCostPrice += (componentItem.pricing.costPrice || 0) * comp.quantity;
+      totalSellingPrice += (componentItem.pricing.sellingPrice || 0) * comp.quantity;
+      totalPurchasePrice += (componentItem.pricing.purchasePrice || 0) * comp.quantity;
+    }
+
+    this.pricing.costPrice = roundCurrency(totalCostPrice);
+    this.pricing.sellingPrice = roundCurrency(totalSellingPrice);
+    this.pricing.purchasePrice = roundCurrency(totalPurchasePrice);
+    this.pricing.mrp = null;
   }
 
   const legacyTaxRate = this.taxRate;
@@ -384,9 +498,15 @@ itemSchema.pre("validate", function preValidate() {
 // ========== OPENING STOCK MOVEMENT ==========
 itemSchema.post("save" as any, async function (doc: any) {
   // Create opening stock movement when item is created
-  if (doc.isNew && doc.itemType === "product" && doc.stock.openingQuantity > 0) {
+  const shouldCreateOpeningStock =
+    doc.isNew &&
+    doc.stock.openingQuantity > 0 &&
+    (doc.itemType === "product" ||
+      (doc.itemType === "compound" && doc.bundleType === "product"));
+
+  if (shouldCreateOpeningStock) {
     const StockMovement = mongoose.model("StockMovement");
-    
+
     await StockMovement.create({
       owner: doc.owner,
       item: doc._id,
@@ -397,7 +517,7 @@ itemSchema.post("save" as any, async function (doc: any) {
       previousQuantity: 0,
       newQuantity: doc.stock.openingQuantity,
       createdBy: doc.owner,
-      metadata: {}
+      metadata: {},
     });
   }
 });

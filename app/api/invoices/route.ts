@@ -16,6 +16,7 @@ import Invoice from '@/models/Invoice';
 import Item from '@/models/Item';
 import Party from '@/models/Party';
 import StockMovement from '@/models/StockMovement';
+import { validateQuantityForUnit } from '@/lib/unit-utils';
 
 type InvoiceNumberingConfig = {
   prefixMap: {
@@ -248,8 +249,23 @@ export async function POST(request: Request) {
   session.startTransaction();
 
   try {
-    const { user } = await requireActiveBusinessSubscription();
+    const { user, features } = await requireActiveBusinessSubscription();
     await connectToDatabase();
+
+    // Check monthly transaction limit (invoices count as transactions)
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+    const currentMonthTransactionCount = await Transaction.countDocuments({
+      owner: user.id,
+      createdAt: { $gte: currentMonthStart },
+    });
+    if (currentMonthTransactionCount >= features.maxMonthlyTransactions) {
+      throw new AppError(
+        `You've reached the maximum limit of ${features.maxMonthlyTransactions} transactions/invoices this month on your plan. Please upgrade to continue.`,
+        403
+      );
+    }
 
     // Require an active shop for creating invoices
     if (!user.activeShopId) {
@@ -309,6 +325,31 @@ export async function POST(request: Request) {
       createdBy: user.id,
       updatedBy: user.id,
     }], { session });
+
+    // Validate line item quantities against item units
+    const lineItemsToCheck = validated.lineItems.filter((li) => li.item);
+    if (lineItemsToCheck.length > 0) {
+      const itemIds = lineItemsToCheck.map((li) => li.item!);
+      const dbItems = await Item.find({
+        _id: { $in: itemIds },
+        owner: user.id,
+      }).session(session).lean();
+
+      for (const lineItem of lineItemsToCheck) {
+        const dbItem = dbItems.find((i) => i._id.toString() === lineItem.item);
+        if (dbItem) {
+          const unit = (dbItem as any).unitOfMeasure || 'pcs';
+          const error = validateQuantityForUnit(
+            lineItem.quantity,
+            unit,
+            lineItem.itemName,
+          );
+          if (error) {
+            throw new AppError(error, 400);
+          }
+        }
+      }
+    }
 
     // Process stock updates if confirmed
     if (validated.status === "confirmed") {

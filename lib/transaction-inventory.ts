@@ -3,6 +3,7 @@ import type { ClientSession } from "mongoose";
 import { AppError, roundCurrency } from "@/lib/utils";
 import Item from "@/models/Item";
 import StockMovement from "@/models/StockMovement";
+import { roundQuantityForUnit } from "@/lib/unit-utils";
 
 type TransactionInventoryType =
   | "sale"
@@ -86,6 +87,81 @@ const CANCELLATION_MOVEMENT_CONFIG = {
   },
 } as const;
 
+/**
+ * Expand compound items in the line items array into their individual components.
+ * For inventory processing, a compound item (e.g. "Gift Hamper") is replaced
+ * by its constituent items (e.g. "Chocolate Box" x 2, "Wine Bottle" x 1, etc.)
+ * so that stock movements are applied to the actual tracked items.
+ *
+ * For product bundles (bundleType === "product" && trackInventory), the compound
+ * item itself is ALSO included in the expanded list so its own stock is tracked.
+ *
+ * Non-compound items pass through unchanged.
+ */
+async function expandCompoundLineItems(
+  lineItems: TransactionLineItemInput[],
+): Promise<TransactionLineItemInput[]> {
+  const expanded: TransactionLineItemInput[] = [];
+
+  for (const lineItem of lineItems) {
+    if (!lineItem.item) {
+      expanded.push(lineItem);
+      continue;
+    }
+
+    const itemId = lineItem.item.toString();
+
+    // Fetch the item to check if it's a compound
+    const item = await Item.findById(itemId).lean();
+
+    if (!item || item.itemType !== "compound" || !item.components || item.components.length === 0) {
+      // Not a compound item — pass through as-is
+      expanded.push(lineItem);
+      continue;
+    }
+
+    // For product bundles with inventory tracking, include the compound item itself
+    // so its own stock is also tracked alongside components
+    const isProductBundle = item.bundleType === "product" && item.trackInventory;
+    if (isProductBundle) {
+      expanded.push(lineItem);
+    }
+
+    // Fetch all component items to get their pricing info
+    const componentIds = item.components.map((c) => c.item);
+    const componentItems = await Item.find({
+      _id: { $in: componentIds },
+    }).lean();
+
+    // Expand the compound: create one synthetic line item per component
+    for (const component of item.components) {
+      const componentItem = componentItems.find(
+        (ci) => ci._id.toString() === component.item.toString(),
+      );
+
+      if (!componentItem) {
+        throw new AppError(
+          `Component item not found for compound "${item.name}"`,
+          404,
+        );
+      }
+
+      const rawQuantity = roundCurrency(lineItem.quantity * component.quantity);
+      const componentUnit = componentItem.unitOfMeasure || 'pcs';
+      const componentQuantity = roundQuantityForUnit(rawQuantity, componentUnit);
+
+      expanded.push({
+        item: component.item.toString(),
+        itemName: componentItem.name,
+        quantity: componentQuantity,
+        unitPrice: componentItem.pricing?.sellingPrice || 0,
+      });
+    }
+  }
+
+  return expanded;
+}
+
 function aggregateLineItems(
   lineItems: TransactionLineItemInput[],
 ): AggregatedLineItem[] {
@@ -126,7 +202,10 @@ async function adjustReservedQuantity(
   session: ClientSession,
   multiplier: 1 | -1,
 ) {
-  for (const lineItem of aggregateLineItems(lineItems)) {
+  // Expand compound items before processing inventory
+  const expandedLineItems = await expandCompoundLineItems(lineItems);
+
+  for (const lineItem of aggregateLineItems(expandedLineItems)) {
     const item = await Item.findById(lineItem.itemId).session(session);
 
     if (!item) {
@@ -204,7 +283,10 @@ async function applyInventoryChange(
 
   const config = configMap[type as keyof typeof configMap];
 
-  for (const lineItem of aggregateLineItems(lineItems)) {
+  // Expand compound items before processing inventory
+  const expandedLineItems = await expandCompoundLineItems(lineItems);
+
+  for (const lineItem of aggregateLineItems(expandedLineItems)) {
     const item = await Item.findById(lineItem.itemId).session(context.session);
 
     if (!item) {

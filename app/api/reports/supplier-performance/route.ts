@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Types } from 'mongoose';
-import { requireOwner } from '@/lib/auth';
+import { requireOwner, requireActiveBusinessSubscription } from '@/lib/auth';
+import { isAdvancedReport } from '@/lib/subscription-features';
 import connectToDatabase from '@/lib/db';
 import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
@@ -10,6 +11,13 @@ import { roundCurrency } from '@/lib/utils';
 export async function GET(request: Request) {
   try {
     const user = await requireOwner();
+    const { features } = await requireActiveBusinessSubscription();
+    if (!features.advancedReports || !isAdvancedReport('supplier-performance')) {
+      return NextResponse.json(
+        { error: 'Advanced reports are not available on your plan. Upgrade to access this report.' },
+        { status: 403 }
+      );
+    }
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);

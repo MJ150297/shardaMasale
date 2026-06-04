@@ -1,5 +1,4 @@
 import "server-only";
-import mongoose from "mongoose";
 
 import { cache } from "react";
 import NextAuth from "next-auth";
@@ -14,7 +13,8 @@ import { AppError, normalizeEmail } from "@/lib/utils";
 import User, { type SafeUser, type UserRole, type UserStatus } from "@/models/User";
 import Settings from "@/models/Settings";
 import Shop from "@/models/Shop";
-import { checkUserSubscription, requireActiveSubscription, getPlanFeatures } from "@/lib/subscription";
+import { getPlanFeatures } from "@/lib/subscription-features";
+import { checkUserSubscription, requireActiveSubscription } from "@/lib/subscription";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -24,10 +24,6 @@ const credentialsSchema = z.object({
 const DEFAULT_MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 export const LOCKOUT_ERROR_PREFIX = "LOCKED_UNTIL:";
-
-// Cache security settings for 10 minutes
-let cachedSettings: { maxLoginAttempts: number; timestamp: number } | null = null;
-const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type AppSessionUser = SafeUser & {
   role: UserRole;

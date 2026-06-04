@@ -32,7 +32,8 @@ import {
 } from '@/components/ui/form';
 import { toast } from 'sonner';
 import { roundCurrency, calculateLineTotal } from '@/lib/utils';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getQuantityStep, getQuantityMin } from '@/lib/unit-utils';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import CommandCreateButton from '@/components/command-create-button';
 import CreateItemDialog, { type CreatedItem } from '@/components/create-item-dialog';
 import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
@@ -137,14 +138,16 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
   const [items, setItems] = useState<Item[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [partySearchQuery, setPartySearchQuery] = useState('');
   const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
-  const [itemSearchQueryByIndex, setItemSearchQueryByIndex] = useState<Record<number, string>>({});
   const [renderKey, setRenderKey] = useState(0);
   const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
   const [originalPrices, setOriginalPrices] = useState<Record<string, number>>({});
   const [priceUpdateItems, setPriceUpdateItems] = useState<Record<string, boolean>>({});
+  const [selectedPartyInfo, setSelectedPartyInfo] = useState<{
+    currentBalance: number;
+    creditLimit: number;
+  } | null>(null);
   const isEditing = Boolean(editingInvoiceId);
 
   useEffect(() => {
@@ -262,6 +265,23 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
     setOriginalPrices({});
     setPriceUpdateItems({});
   }, [form, initialValues]);
+
+  // Watch for party selection changes and fetch balance info
+  const selectedPartyId = form.watch('party') as string;
+  useEffect(() => {
+    if (!selectedPartyId) {
+      setSelectedPartyInfo(null);
+      return;
+    }
+
+    const party = parties.find(p => p._id === selectedPartyId);
+    if (party) {
+      setSelectedPartyInfo({
+        currentBalance: (party as any).currentBalance || 0,
+        creditLimit: (party as any).creditLimit || 0,
+      });
+    }
+  }, [selectedPartyId, parties]);
 
   // After parties load, re-assert the party field value to ensure Select shows it
   // Also ensure the selected party is in the parties list even if not returned by the API
@@ -545,7 +565,6 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
       shouldTouch: true,
       shouldValidate: true,
     });
-    setPartySearchQuery('');
     setCreatePartyOpen(false);
   }
 
@@ -622,62 +641,57 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Customer</FormLabel>
-                      <Select value={field.value || ''} onValueChange={(value) => field.onChange(value)}>
-                        <SelectTrigger className={cn(
-                          "w-full justify-between",
-                          !field.value && "text-muted-foreground"
-                        )}>
-                          <SelectValue placeholder="Select customer" className="truncate" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white">
-                          <div className="px-3 py-2">
-                            <Input
-                              value={partySearchQuery}
-                              onChange={(event) => setPartySearchQuery(event.target.value)}
-                              placeholder="Search customer by name or phone..."
-                              className="h-9 w-full"
-                            />
-                          </div>
-                          {(() => {
-                            const search = partySearchQuery.toLowerCase();
-                            const filteredParties = search === ''
-                              ? parties
-                              : parties.filter((party) => {
-                                const partyName = (party.displayName || party.name || party.fullName || party.partyName || '').toLowerCase();
-                                const phone = (party.phoneNumber || party.mobile || party.phone || '').toLowerCase();
-                                return partyName.includes(search) || phone.includes(search);
-                              });
-                            if (filteredParties.length === 0) {
-                              return (
-                                <div className="px-3 py-2 text-sm text-muted-foreground">
-                                  No customer found.
-                                </div>
-                              );
-                            }
-                            return filteredParties.map((party) => (
-                              <SelectItem
-                                value={party._id}
-                                key={party._id}
-                                textValue={(party.displayName || party.name || '')}
-                              >
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{party.displayName || party.name}</span>
-                                  {(party.phoneNumber || party.mobile || party.phone) && (
-                                    <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ));
-                          })()}
-                          <SelectSeparator className="my-1" key="party-separator" />
-                          <div key="party-create-btn" className="border-t p-1">
-                            <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
-                              Create customer
-                            </CommandCreateButton>
-                          </div>
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={field.value || ''}
+                        onValueChange={(value) => field.onChange(value)}
+                        options={parties.map((party): SearchableSelectOption => ({
+                          value: party._id,
+                          label: party.displayName || party.name || '',
+                          data: party,
+                        }))}
+                        placeholder="Select customer"
+                        searchPlaceholder="Search customer by name or phone..."
+                        emptyMessage="No customer found."
+                        renderItem={(option) => {
+                          const party = option.data;
+                          return (
+                            <div className="flex flex-col">
+                              <span className="font-medium">{party.displayName || party.name}</span>
+                              {(party.phoneNumber || party.mobile || party.phone) && (
+                                <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
+                              )}
+                            </div>
+                          );
+                        }}
+                        actionSlot={
+                          <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                            Create customer
+                          </CommandCreateButton>
+                        }
+                      />
                       <FormMessage />
+
+                      {/* Available Credit Display */}
+                      {selectedPartyInfo && selectedPartyInfo.creditLimit > 0 && (
+                        <div className="mt-2 rounded-md border p-3 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Current Balance:</span>
+                            <span className={`font-semibold ${selectedPartyInfo.currentBalance > selectedPartyInfo.creditLimit ? 'text-red-600' : ''}`}>
+                              ₹{selectedPartyInfo.currentBalance.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-muted-foreground">Credit Limit:</span>
+                            <span className="font-semibold">₹{selectedPartyInfo.creditLimit.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1 pt-1 border-t">
+                            <span className="text-muted-foreground">Available Credit:</span>
+                            <span className={`font-semibold ${(selectedPartyInfo.creditLimit - selectedPartyInfo.currentBalance) <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              ₹{Math.max(0, selectedPartyInfo.creditLimit - selectedPartyInfo.currentBalance).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
@@ -763,95 +777,78 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                                   const selectedItemId = form.watch(`lineItems.${index}.item`);
 
                                   return (
-                                    <FormItem className="m-0">
-                                      <Select
-                                        value={selectedItemId || ''}
-                                        onValueChange={(value) => {
-                                          const item = items.find((item) => item._id === value);
-                                          if (!item) return;
+                                     <FormItem className="m-0">
+                                       <SearchableSelect
+                                         value={selectedItemId || ''}
+                                         onValueChange={(value: string) => {
+                                           const item = items.find((item) => item._id === value);
+                                           if (!item) return;
 
-                                          const sellingPrice = getItemSellingPrice(item);
-                                          const current = form.getValues('lineItems') || [];
-                                          const updated = [...current];
-                                          updated[index] = {
-                                            ...(updated[index] || {}),
-                                            item: item._id,
-                                            itemName: item.name,
-                                            sku: item.sku || null,
-                                            description: item.description || null,
-                                            unit: getItemUnit(item),
-                                            unitPrice: sellingPrice,
-                                            taxRate: getDefaultTaxRate(item),
-                                            discountAmount: 0,
-                                          };
+                                           const sellingPrice = getItemSellingPrice(item);
+                                           const current = form.getValues('lineItems') || [];
+                                           const updated = [...current];
+                                           updated[index] = {
+                                             ...(updated[index] || {}),
+                                             item: item._id,
+                                             itemName: item.name,
+                                             sku: item.sku || null,
+                                             description: item.description || null,
+                                             unit: getItemUnit(item),
+                                             unitPrice: sellingPrice,
+                                             taxRate: getDefaultTaxRate(item),
+                                             discountAmount: 0,
+                                           };
 
-                                          form.setValue('lineItems', updated, {
-                                            shouldDirty: true,
-                                            shouldTouch: true,
-                                            shouldValidate: true,
-                                          });
+                                           form.setValue('lineItems', updated, {
+                                             shouldDirty: true,
+                                             shouldTouch: true,
+                                             shouldValidate: true,
+                                           });
 
-                                          console.log('Invoice: item selected', item);
-                                          try { toast.success && toast.success(`Selected item: ${item.name}`); } catch (e) { }
+                                           console.log('Invoice: item selected', item);
+                                           try { toast.success && toast.success(`Selected item: ${item.name}`); } catch (e) { }
 
-                                          setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
-                                          setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
-                                        }}
-                                      >
-                                        <SelectTrigger className="w-full h-8 border-0 shadow-none">
-                                          <SelectValue placeholder="Select item" className="truncate" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-white">
-                                          <div className="px-3 py-2">
-                                            <Input
-                                              value={itemSearchQueryByIndex[index] ?? ''}
-                                              onChange={(event) => setItemSearchQueryByIndex(prev => ({
-                                                ...prev,
-                                                [index]: event.target.value,
-                                              }))}
-                                              placeholder="Search item by name or sku..."
-                                              className="h-9 w-full"
-                                            />
-                                          </div>
-                                          {(() => {
-                                            const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
-                                            const filteredItems = query === ''
-                                              ? items
-                                              : items.filter((item) => {
-                                                const name = item.name?.toLowerCase() || '';
-                                                const sku = item.sku?.toLowerCase() || '';
-                                                return name.includes(query) || sku.includes(query);
-                                              });
-
-                                            if (filteredItems.length === 0) {
-                                              return (
-                                                <div className="px-3 py-2 text-sm text-muted-foreground">
-                                                  No item found.
-                                                </div>
-                                              );
-                                            }
-
-                                            return filteredItems.map((item) => (
-                                              <SelectItem value={item._id} key={item._id} textValue={item.name}>
-                                                <div className="flex flex-col">
-                                                  <span className="font-medium">{item.name}</span>
-                                                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                    {item.sku && <span>SKU: {item.sku}</span>}
-                                                    <span>Sell: ₹{getItemSellingPrice(item).toFixed(2)}</span>
-                                                    <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
-                                                  </div>
-                                                </div>
-                                              </SelectItem>
-                                            ));
-                                          })()}
-                                          <SelectSeparator className="my-1" />
-                                          <div className="border-t p-1">
-                                            <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
-                                              Create item
-                                            </CommandCreateButton>
-                                          </div>
-                                        </SelectContent>
-                                      </Select>
+                                           setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
+                                           setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
+                                         }}
+                                         options={items.map((item): SearchableSelectOption => ({
+                                           value: item._id,
+                                           label: item.name || '',
+                                           data: item,
+                                         }))}
+                                         placeholder="Select item"
+                                         searchPlaceholder="Search item by name or sku..."
+                                         emptyMessage="No item found."
+                                         triggerClassName="h-8 border-0 shadow-none"
+                                          renderItem={(option) => {
+                                            const item = option.data;
+                                            return (
+                                              <span className="font-medium">
+                                                {item.itemType === 'compound' && (
+                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 mr-1.5 uppercase">
+                                                    {item.bundleType === 'product' ? 'PB' : item.bundleType === 'service' ? 'SB' : 'B'}
+                                                  </span>
+                                                )}
+                                                {item.itemType === 'product' && (
+                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 mr-1.5 uppercase">
+                                                    P
+                                                  </span>
+                                                )}
+                                                {item.itemType === 'service' && (
+                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 mr-1.5 uppercase">
+                                                    S
+                                                  </span>
+                                                )}
+                                                {item.name}
+                                              </span>
+                                            );
+                                          }}
+                                         actionSlot={
+                                           <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                             Create item
+                                           </CommandCreateButton>
+                                         }
+                                       />
                                       <FormMessage />
                                     </FormItem>
                                   );
@@ -865,12 +862,20 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                                 render={({ field }) => (
                                   <FormItem className="m-0">
                                     <FormControl>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        {...field}
-                                        className="border-0 shadow-none text-center"
-                                      />
+                                      {(() => {
+                                        const selectedItemId = form.watch(`lineItems.${index}.item`);
+                                        const selectedItem = selectedItemId ? items.find((i) => i._id === selectedItemId) : null;
+                                        const unit = selectedItem ? (selectedItem.unitOfMeasure ?? selectedItem.unit ?? 'pcs') : 'pcs';
+                                        return (
+                                          <Input
+                                            type="number"
+                                            step={getQuantityStep(unit)}
+                                            min={getQuantityMin(unit)}
+                                            {...field}
+                                            className="border-0 shadow-none text-center"
+                                          />
+                                        );
+                                      })()}
                                     </FormControl>
                                   </FormItem>
                                 )}
@@ -880,16 +885,27 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                               <FormField
                                 control={form.control as any}
                                 name={`lineItems.${index}.unit`}
-                                render={({ field }) => (
-                                  <FormItem className="m-0">
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        className="border-0 shadow-none text-center"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
+                                render={({ field }) => {
+                                  const selectedItemId = form.watch(`lineItems.${index}.item`);
+                                  const selectedItem = selectedItemId ? items.find((i) => i._id === selectedItemId) : null;
+                                  const itemUnit = selectedItem ? (selectedItem.unitOfMeasure ?? selectedItem.unit ?? 'pcs') : null;
+                                  return (
+                                    <FormItem className="m-0">
+                                      <FormControl>
+                                        {itemUnit ? (
+                                          <span className="inline-flex items-center justify-center w-full h-8 text-sm text-center border-0 shadow-none">
+                                            {itemUnit}
+                                          </span>
+                                        ) : (
+                                          <Input
+                                            {...field}
+                                            className="border-0 shadow-none text-center"
+                                          />
+                                        )}
+                                      </FormControl>
+                                    </FormItem>
+                                  );
+                                }}
                               />
                             </TableCell>
                             <TableCell>
@@ -1015,92 +1031,74 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                                 const selectedItemId = form.watch(`lineItems.${index}.item`);
 
                                 return (
-                                  <FormItem className="m-0">
-                                    <Select
-                                      value={selectedItemId || ''}
-                                      onValueChange={(value) => {
-                                        const item = items.find((item) => item._id === value);
-                                        if (!item) return;
+                                   <FormItem className="m-0">
+                                     <SearchableSelect
+                                       value={selectedItemId || ''}
+                                       onValueChange={(value: string) => {
+                                         const item = items.find((item) => item._id === value);
+                                         if (!item) return;
 
-                                        const sellingPrice = getItemSellingPrice(item);
-                                        const current = form.getValues('lineItems') || [];
-                                        const updated = [...current];
-                                        updated[index] = {
-                                          ...(updated[index] || {}),
-                                          item: item._id,
-                                          itemName: item.name,
-                                          sku: item.sku || null,
-                                          description: item.description || null,
-                                          unit: getItemUnit(item),
-                                          unitPrice: sellingPrice,
-                                          taxRate: getDefaultTaxRate(item),
-                                          discountAmount: 0,
-                                        };
+                                         const sellingPrice = getItemSellingPrice(item);
+                                         const current = form.getValues('lineItems') || [];
+                                         const updated = [...current];
+                                         updated[index] = {
+                                           ...(updated[index] || {}),
+                                           item: item._id,
+                                           itemName: item.name,
+                                           sku: item.sku || null,
+                                           description: item.description || null,
+                                           unit: getItemUnit(item),
+                                           unitPrice: sellingPrice,
+                                           taxRate: getDefaultTaxRate(item),
+                                           discountAmount: 0,
+                                         };
 
-                                        form.setValue('lineItems', updated, {
-                                          shouldDirty: true,
-                                          shouldTouch: true,
-                                          shouldValidate: true,
-                                        });
+                                         form.setValue('lineItems', updated, {
+                                           shouldDirty: true,
+                                           shouldTouch: true,
+                                           shouldValidate: true,
+                                         });
 
-                                        setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
-                                        setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
-                                      }}
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Select item" />
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-white">
-                                        <div className="px-3 py-2">
-                                          <Input
-                                            value={itemSearchQueryByIndex[index] ?? ''}
-                                            onChange={(event) => setItemSearchQueryByIndex(prev => ({
-                                              ...prev,
-                                              [index]: event.target.value,
-                                            }))}
-                                            placeholder="Search item by name or sku..."
-                                            className="h-9 w-full"
-                                          />
-                                        </div>
-                                        {(() => {
-                                          const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
-                                          const filteredItems = query === ''
-                                            ? items
-                                            : items.filter((item) => {
-                                              const name = item.name?.toLowerCase() || '';
-                                              const sku = item.sku?.toLowerCase() || '';
-                                              return name.includes(query) || sku.includes(query);
-                                            });
-
-                                          if (filteredItems.length === 0) {
-                                            return (
-                                              <div className="px-3 py-2 text-sm text-muted-foreground">
-                                                No item found.
-                                              </div>
-                                            );
-                                          }
-
-                                          return filteredItems.map((item) => (
-                                            <SelectItem value={item._id} key={item._id} textValue={item.name}>
-                                              <div className="flex flex-col">
-                                                <span className="font-medium">{item.name}</span>
-                                                <div className="flex gap-3 text-xs text-muted-foreground">
-                                                  {item.sku && <span>SKU: {item.sku}</span>}
-                                                  <span>Sell: ₹{getItemSellingPrice(item).toFixed(2)}</span>
-                                                  <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
-                                                </div>
-                                              </div>
-                                            </SelectItem>
-                                          ));
-                                        })()}
-                                        <SelectSeparator className="my-1" />
-                                        <div className="border-t p-1">
-                                          <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
-                                            Create item
-                                          </CommandCreateButton>
-                                        </div>
-                                      </SelectContent>
-                                    </Select>
+                                         setOriginalPrices(prev => ({ ...prev, [item._id]: sellingPrice }));
+                                         setPriceUpdateItems(prev => ({ ...prev, [item._id]: false }));
+                                       }}
+                                       options={items.map((item): SearchableSelectOption => ({
+                                         value: item._id,
+                                         label: item.name || '',
+                                         data: item,
+                                       }))}
+                                       placeholder="Select item"
+                                       searchPlaceholder="Search item by name or sku..."
+                                       emptyMessage="No item found."
+                                        renderItem={(option) => {
+                                          const item = option.data;
+                                          return (
+                                            <span className="font-medium">
+                                              {item.itemType === 'compound' && (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 mr-1.5 uppercase">
+                                                  {item.bundleType === 'product' ? 'PB' : item.bundleType === 'service' ? 'SB' : 'B'}
+                                                </span>
+                                              )}
+                                              {item.itemType === 'product' && (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 mr-1.5 uppercase">
+                                                  P
+                                                </span>
+                                              )}
+                                              {item.itemType === 'service' && (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 mr-1.5 uppercase">
+                                                  S
+                                                </span>
+                                              )}
+                                              {item.name}
+                                            </span>
+                                          );
+                                        }}
+                                       actionSlot={
+                                         <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                           Create item
+                                         </CommandCreateButton>
+                                       }
+                                     />
                                     <FormMessage />
                                   </FormItem>
                                 );
@@ -1128,11 +1126,19 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                               render={({ field }) => (
                                 <FormItem className="m-0">
                                   <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      {...field}
-                                    />
+                                    {(() => {
+                                      const selectedItemId = form.watch(`lineItems.${index}.item`);
+                                      const selectedItem = selectedItemId ? items.find((i) => i._id === selectedItemId) : null;
+                                      const unit = selectedItem ? (selectedItem.unitOfMeasure ?? selectedItem.unit ?? 'pcs') : 'pcs';
+                                      return (
+                                        <Input
+                                          type="number"
+                                          step={getQuantityStep(unit)}
+                                          min={getQuantityMin(unit)}
+                                          {...field}
+                                        />
+                                      );
+                                    })()}
                                   </FormControl>
                                 </FormItem>
                               )}
@@ -1143,15 +1149,26 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
                             <FormField
                               control={form.control as any}
                               name={`lineItems.${index}.unit`}
-                              render={({ field }) => (
-                                <FormItem className="m-0">
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
+                              render={({ field }) => {
+                                const selectedItemId = form.watch(`lineItems.${index}.item`);
+                                const selectedItem = selectedItemId ? items.find((i) => i._id === selectedItemId) : null;
+                                const itemUnit = selectedItem ? (selectedItem.unitOfMeasure ?? selectedItem.unit ?? 'pcs') : null;
+                                return (
+                                  <FormItem className="m-0">
+                                    <FormControl>
+                                      {itemUnit ? (
+                                        <span className="inline-flex items-center justify-center w-full h-9 text-sm border rounded-md px-3 bg-muted/50">
+                                          {itemUnit}
+                                        </span>
+                                      ) : (
+                                        <Input
+                                          {...field}
+                                        />
+                                      )}
+                                    </FormControl>
+                                  </FormItem>
+                                );
+                              }}
                             />
                           </div>
                           <div>

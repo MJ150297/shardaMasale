@@ -149,7 +149,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
@@ -160,7 +160,7 @@ export default function SettingsPage() {
                 : 'Configure business and system settings'}
           </p>
         </div>
-        <Button onClick={handleSubmit(onSubmit)} disabled={saving}>
+        <Button onClick={handleSubmit(onSubmit)} disabled={saving} className="hidden sm:inline-flex">
           <Save className="size-4 mr-2" />
           {saving ? "Saving..." : "Save Changes"}
         </Button>
@@ -437,7 +437,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="billing.invoicePrefix">Invoice Prefix</Label>
                     <Input id="billing.invoicePrefix" {...register("billing.invoicePrefix")} />
@@ -460,7 +460,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="billing.nextInvoiceSequence">Next Invoice Number</Label>
                     <Input
@@ -684,6 +684,14 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Mobile save button at bottom */}
+        <div className="sm:hidden">
+          <Button onClick={handleSubmit(onSubmit)} disabled={saving} className="w-full">
+            <Save className="size-4 mr-2" />
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
       </form>
     </div>
   );

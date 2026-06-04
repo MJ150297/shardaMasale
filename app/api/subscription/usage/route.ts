@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { getServerAuthSession, requireUser } from "@/lib/auth";
-import { getPlanFeatures } from "@/lib/subscription";
+import { getPlanFeatures } from "@/lib/subscription-features";
 import Shop from "@/models/Shop";
 import Item from "@/models/Item";
 import Party from "@/models/Party";
@@ -62,9 +62,10 @@ export async function GET() {
       monthlyTransactions: transactionCount,
       maxMonthlyTransactions: features.maxMonthlyTransactions,
     });
-  } catch (error: any) {
-    if (error?.digest?.startsWith("NEXT_REDIRECT")) throw error;
-    if (error?.digest?.startsWith("NEXT_NOT_FOUND")) throw error;
+  } catch (error: unknown) {
+    const nextError = error as { digest?: string };
+    if (nextError.digest?.startsWith("NEXT_REDIRECT")) throw error;
+    if (nextError.digest?.startsWith("NEXT_NOT_FOUND")) throw error;
     console.error("Error fetching subscription usage:", error);
     return NextResponse.json(
       { error: "Failed to fetch usage data" },

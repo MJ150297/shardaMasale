@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import CreateItemDialog, { type CreatedItem } from '@/components/create-item-dia
 import CreatePartyDialog, { type CreatedParty } from '@/components/create-party-dialog';
 
 import { roundCurrency } from '@/lib/utils';
+import { isIntegerUnit, getQuantityStep, getQuantityMin } from '@/lib/unit-utils';
 
 const requiredPartySchema = z.preprocess(
   (value) => (value === undefined || value === null ? '' : value),
@@ -172,11 +173,8 @@ export default function TransactionForm({
   const [parties, setParties] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingParties, setLoadingParties] = useState(false);
-  const [partySearchQuery, setPartySearchQuery] = useState('');
   const [createPartyOpen, setCreatePartyOpen] = useState(false);
   const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
-  const [itemSearchQueryByIndex, setItemSearchQueryByIndex] = useState<Record<number, string>>({});
-  const [openItemPopoverIndex, setOpenItemPopoverIndex] = useState<number | null>(null);
   const [selectedPartyInfo, setSelectedPartyInfo] = useState<{
     currentBalance: number;
     creditLimit: number;
@@ -687,62 +685,34 @@ export default function TransactionForm({
               render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>{isSaleFlow(mode) ? 'Customer *' : 'Supplier *'}</FormLabel>
-                  <Select value={field.value || ''} onValueChange={(value) => field.onChange(value)}>
-                    <SelectTrigger className={cn(
-                      "w-full justify-between",
-                      !field.value && "text-muted-foreground"
-                    )}>
-                      <SelectValue placeholder={`Select ${getPartyRole(mode)}`} className="truncate" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white">
-                      <div className="px-3 py-2 bg-white">
-                        <Input
-                          value={partySearchQuery}
-                          onChange={(event) => setPartySearchQuery(event.target.value)}
-                          placeholder="Search party by name or phone..."
-                          className="h-9 w-full"
-                        />
-                      </div>
-                      {(() => {
-                        const search = partySearchQuery.toLowerCase();
-                        const filteredParties = search === ''
-                          ? parties
-                          : parties.filter((party) => {
-                              const partyName = (party.displayName || party.name || party.fullName || party.partyName || '').toLowerCase();
-                              const phone = (party.phoneNumber || party.mobile || party.phone || '').toLowerCase();
-                              return partyName.includes(search) || phone.includes(search);
-                            });
-                        if (filteredParties.length === 0) {
-                          return (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">
-                              No party found.
-                            </div>
-                          );
-                        }
-                        return filteredParties.map((party) => (
-                          <SelectItem
-                            value={party._id}
-                            key={party._id}
-                            textValue={party.displayName || party.name}
-                            className='bg-white'
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">{party.displayName || party.name}</span>
-                              {(party.phoneNumber || party.mobile || party.phone) && (
-                                <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ));
-                      })()}
-                      <SelectSeparator className="my-1" />
-                      <div className="border-t p-1 bg-white">
-                        <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
-                          Create {getPartyRole(mode)}
-                        </CommandCreateButton>
-                      </div>
-                    </SelectContent>
-                  </Select>
+                   <SearchableSelect
+                     value={field.value || ''}
+                     onValueChange={(value) => field.onChange(value)}
+                     options={parties.map((party): SearchableSelectOption => ({
+                       value: party._id,
+                       label: party.displayName || party.name || '',
+                       data: party,
+                     }))}
+                     placeholder={`Select ${getPartyRole(mode)}`}
+                     searchPlaceholder="Search party by name or phone..."
+                     emptyMessage="No party found."
+                     renderItem={(option) => {
+                       const party = option.data;
+                       return (
+                         <div className="flex flex-col">
+                           <span className="font-medium">{party.displayName || party.name}</span>
+                           {(party.phoneNumber || party.mobile || party.phone) && (
+                             <span className="text-xs text-muted-foreground">{party.phoneNumber || party.mobile || party.phone}</span>
+                           )}
+                         </div>
+                       );
+                     }}
+                     actionSlot={
+                       <CommandCreateButton onClick={() => setCreatePartyOpen(true)}>
+                         Create {getPartyRole(mode)}
+                       </CommandCreateButton>
+                     }
+                   />
                   <FormMessage />
                   
                   {/* Available Credit Display */}
@@ -853,69 +823,51 @@ export default function TransactionForm({
 
                         return (
                           <FormItem className="m-0">
-                            <Select
-                              value={selectedItemId || ''}
-                              onValueChange={(value) => {
-                                const item = items.find((item) => item._id === value);
-                                if (item) {
-                                  handleItemSelect(index, item);
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select item" className="truncate" />
-                              </SelectTrigger>
-                               <SelectContent className="bg-white">
-                                <div key="item-search" className="px-3 py-2">
-                                  <Input
-                                    value={itemSearchQueryByIndex[index] ?? ''}
-                                    onChange={(event) => setItemSearchQueryByIndex(prev => ({
-                                      ...prev,
-                                      [index]: event.target.value,
-                                    }))}
-                                    placeholder="Search item by name or sku..."
-                                    className="h-9 w-full"
-                                  />
-                                </div>
-                                {(() => {
-                                  const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
-                                  const filteredItems = query === ''
-                                    ? items
-                                    : items.filter((item) => {
-                                        const name = item.name?.toLowerCase() || '';
-                                        const sku = item.sku?.toLowerCase() || '';
-                                        return name.includes(query) || sku.includes(query);
-                                      });
-
-                                  if (filteredItems.length === 0) {
-                                    return (
-                                      <div key="item-empty" className="px-3 py-2 text-sm text-muted-foreground">
-                                        No item found.
-                                      </div>
-                                    );
-                                  }
-
-                                  return filteredItems.map((item) => (
-                                    <SelectItem value={item._id} key={item._id} textValue={item.name}>
-                                      <div className="flex flex-col">
-                                        <span className="font-medium">{item.name}</span>
-                                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                          {item.sku && <span>SKU: {item.sku}</span>}
-                                          <span>{isSaleFlow(mode) ? 'Sell' : 'Buy'}: ₹{getDefaultUnitPrice(item, mode).toFixed(2)}</span>
-                                          <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
-                                        </div>
-                                      </div>
-                                    </SelectItem>
-                                  ));
-                                })()}
-                                <SelectSeparator key="item-separator" className="my-1" />
-                                <div key="item-create" className="border-t p-1">
-                                  <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
-                                    Create item
-                                  </CommandCreateButton>
-                                </div>
-                              </SelectContent>
-                            </Select>
+                             <SearchableSelect
+                               value={selectedItemId || ''}
+                               onValueChange={(value) => {
+                                 const item = items.find((item) => item._id === value);
+                                 if (item) {
+                                   handleItemSelect(index, item);
+                                 }
+                               }}
+                               options={items.map((item): SearchableSelectOption => ({
+                                 value: item._id,
+                                 label: item.name || '',
+                                 data: item,
+                               }))}
+                               placeholder="Select item"
+                               searchPlaceholder="Search item by name or sku..."
+                               emptyMessage="No item found."
+                               renderItem={(option) => {
+                                 const item = option.data;
+                                 return (
+                                   <span className="font-medium">
+                                     {item.itemType === 'compound' && (
+                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 mr-1.5 uppercase">
+                                         {item.bundleType === 'product' ? 'PB' : item.bundleType === 'service' ? 'SB' : 'B'}
+                                       </span>
+                                     )}
+                                     {item.itemType === 'product' && (
+                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 mr-1.5 uppercase">
+                                         P
+                                       </span>
+                                     )}
+                                     {item.itemType === 'service' && (
+                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 mr-1.5 uppercase">
+                                         S
+                                       </span>
+                                     )}
+                                     {item.name}
+                                   </span>
+                                 );
+                               }}
+                               actionSlot={
+                                 <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                   Create item
+                                 </CommandCreateButton>
+                               }
+                             />
                             <FormMessage />
                           </FormItem>
                         );
@@ -927,19 +879,29 @@ export default function TransactionForm({
                     <FormField
                       control={form.control}
                       name={`lineItems.${index}.quantity`}
-                      render={({ field: qtyField }) => (
-                        <FormItem className="m-0">
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              min="0" 
-                              step="0.01" 
-                              {...qtyField}
-                              className="text-center"
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
+                      render={({ field: qtyField }) => {
+                        const selectedItemId = form.watch(`lineItems.${index}.item`);
+                        const selectedItem = selectedItemId ? items.find((i: any) => i._id === selectedItemId) : null;
+                        const unit = selectedItem ? getItemUnit(selectedItem) : 'pcs';
+                        return (
+                          <FormItem className="m-0">
+                            <FormControl>
+                              <div className="flex items-center gap-1">
+                                <Input 
+                                  type="number" 
+                                  min={getQuantityMin(unit)} 
+                                  step={getQuantityStep(unit)} 
+                                  {...qtyField}
+                                  className="text-center flex-1"
+                                />
+                                <span className="text-xs text-muted-foreground shrink-0 w-6">
+                                  {unit}
+                                </span>
+                              </div>
+                            </FormControl>
+                          </FormItem>
+                        );
+                      }}
                     />
                   </div>
 
@@ -966,7 +928,8 @@ export default function TransactionForm({
                       const currentPrice = Number(form.watch(`lineItems.${index}.unitPrice`) || 0);
                       const originalPrice = itemId ? originalPrices[itemId] : undefined;
                       const isDifferent = itemId && originalPrice !== undefined && Math.abs(currentPrice - originalPrice) > 0.001;
-                      return isDifferent ? (
+                      const isCompoundItem = itemId && items.find((i: any) => i._id === itemId)?.itemType === 'compound';
+                      return isDifferent && !isCompoundItem ? (
                         <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer mt-0.5 whitespace-nowrap justify-center">
                           <input
                             type="checkbox"
@@ -1063,69 +1026,51 @@ export default function TransactionForm({
 
                           return (
                             <FormItem className="m-0">
-                              <Select
-                                value={selectedItemId || ''}
-                                onValueChange={(value) => {
-                                  const item = items.find((item) => item._id === value);
-                                  if (item) {
-                                    handleItemSelect(index, item);
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select item" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-white">
-                                  <div key="mob-item-search" className="px-3 py-2">
-                                    <Input
-                                      value={itemSearchQueryByIndex[index] ?? ''}
-                                      onChange={(event) => setItemSearchQueryByIndex(prev => ({
-                                        ...prev,
-                                        [index]: event.target.value,
-                                      }))}
-                                      placeholder="Search item by name or sku..."
-                                      className="h-9 w-full"
-                                    />
-                                  </div>
-                                  {(() => {
-                                    const query = (itemSearchQueryByIndex[index] ?? '').toLowerCase();
-                                    const filteredItems = query === ''
-                                      ? items
-                                      : items.filter((item) => {
-                                          const name = item.name?.toLowerCase() || '';
-                                          const sku = item.sku?.toLowerCase() || '';
-                                          return name.includes(query) || sku.includes(query);
-                                        });
-
-                                    if (filteredItems.length === 0) {
-                                      return (
-                                        <div key="mob-item-empty" className="px-3 py-2 text-sm text-muted-foreground">
-                                          No item found.
-                                        </div>
-                                      );
-                                    }
-
-                                    return filteredItems.map((item) => (
-                                      <SelectItem value={item._id} key={item._id} textValue={item.name}>
-                                        <div className="flex flex-col">
-                                          <span className="font-medium">{item.name}</span>
-                                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                            {item.sku && <span>SKU: {item.sku}</span>}
-                                            <span>{isSaleFlow(mode) ? 'Sell' : 'Buy'}: ₹{getDefaultUnitPrice(item, mode).toFixed(2)}</span>
-                                            <span>Stock: {typeof item.stock === 'object' ? item.stock?.currentQuantity || 0 : (item.stockQuantity || item.stock || 0)}</span>
-                                          </div>
-                                        </div>
-                                      </SelectItem>
-                                    ));
-                                  })()}
-                                  <SelectSeparator key="mob-item-separator" className="my-1" />
-                                  <div key="mob-item-create" className="border-t p-1">
-                                    <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
-                                      Create item
-                                    </CommandCreateButton>
-                                  </div>
-                                </SelectContent>
-                              </Select>
+                               <SearchableSelect
+                                 value={selectedItemId || ''}
+                                 onValueChange={(value) => {
+                                   const item = items.find((item) => item._id === value);
+                                   if (item) {
+                                     handleItemSelect(index, item);
+                                   }
+                                 }}
+                                 options={items.map((item): SearchableSelectOption => ({
+                                   value: item._id,
+                                   label: item.name || '',
+                                   data: item,
+                                 }))}
+                                 placeholder="Select item"
+                                 searchPlaceholder="Search item by name or sku..."
+                                 emptyMessage="No item found."
+                                 renderItem={(option) => {
+                                   const item = option.data;
+                                   return (
+                                     <span className="font-medium">
+                                       {item.itemType === 'compound' && (
+                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 mr-1.5 uppercase">
+                                           {item.bundleType === 'product' ? 'PB' : item.bundleType === 'service' ? 'SB' : 'B'}
+                                         </span>
+                                       )}
+                                       {item.itemType === 'product' && (
+                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 mr-1.5 uppercase">
+                                           P
+                                         </span>
+                                       )}
+                                       {item.itemType === 'service' && (
+                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 mr-1.5 uppercase">
+                                           S
+                                         </span>
+                                       )}
+                                       {item.name}
+                                     </span>
+                                   );
+                                 }}
+                                 actionSlot={
+                                   <CommandCreateButton onClick={() => setCreateItemIndex(index)}>
+                                     Create item
+                                   </CommandCreateButton>
+                                 }
+                               />
                               <FormMessage />
                             </FormItem>
                           );
@@ -1144,22 +1089,35 @@ export default function TransactionForm({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Qty
+                        {(() => {
+                          const selectedItemId = form.watch(`lineItems.${index}.item`);
+                          const selectedItem = selectedItemId ? items.find((i: any) => i._id === selectedItemId) : null;
+                          const unit = selectedItem ? getItemUnit(selectedItem) : 'pcs';
+                          return <span className="ml-1">({unit})</span>;
+                        })()}
+                      </label>
                       <FormField
                         control={form.control}
                         name={`lineItems.${index}.quantity`}
-                        render={({ field: qtyField }) => (
-                          <FormItem className="m-0">
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                min="0" 
-                                step="0.01" 
-                                {...qtyField}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
+                        render={({ field: qtyField }) => {
+                          const selectedItemId = form.watch(`lineItems.${index}.item`);
+                          const selectedItem = selectedItemId ? items.find((i: any) => i._id === selectedItemId) : null;
+                          const unit = selectedItem ? getItemUnit(selectedItem) : 'pcs';
+                          return (
+                            <FormItem className="m-0">
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  min={getQuantityMin(unit)} 
+                                  step={getQuantityStep(unit)} 
+                                  {...qtyField}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          );
+                        }}
                       />
                     </div>
                     <div>
@@ -1185,7 +1143,8 @@ export default function TransactionForm({
                         const currentPrice = Number(form.watch(`lineItems.${index}.unitPrice`) || 0);
                         const originalPrice = itemId ? originalPrices[itemId] : undefined;
                         const isDifferent = itemId && originalPrice !== undefined && Math.abs(currentPrice - originalPrice) > 0.001;
-                        return isDifferent ? (
+                        const isCompoundItem = itemId && items.find((i: any) => i._id === itemId)?.itemType === 'compound';
+                        return isDifferent && !isCompoundItem ? (
                           <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer mt-0.5 whitespace-nowrap">
                             <input
                               type="checkbox"

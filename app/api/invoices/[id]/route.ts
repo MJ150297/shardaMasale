@@ -12,6 +12,7 @@ import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
 import StockMovement from '@/models/StockMovement';
+import { validateQuantityForUnit } from '@/lib/unit-utils';
 
 const updateInvoiceSchema = z.object({
   party: z.string().optional().nullable(),
@@ -350,6 +351,31 @@ export async function PATCH(
           user.id,
           user.activeShopId ?? null,
         );
+      }
+
+      // Validate line item quantities against item units before processing stock
+      const lineItemsToCheck = transaction.lineItems.filter((li: any) => li.item);
+      if (lineItemsToCheck.length > 0) {
+        const itemIds = lineItemsToCheck.map((li: any) => li.item);
+        const dbItems = await Item.find({
+          _id: { $in: itemIds },
+          owner: user.id,
+        }).session(session).lean();
+
+        for (const lineItem of lineItemsToCheck) {
+          const dbItem = dbItems.find((i: any) => i._id.toString() === lineItem.item!.toString());
+          if (dbItem) {
+            const unit = (dbItem as any).unitOfMeasure || 'pcs';
+            const error = validateQuantityForUnit(
+              lineItem.quantity,
+              unit,
+              lineItem.itemName,
+            );
+            if (error) {
+              throw new AppError(error, 400);
+            }
+          }
+        }
       }
 
       for (const lineItem of transaction.lineItems) {

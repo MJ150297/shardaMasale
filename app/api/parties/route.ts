@@ -25,11 +25,20 @@ const createPartySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const { user } = await requireActiveBusinessSubscription();
+    const { user, features } = await requireActiveBusinessSubscription();
     await connectToDatabase();
 
     const body = await request.json();
     const validatedData = createPartySchema.parse(body);
+
+    // Check subscription party limit
+    const currentPartyCount = await Party.countDocuments({ owner: user.id, isArchived: false });
+    if (currentPartyCount >= features.maxParties) {
+      throw new AppError(
+        `You've reached the maximum limit of ${features.maxParties} parties on your plan. Please upgrade to add more.`,
+        403
+      );
+    }
 
     // Check for duplicate email if provided
     if (validatedData.email) {

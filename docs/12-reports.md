@@ -118,6 +118,69 @@ const pipeline = [
 ];
 ```
 
+## Advanced Reports & Subscription Gating
+
+Reports are divided into **basic** and **advanced** tiers. Advanced reports require the `advancedReports` plan feature (set to `false` for `free` and `trial` plans, `true` for `paid` and `enterprise`).
+
+### Basic Reports (all plans)
+These are available on every plan and only require the user to be authenticated as a business user:
+
+| Report | Slug | Description |
+|--------|------|-------------|
+| Daily Sales | `daily-sales` | Daily sales summary |
+| Customer Ledger | `customer-ledger` | Per-customer balance history |
+| Stock | `stock` | Current inventory levels |
+| Stock Movements | `stock/movements` | Detailed stock movement log |
+| Parties | `parties` | Party summaries |
+| Transactions | `transactions` | Full transaction list |
+| Invoices | `invoices` | Full invoice list |
+| Dashboard Charts | `dashboard-charts` | Time-series chart data |
+| Snapshot | `snapshot` | At-a-glance KPIs |
+
+### Advanced Reports (paid+ plans)
+These return **HTTP 403** with `error: "Advanced reports are not available on your plan. Upgrade to access this report."` for users on `free` or `trial` plans:
+
+| Report | Slug | Plan Required |
+|--------|------|---------------|
+| Profit & Loss | `profit-loss` | paid+ |
+| Balance Sheet | `balance-sheet` | paid+ |
+| Cash Flow | `cash-flow` | paid+ |
+| Tax/GST | `tax` | paid+ |
+| Sales by Item | `sales-by-item` | paid+ |
+| Receivables Aging | `receivables-aging` | paid+ |
+| Payables Aging | `payables-aging` | paid+ |
+| Supplier Performance | `supplier-performance` | paid+ |
+| Top Spenders | `top-spenders` | paid+ |
+| Wastage | `wastage` | paid+ |
+| Purchase Orders | `purchase-orders` | paid+ |
+| Stock Aging | `stock-aging` | paid+ |
+| Sales Returns | `sales-returns` | paid+ |
+
+### How Gating Works
+
+Each advanced report route:
+
+1. Calls `requireOwner()` (or `requireBusinessUser()`) to verify auth + role
+2. Calls `requireActiveBusinessSubscription()` to verify subscription is **active** or **trial** (not expired/suspended)
+3. Checks `features.advancedReports` against `ADVANCED_REPORT_SLUGS` from `lib/subscription.ts`
+4. Returns 403 if the user is on a plan that doesn't support that report
+
+```typescript
+// Pattern used in every advanced report route
+const user = await requireOwner();
+const { features } = await requireActiveBusinessSubscription();
+if (!features.advancedReports || !isAdvancedReport('profit-loss')) {
+  return NextResponse.json(
+    { error: 'Advanced reports are not available on your plan. Upgrade to access this report.' },
+    { status: 403 }
+  );
+}
+```
+
+The `ADVANCED_REPORT_SLUGS` set is defined in `lib/subscription.ts` along with the `isAdvancedReport(slug)` helper. Adding a new advanced report requires:
+1. Adding the slug to `ADVANCED_REPORT_SLUGS`
+2. Adding the gate in the new route's `GET` handler
+
 ## Report Page Layout
 
 The reports page (`app/(dashboard)/dashboard/reports/page.tsx`) uses tabs to switch between report types:

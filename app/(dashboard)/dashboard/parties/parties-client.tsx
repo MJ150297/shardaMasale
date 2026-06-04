@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, Users } from 'lucide-react';
+import { MoreHorizontal, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import CreatePartyDialog from '@/components/create-party-dialog';
 import EditPartyDialog from '@/components/edit-party-dialog';
@@ -30,6 +31,7 @@ import RequireShopGuard from '@/components/require-shop-guard';
 
 interface Party {
   _id: string;
+  displayName: string;
   name: string;
   email?: string | null;
   phoneNumber?: string | null;
@@ -37,8 +39,11 @@ interface Party {
   partyType: 'customer' | 'supplier' | 'both';
 }
 
-interface PartiesClientProps {
-  parties: Party[];
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
 }
 
 function getStatusBadgeClass(status: string) {
@@ -58,9 +63,11 @@ function getTypeBadgeClass(type: string) {
   }
 }
 
-export default function PartiesClient({ parties }: PartiesClientProps) {
+export default function PartiesClient() {
   const router = useRouter();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [parties, setParties] = useState<Party[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, pages: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [partyTypeFilter, setPartyTypeFilter] = useState('all');
@@ -69,46 +76,66 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
   const [editPartyOpen, setEditPartyOpen] = useState(false);
   const [editPartyTarget, setEditPartyTarget] = useState<Party | null>(null);
 
+  useEffect(() => {
+    loadParties();
+  }, [pagination.page, statusFilter, partyTypeFilter]);
+
+  async function loadParties() {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...(statusFilter !== 'all' && { status: statusFilter }),
+        ...(partyTypeFilter !== 'all' && { type: partyTypeFilter }),
+      });
+
+      const res = await fetch(`/api/parties?${params}`);
+      const data = await res.json();
+
+      if (res.ok) {
+        setParties(data.parties || []);
+        setPagination(data.pagination);
+      }
+    } catch (error) {
+      console.error('Failed to load parties:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const filteredParties = useMemo(() => {
     return parties.filter(party => {
       const matchesSearch = searchQuery === '' || 
-        party.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (party.displayName || party.name).toLowerCase().includes(searchQuery.toLowerCase()) ||
         (party.email && party.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (party.phoneNumber && party.phoneNumber.includes(searchQuery));
 
-      const matchesStatus = statusFilter === 'all' || party.status === statusFilter;
-      const matchesType = partyTypeFilter === 'all' || party.partyType === partyTypeFilter;
-
-      return matchesSearch && matchesStatus && matchesType;
+      return matchesSearch;
     });
-  }, [parties, searchQuery, statusFilter, partyTypeFilter]);
+  }, [parties, searchQuery]);
 
   const handleFilter = (key: string, value: string) => {
     if (key === 'status') setStatusFilter(value);
-  };
-
-  const handlePartyCreated = () => {
-    setRefreshKey(prev => prev + 1);
-    window.location.reload();
   };
 
   const handleSendInvite = (party: Party) => {
     if (party.email) {
       toast.success(`Invite sent to ${party.email}`);
     } else {
-      toast.error(`No email found for ${party.name}`);
+      toast.error(`No email found for ${party.displayName || party.name}`);
     }
   };
 
   return (
-    <div className="space-y-6" key={refreshKey}>
-      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Customers / Suppliers</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your customers and send login invites</p>
         </div>
         <RequireShopGuard>
-          <CreatePartyDialog onPartyCreated={handlePartyCreated} />
+          <CreatePartyDialog onPartyCreated={() => { loadParties(); }} />
         </RequireShopGuard>
       </div>
 
@@ -138,9 +165,30 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
         ]}
       />
 
-      {/* Flexbox Card Layout - Matching Dashboard Transactions & Items */}
+      {/* Flexbox Card Layout */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-        {filteredParties.length === 0 ? (
+        {loading ? (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="px-4 md:px-6 py-3 md:py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <Skeleton className="h-8 w-8 md:h-10 md:w-10 rounded-full" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredParties.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <div className="text-4xl mb-2">👥</div>
             <p className="font-medium text-gray-900 dark:text-white">No parties found</p>
@@ -171,7 +219,7 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {party.name}
+                          {party.displayName || party.name}
                         </p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getTypeBadgeClass(party.partyType)}`}>
@@ -248,7 +296,7 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
                                 <AlertDialogTitle>Delete Party</AlertDialogTitle>
                                 <AlertDialogDescription>
                                   This action cannot be undone. This will permanently delete the party
-                                  <span className="font-semibold"> {party.name} </span>
+                                  <span className="font-semibold"> {party.displayName || party.name} </span>
                                   and remove all associated data.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
@@ -268,7 +316,7 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
                                       }
                                       
                                       toast.success('Party deleted successfully');
-                                      window.location.reload();
+                                      loadParties();
                                     } catch (error) {
                                       console.error('Error deleting party:', error);
                                       toast.error(error instanceof Error ? error.message : 'Failed to delete party');
@@ -289,6 +337,33 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
             ))}
           </div>
         )}
+
+        {/* Pagination */}
+        {pagination.pages > 1 && (
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-gray-100 dark:border-gray-800">
+            <p className="text-sm text-muted-foreground">
+              Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+            </p>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                disabled={pagination.page <= 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                disabled={pagination.page >= pagination.pages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Edit Party Dialog - rendered outside dropdown */}
@@ -298,7 +373,7 @@ export default function PartiesClient({ parties }: PartiesClientProps) {
           party={editPartyTarget}
           open={editPartyOpen}
           onOpenChange={setEditPartyOpen}
-          onPartyUpdated={() => window.location.reload()}
+          onPartyUpdated={() => { loadParties(); }}
         />
       )}
     </div>

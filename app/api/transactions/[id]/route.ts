@@ -14,9 +14,11 @@ import {
 } from '@/lib/transaction-inventory';
 import { getNextCounterSequence } from '@/lib/document-numbering';
 import { getBalanceDelta, updatePartyBalance } from '@/lib/party-balance';
+import Item from '@/models/Item';
 import Party from '@/models/Party';
 import Transaction from '@/models/Transaction';
 import Invoice from '@/models/Invoice';
+import { validateQuantityForUnit } from '@/lib/unit-utils';
 
 type TransactionNumberingConfig = {
   prefixMap: Record<string, string>;
@@ -260,6 +262,28 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 
     if (hasEditableUpdates) {
+      // Validate line item quantities against item units
+      const lineItems = (updatePayload.lineItems as any[]) || [];
+      const itemsToCheck = lineItems.filter((li: any) => li.item);
+      if (itemsToCheck.length > 0) {
+        const itemIds = itemsToCheck.map((li: any) => li.item);
+        const dbItems = await Item.find({
+          _id: { $in: itemIds },
+          owner: user.id,
+        }).lean();
+
+        for (const lineItem of itemsToCheck) {
+          const dbItem = dbItems.find((i: any) => i._id.toString() === lineItem.item);
+          if (dbItem) {
+            const unit = dbItem.unitOfMeasure || 'pcs';
+            const error = validateQuantityForUnit(lineItem.quantity, unit, dbItem.name);
+            if (error) {
+              throw new AppError(error, 400);
+            }
+          }
+        }
+      }
+
       Object.assign(transaction, updatePayload);
       transaction.updatedBy = new mongoose.Types.ObjectId(user.id);
       await transaction.save({ session });
