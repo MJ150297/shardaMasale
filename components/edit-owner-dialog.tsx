@@ -244,7 +244,7 @@ export default function EditOwnerDialog({
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList variant="segmented" className="grid w-full grid-cols-3">
                   <TabsTrigger value="basic">Basic Info</TabsTrigger>
                   <TabsTrigger value="shops">Shop Access</TabsTrigger>
                   <TabsTrigger value="advanced">Advanced</TabsTrigger>

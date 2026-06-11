@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Share2,
   Copy,
@@ -33,6 +33,8 @@ import {
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getPartyPhone as getPartyPhoneUtil } from '@/lib/party-helpers';
+import QRCode from 'qrcode';
 
 interface InvoiceLineItem {
   itemName: string;
@@ -77,10 +79,43 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [sharing, setSharing] = useState<string | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [qrError, setQrError] = useState(false);
   const isMobile = useIsMobile();
 
   const invoiceUrl = `${window.location.origin}/api/invoices/${invoice.id}/pdf`;
   const publicUrl = `${window.location.origin}/invoices/${invoice.id}`;
+
+  // Generate QR code when the sheet opens
+  useEffect(() => {
+    if (!open) return;
+    setQrError(false);
+    setQrCodeDataUrl(null);
+    QRCode.toDataURL(publicUrl, {
+      width: 200,
+      margin: 2,
+      color: {
+        dark: '#1f2937',
+        light: '#ffffff',
+      },
+    })
+      .then((url: string) => {
+        setQrCodeDataUrl(url);
+      })
+      .catch(() => {
+        setQrError(true);
+      });
+  }, [open, publicUrl]);
+
+  const handleDownloadQr = useCallback(() => {
+    if (!qrCodeDataUrl) return;
+    const link = document.createElement('a');
+    link.download = `invoice-${invoice.invoiceNumber}-qr.png`;
+    link.href = qrCodeDataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [qrCodeDataUrl, invoice.invoiceNumber]);
 
   // Helper to format currency
   const fmt = (val: number | undefined | null) =>
@@ -138,28 +173,46 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
   }
 
   function getPartyPhone(): string {
-    return invoice.party?.phone || invoice.transactionId?.party?.phone || '';
+    if (invoice.transactionId?.party) {
+      return getPartyPhoneUtil(invoice.transactionId.party) || '';
+    }
+    if (invoice.party) {
+      return (invoice.party as any)?.phoneNumber || invoice.party.phone || '';
+    }
+    return '';
   }
 
   function getPartyEmail(): string {
     return invoice.party?.email || invoice.transactionId?.party?.email || '';
   }
 
+  function getPaymentStatus(): string {
+    const dueAmount = invoice.transactionId?.summary?.dueAmount || 0;
+    const paidAmount = invoice.transactionId?.summary?.paidAmount || 0;
+    if (paidAmount > 0 && dueAmount > 0) return 'partial';
+    if (dueAmount > 0) return 'unpaid';
+    return 'paid';
+  }
+
   function buildTextMessage(): string {
-    const dueDateStr = new Date(invoice.dueDate).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-    return `Invoice ${invoice.invoiceNumber}\n\nAmount: Rs.${invoice.grandTotal.toFixed(2)}\nDue Date: ${dueDateStr}`;
+    const invoiceNo = invoice.invoiceNumber || '';
+    const customerName = getPartyName();
+    const amount = `₹ ${invoice.grandTotal.toFixed(2)}`;
+    const status = getPaymentStatus();
+    return `*Transaction Details*\n-------------------\nInvoice #: ${invoiceNo}\nCustomer: ${customerName}\nAmount: ${amount}\nStatus: ${status}\n\nSent from GSMS Shop Management System`;
   }
 
   async function shareViaWhatsApp() {
     setSharing('whatsapp');
     try {
-      const phone = invoice.party?.phone?.replace(/\D/g, '') || '';
+      const phone = getPartyPhone().replace(/\D/g, '');
+      if (!phone) {
+        toast.error('No phone number found for this customer.');
+        setSharing(null);
+        return;
+      }
       const text = buildTextMessage();
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+      window.open(`https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(text)}&type=phone_number&app_absent=0`, '_blank');
       await trackShare('whatsapp');
     } finally {
       setSharing(null);
@@ -250,7 +303,11 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
       icon: MessageSquare,
       color: 'text-purple-600',
       handler: () => {
-        const phone = invoice.party?.phone?.replace(/\D/g, '') || '';
+        const phone = getPartyPhone().replace(/\D/g, '');
+        if (!phone) {
+          toast.error('No phone number found for this customer.');
+          return;
+        }
         const text = buildTextMessage();
         window.open(`sms:${phone}?body=${encodeURIComponent(text)}`, '_blank');
         trackShare('sms');
@@ -388,11 +445,42 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
 
       <Separator className="my-3" />
 
-      <div className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mt-2">
-        <QrCode className="h-16 w-16 text-gray-400 mb-2" />
-        <p className="text-sm text-muted-foreground text-center">
-          Scan QR code to view invoice
-        </p>
+      <div className="flex flex-col items-center justify-center p-4 bg-white dark:bg-gray-800 rounded-lg mt-2">
+        {qrCodeDataUrl ? (
+          <>
+            <img
+              src={qrCodeDataUrl}
+              alt={`QR Code for Invoice ${invoice.invoiceNumber}`}
+              className="w-40 h-40 rounded-lg"
+            />
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Scan to view invoice
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 h-8 text-xs"
+              onClick={handleDownloadQr}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              Download QR
+            </Button>
+          </>
+        ) : qrError ? (
+          <>
+            <QrCode className="h-12 w-12 text-gray-400 mb-2" />
+            <p className="text-xs text-red-500 text-center">
+              Failed to generate QR code
+            </p>
+          </>
+        ) : (
+          <>
+            <Loader2 className="h-12 w-12 text-gray-400 mb-2 animate-spin" />
+            <p className="text-xs text-muted-foreground text-center">
+              Generating QR code...
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -404,7 +492,7 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
           <SheetTrigger asChild>
             {triggerButton}
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl">
+          <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl bg-white/90 overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Share Invoice</SheetTitle>
             </SheetHeader>
@@ -416,7 +504,7 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
           <DialogTrigger asChild>
             {triggerButton}
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md bg-white/90">
             <DialogHeader>
               <DialogTitle>Share Invoice</DialogTitle>
             </DialogHeader>

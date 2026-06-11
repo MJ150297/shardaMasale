@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Users, DollarSign, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { ExportButton } from './export-button';
 import { DateRangeFilter } from './date-range-filter';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 interface PartyReportProps {
   shopId?: string;
@@ -20,6 +21,12 @@ export function PartyReport({ shopId }: PartyReportProps) {
   const [partyTypeFilter, setPartyTypeFilter] = useState('all');
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [partyTypeFilter, startDate, endDate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -30,6 +37,8 @@ export function PartyReport({ shopId }: PartyReportProps) {
         if (partyTypeFilter) params.append('partyType', partyTypeFilter);
         if (startDate) params.append('startDate', startDate.toISOString());
         if (endDate) params.append('endDate', endDate.toISOString());
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
 
         const res = await fetch(`/api/reports/parties?${params}`);
         const result = await res.json();
@@ -41,7 +50,7 @@ export function PartyReport({ shopId }: PartyReportProps) {
       }
     };
     fetchData();
-  }, [shopId, partyTypeFilter, startDate, endDate]);
+  }, [shopId, partyTypeFilter, startDate, endDate, page]);
 
   const partyColumns = [
     { key: 'displayName', label: 'Party Name' },
@@ -181,6 +190,15 @@ export function PartyReport({ shopId }: PartyReportProps) {
             </TableBody>
           </Table>
         </CardContent>
+        {data.pagination && (
+          <PaginationControls
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            total={data.pagination.total}
+            limit={data.pagination.limit}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );

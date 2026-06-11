@@ -16,11 +16,18 @@ function normalizeBillingSettings(settings: Record<string, unknown> | null | und
   const legacyFreeBilling = { ...billing };
   delete legacyFreeBilling.quotationPrefix;
 
+  const business = (settings.business as Record<string, unknown> | undefined) || {};
+
   return {
     ...settings,
     billing: {
       ...legacyFreeBilling,
       salePrefix,
+      footerText: legacyFreeBilling.footerText ?? null,
+    },
+    business: {
+      ...business,
+      logo: business.logo ?? null,
     },
   };
 }

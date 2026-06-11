@@ -19,9 +19,11 @@ export interface BusinessProfileSettings {
   displayName: string;
   email?: string | null;
   phoneNumber?: string | null;
+  website?: string | null;
   gstin?: string | null;
   pan?: string | null;
   address: SettingsAddress;
+  logo?: string | null;
 }
 
 export interface LocalizationSettings {
@@ -51,6 +53,7 @@ export interface BillingSettings {
   nextSaleSequence: number;
   autoRoundOff: boolean;
   termsAndConditions?: string | null;
+  footerText?: string | null;
 }
 
 export interface TaxationSettings {
@@ -189,6 +192,12 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             default: null,
             trim: true,
           },
+          website: {
+            type: String,
+            default: null,
+            trim: true,
+            maxlength: 200,
+          },
           gstin: {
             type: String,
             default: null,
@@ -206,6 +215,10 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
           address: {
             type: addressSchema,
             required: true,
+          },
+          logo: {
+            type: String,
+            default: null,
           },
         },
         { _id: false },
@@ -354,6 +367,12 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             trim: true,
             maxlength: 2_000,
           },
+          footerText: {
+            type: String,
+            default: null,
+            trim: true,
+            maxlength: 500,
+          },
         },
         { _id: false },
       ),
@@ -369,6 +388,7 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         nextSaleSequence: 1,
         autoRoundOff: true,
         termsAndConditions: null,
+        footerText: null,
       }),
     },
     taxation: {

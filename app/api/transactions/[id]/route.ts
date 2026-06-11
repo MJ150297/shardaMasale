@@ -203,7 +203,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const transaction = await Transaction.findOne({
       _id: id,
       owner: user.id,
-    }).populate('party', 'displayName phoneNumber email').lean();
+    })
+      .populate('party', 'displayName phoneNumber email')
+      .populate('invoiceId', 'invoiceNumber status')
+      .lean();
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });

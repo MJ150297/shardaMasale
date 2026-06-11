@@ -10,6 +10,7 @@ import { BookOpen, DollarSign, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { formatDate } from '@/lib/date-utils';
 import { DateRangeFilter } from './date-range-filter';
 import { ExportButton } from './export-button';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
   const [loading, setLoading] = useState(true);
@@ -17,6 +18,8 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
   const [partyId, setPartyId] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
   useEffect(() => {
     const fetchParties = async () => {
@@ -32,6 +35,7 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
 
   useEffect(() => {
     if (!partyId) return;
+    setPage(1);
     const fetchLedger = async () => {
       setLoading(true);
       const params = new URLSearchParams();
@@ -46,6 +50,11 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
     };
     fetchLedger();
   }, [partyId, shopId, startDate, endDate]);
+
+  // Client-side pagination for ledger entries
+  const ledger = data?.ledger || [];
+  const totalPages = Math.ceil(ledger.length / limit);
+  const paginatedLedger = ledger.slice((page - 1) * limit, page * limit);
 
   const ledgerColumns = [
     { key: 'date', label: 'Date' },
@@ -84,7 +93,7 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
     );
   }
 
-  const { selectedParty, ledger, summary } = data;
+  const { selectedParty, summary } = data;
 
   return (
     <div className="space-y-6">
@@ -136,7 +145,7 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ledger.map((entry: any) => (
+              {paginatedLedger.map((entry: any) => (
                 <TableRow key={entry._id}>
                   <TableCell>{formatDate(entry.date)}</TableCell>
                   <TableCell className="font-medium">{entry.transactionNumber}</TableCell>
@@ -149,12 +158,21 @@ export function CustomerLedgerReport({ shopId }: { shopId?: string }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {ledger.length === 0 && (
+              {paginatedLedger.length === 0 && (
                 <TableRow><TableCell colSpan={7} className="h-24 text-center">No transactions found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
+        {totalPages > 1 && (
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            total={ledger.length}
+            limit={limit}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );

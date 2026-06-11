@@ -342,7 +342,7 @@ export default function InvoicesClient() {
       </div>
 
       <Tabs defaultValue="" value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))} className="w-full">
-        <TabsList className="w-full overflow-x-auto flex-nowrap">
+        <TabsList variant="segmented" className="w-full overflow-x-auto flex-nowrap">
           <TabsTrigger value="">All</TabsTrigger>
           <TabsTrigger value="draft">Draft</TabsTrigger>
           <TabsTrigger value="sent">Sent</TabsTrigger>
@@ -419,6 +419,9 @@ export default function InvoicesClient() {
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getStatusBadgeClass(invoice.status)}`}>
                             {invoice.status}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {formatDate(invoice.createdAt)}
                           </span>
                           <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
                             Due: {formatDate(invoice.dueDate)}

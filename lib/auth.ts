@@ -97,11 +97,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: getAuthSecret(),
   session: {
     strategy: "jwt",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24,   // Re-encrypt the JWT at most once per day
   },
   cookies: {
     sessionToken: {
-      name: `next-auth.session-token`,
+      // NextAuth v5 requires the `__Secure-` prefix on the session cookie
+      // whenever `secure: true` is set in production. Without this prefix,
+      // browsers silently reject the Set-Cookie header, which is why
+      // logins did not persist across browser/PWA restarts.
+      name:
+        process.env.NODE_ENV === "production"
+          ? "__Secure-next-auth.session-token"
+          : "next-auth.session-token",
       options: {
         httpOnly: true,
         sameSite: "lax",

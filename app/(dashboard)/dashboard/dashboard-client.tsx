@@ -299,11 +299,14 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
         createdAt: fullTransaction.createdAt,
         updatedAt: fullTransaction.updatedAt,
         invoiceId: fullTransaction.invoiceId
-          ? {
-              _id: fullTransaction.invoiceId._id,
-              invoiceNumber: fullTransaction.invoiceId.invoiceNumber,
-              status: fullTransaction.invoiceId.status as 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled',
-            }
+          ? (typeof fullTransaction.invoiceId === 'string'
+              ? { _id: fullTransaction.invoiceId, invoiceNumber: '', status: 'sent' as const }
+              : {
+                  _id: fullTransaction.invoiceId._id,
+                  invoiceNumber: fullTransaction.invoiceId.invoiceNumber,
+                  status: fullTransaction.invoiceId.status as 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled',
+                }
+            )
           : null,
       };
 

@@ -10,6 +10,7 @@ import { ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import { ExportButton } from './export-button';
 import { DateRangeFilter } from './date-range-filter';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 interface TransactionReportProps {
   shopId?: string;
@@ -22,6 +23,12 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [typeFilter, statusFilter, startDate, endDate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,7 +40,9 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
         if (statusFilter) params.append('status', statusFilter);
         if (startDate) params.append('startDate', startDate.toISOString());
         if (endDate) params.append('endDate', endDate.toISOString());
-        
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
+
         const res = await fetch(`/api/reports/transactions?${params}`);
         const result = await res.json();
         setData(result);
@@ -45,7 +54,7 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
     };
 
     fetchData();
-  }, [shopId, typeFilter, statusFilter, startDate, endDate]);
+  }, [shopId, typeFilter, statusFilter, startDate, endDate, page]);
 
   const transactionColumns = [
     { key: 'createdAt', label: 'Date' },
@@ -167,9 +176,25 @@ export function TransactionReport({ shopId }: TransactionReportProps) {
                   <TableCell className="text-right font-medium">₹{(tx.summary?.grandTotal || 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
+              {data.transactions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    No transactions found for the selected filters.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
+        {data.pagination && (
+          <PaginationControls
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            total={data.pagination.total}
+            limit={data.pagination.limit}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );

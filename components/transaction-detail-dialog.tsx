@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileText, ArrowUpRight, ArrowDownLeft, Tag, CreditCard, IndianRupee, ShoppingCart, CalendarDays, Package, Info, BadgeCheck, AlertCircle, Phone, Mail } from 'lucide-react';
+import { FileText, ArrowUpRight, ArrowDownLeft, Tag, CreditCard, IndianRupee, ShoppingCart, CalendarDays, Package, Info, BadgeCheck, AlertCircle, Phone, Mail, Download, Printer } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
+import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
+import { toast } from 'sonner';
 
 // Types matching the Transaction interface used across the app
 export interface TransactionLineItem {
@@ -108,7 +111,39 @@ export default function TransactionDetailDialog({
   onOpenChange,
   transaction,
 }: TransactionDetailDialogProps) {
+  const [invoiceToPreview, setInvoiceToPreview] = useState<any>(null);
+  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
+
   if (!transaction) return null;
+
+  const handleViewInvoice = async (invoiceId: string) => {
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`);
+      if (!res.ok) throw new Error('Failed to load invoice');
+      const data = await res.json();
+      setInvoiceToPreview(data.data || data);
+      setInvoicePreviewOpen(true);
+    } catch (error) {
+      toast.error('Could not load invoice details');
+      console.error(error);
+    }
+  };
+
+  const downloadInvoice = (inv: any) => {
+    toast.info('Downloading invoice...');
+    window.open(`/api/invoices/${inv._id}/pdf`, '_blank');
+  };
+
+  const printInvoice = (inv: any) => {
+    toast.info('Preparing invoice for print...');
+    const printWindow = window.open(`/api/invoices/${inv._id}/pdf#toolbar=0`, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -285,9 +320,9 @@ export default function TransactionDetailDialog({
 
           {/* Invoice PDF button */}
           {transaction.invoiceId && (
-            <Button variant="outline" size="sm" className="w-full text-sm" onClick={() => window.open(`/api/invoices/${transaction.invoiceId!._id}/pdf`, '_blank')}>
+            <Button variant="outline" size="sm" className="w-full text-sm" onClick={() => handleViewInvoice(transaction.invoiceId!._id)}>
               <FileText className="h-4 w-4 mr-2" />
-              View Invoice PDF
+              View Invoice
             </Button>
           )}
 
@@ -543,10 +578,10 @@ export default function TransactionDetailDialog({
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => window.open(`/api/invoices/${transaction.invoiceId!._id}/pdf`, '_blank')}
+                  onClick={() => handleViewInvoice(transaction.invoiceId!._id)}
                 >
                   <FileText className="h-4 w-4 mr-2" />
-                  View Invoice PDF
+                  View Invoice
                 </Button>
               )}
 
@@ -556,6 +591,17 @@ export default function TransactionDetailDialog({
                   Close
                 </Button>
               </div>
+
+              {/* Invoice Preview Modal */}
+              {invoiceToPreview && (
+                <InvoicePreviewModal
+                  open={invoicePreviewOpen}
+                  onOpenChange={setInvoicePreviewOpen}
+                  invoice={invoiceToPreview}
+                  onDownload={() => downloadInvoice(invoiceToPreview)}
+                  onPrint={() => printInvoice(invoiceToPreview)}
+                />
+              )}
             </div>
           </div>
         </div>

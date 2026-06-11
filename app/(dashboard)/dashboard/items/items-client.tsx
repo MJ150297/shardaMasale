@@ -128,7 +128,7 @@ export default function ItemsClient() {
       </div>
 
       <Tabs defaultValue="all" value={typeFilter} onValueChange={setTypeFilter} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList variant="segmented" className="grid w-full grid-cols-4">
           <TabsTrigger value="all">All Items</TabsTrigger>
           <TabsTrigger value="product">Products</TabsTrigger>
           <TabsTrigger value="service">Services</TabsTrigger>

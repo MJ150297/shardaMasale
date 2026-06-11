@@ -14,6 +14,8 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     const query: any = { owner: user.id };
     
@@ -27,34 +29,50 @@ export async function GET(request: Request) {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
+    // Get total count for pagination
+    const total = await Transaction.countDocuments(query);
+
     const transactions = await Transaction.find(query)
       .sort({ createdAt: -1 })
-      .limit(500)
+      .skip((page - 1) * limit)
+      .limit(limit)
       .populate('party', 'displayName')
       .lean();
 
-    // Calculate totals
-    const totals = transactions.reduce((acc, t) => {
-      if (t.type === 'sale') {
-        acc.totalSales += t.summary.grandTotal || 0;
-        acc.salesCount += 1;
-      } else if (t.type === 'purchase') {
-        acc.totalPurchases += t.summary.grandTotal || 0;
-        acc.purchasesCount += 1;
-      }
-      acc.totalAmount += t.summary.grandTotal || 0;
-      return acc;
-    }, {
+    // Calculate totals from all matching documents
+    const [totalsResult] = await Transaction.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: { $cond: [{ $eq: ['$type', 'sale'] }, '$summary.grandTotal', 0] } },
+          totalPurchases: { $sum: { $cond: [{ $eq: ['$type', 'purchase'] }, '$summary.grandTotal', 0] } },
+          salesCount: { $sum: { $cond: [{ $eq: ['$type', 'sale'] }, 1, 0] } },
+          purchasesCount: { $sum: { $cond: [{ $eq: ['$type', 'purchase'] }, 1, 0] } },
+          totalAmount: { $sum: '$summary.grandTotal' },
+        },
+      },
+    ]);
+
+    const totals = totalsResult || {
       totalSales: 0,
       totalPurchases: 0,
       salesCount: 0,
       purchasesCount: 0,
-      totalAmount: 0
-    });
+      totalAmount: 0,
+    };
+
+    const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
       transactions,
-      totals
+      totals,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
     });
 
   } catch (error) {

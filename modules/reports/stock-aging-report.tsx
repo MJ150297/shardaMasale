@@ -55,7 +55,7 @@ export function StockAgingReport({ shopId }: { shopId?: string }) {
       </div>
 
       <Tabs defaultValue="all">
-        <TabsList>
+        <TabsList variant="segmented">
           <TabsTrigger value="all">All Items</TabsTrigger>
           <TabsTrigger value="slow">Slow Moving (90+ days)</TabsTrigger>
         </TabsList>

@@ -31,6 +31,7 @@ export default function SettingsPage() {
         displayName: "",
         email: "",
         phoneNumber: "",
+        website: "",
         gstin: "",
         pan: "",
         address: {
@@ -71,6 +72,7 @@ export default function SettingsPage() {
         nextSaleSequence: 1,
         autoRoundOff: true,
         termsAndConditions: "",
+        footerText: "",
       },
       security: {
         sessionTimeoutMinutes: 480,
@@ -168,7 +170,7 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="w-full overflow-x-auto flex-nowrap justify-start">
+          <TabsList variant="segmented" className="w-full overflow-x-auto flex-nowrap justify-start">
             <TabsTrigger value="business">Business</TabsTrigger>
             <TabsTrigger value="localization">Localization</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
@@ -209,6 +211,53 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="business.phoneNumber">Phone Number</Label>
                     <Input id="business.phoneNumber" {...register("business.phoneNumber")} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="business.website">Website</Label>
+                    <Input id="business.website" placeholder="e.g. https://example.com" {...register("business.website")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Business Logo</Label>
+                    <div className="space-y-2">
+                      {watch("business.logo") ? (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={watch("business.logo") ?? undefined}
+                            alt="Business logo"
+                            className="h-12 w-12 object-contain rounded border"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setValue("business.logo", "")}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No logo uploaded</p>
+                      )}
+                      <Input
+                        id="business.logo"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="text-xs"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const dataUrl = event.target?.result as string;
+                            setValue("business.logo", dataUrl);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -512,6 +561,19 @@ export default function SettingsPage() {
                       rows={4}
                       {...register("billing.termsAndConditions")}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="billing.footerText">Footer Text</Label>
+                    <Textarea
+                      id="billing.footerText"
+                      rows={2}
+                      placeholder="e.g. Thank you for your business! Visit us again."
+                      {...register("billing.footerText")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This text will be displayed at the bottom of invoices (PDF & preview).
+                    </p>
                   </div>
                 </div>
               </CardContent>

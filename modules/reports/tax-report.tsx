@@ -117,7 +117,7 @@ export function TaxReport({ shopId }: TaxReportProps) {
       </div>
 
       <Tabs defaultValue="slabs">
-        <TabsList>
+        <TabsList variant="segmented">
           <TabsTrigger value="slabs">Tax Rate Slabs</TabsTrigger>
           <TabsTrigger value="output">Output Tax Detail</TabsTrigger>
           <TabsTrigger value="input">Input Tax Detail</TabsTrigger>

@@ -416,7 +416,7 @@ export default function EditItemDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className={`grid w-full ${itemType === 'compound' ? 'grid-cols-6' : 'grid-cols-5'}`}>
+              <TabsList variant="segmented" className={`grid w-full ${itemType === 'compound' ? 'grid-cols-6' : 'grid-cols-5'}`}>
                 <TabsTrigger value="basic">Basic</TabsTrigger>
                 <TabsTrigger value="identification">ID & Codes</TabsTrigger>
                 {itemType === 'compound' && (

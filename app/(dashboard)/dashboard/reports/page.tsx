@@ -156,7 +156,7 @@ export default function ConsolidatedReportsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full min-w-0 space-y-4">
-        <TabsList className="w-full max-w-full overflow-x-auto flex-nowrap justify-start">
+        <TabsList variant="segmented" className="w-full max-w-full overflow-x-auto flex-nowrap justify-start">
           {orderedTabs.map((tab) => {
             const isLocked = !accessibleSet.has(tab.value);
             return (

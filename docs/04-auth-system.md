@@ -156,9 +156,28 @@ All POST/PUT/DELETE endpoints enforce shop guards:
 ```typescript
 session: {
   strategy: "jwt",
-  maxAge: 8 * 60 * 60,      // 8 hours
-  updateAge: 15 * 60,         // Refresh every 15 minutes
+  maxAge: 60 * 60 * 24 * 30, // 30 days
+  updateAge: 60 * 60 * 24,     // Re-encrypt the JWT at most once per day
 }
+
+// Session cookie is prefixed with `__Secure-` in production so that
+// browsers actually accept it on HTTPS (without the prefix, the cookie
+// is silently dropped, which is what was causing "logout on browser
+// close" / "logout on PWA relaunch" on mobile).
+cookies: {
+  sessionToken: {
+    name: process.env.NODE_ENV === "production"
+      ? "__Secure-next-auth.session-token"
+      : "next-auth.session-token",
+    options: {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 30,
+    },
+  },
+},
 ```
 
 ## Impersonation

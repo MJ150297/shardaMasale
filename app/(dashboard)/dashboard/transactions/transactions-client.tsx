@@ -565,7 +565,7 @@ export default function TransactionsClient() {
       </div>
 
       <Tabs defaultValue="" value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))} className="w-full">
-        <TabsList className="w-full overflow-x-auto flex-nowrap justify-start">
+        <TabsList variant="segmented" className="w-full overflow-x-auto flex-nowrap justify-start">
           <TabsTrigger value="">All Types</TabsTrigger>
           <TabsTrigger value="sale">Sales</TabsTrigger>
           <TabsTrigger value="purchase">Purchases</TabsTrigger>
@@ -644,7 +644,7 @@ export default function TransactionsClient() {
                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getTypeBadgeClass(transaction.type)}`}>
                             {transaction.type}
                           </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             {formatDate(transaction.transactionDate)}
                           </span>
                           {(() => {

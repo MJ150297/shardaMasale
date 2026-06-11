@@ -10,6 +10,7 @@ import { Receipt, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import { ExportButton } from './export-button';
 import { DateRangeFilter } from './date-range-filter';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 interface InvoiceReportProps {
   shopId?: string;
@@ -29,6 +30,12 @@ export function InvoiceReport({ shopId }: InvoiceReportProps) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, startDate, endDate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,6 +46,8 @@ export function InvoiceReport({ shopId }: InvoiceReportProps) {
         if (statusFilter) params.append('status', statusFilter);
         if (startDate) params.append('startDate', startDate.toISOString());
         if (endDate) params.append('endDate', endDate.toISOString());
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
 
         const res = await fetch(`/api/reports/invoices?${params}`);
         const result = await res.json();
@@ -50,7 +59,7 @@ export function InvoiceReport({ shopId }: InvoiceReportProps) {
       }
     };
     fetchData();
-  }, [shopId, statusFilter, startDate, endDate]);
+  }, [shopId, statusFilter, startDate, endDate, page]);
 
   const invoiceColumns = [
     { key: 'invoiceNumber', label: 'Invoice #' },
@@ -192,6 +201,15 @@ export function InvoiceReport({ shopId }: InvoiceReportProps) {
             </TableBody>
           </Table>
         </CardContent>
+        {data.pagination && (
+          <PaginationControls
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            total={data.pagination.total}
+            limit={data.pagination.limit}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );

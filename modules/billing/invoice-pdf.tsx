@@ -200,11 +200,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   footerLeft: {
-    flex: 1,
+    flex: 2,
     paddingRight: 12,
   },
   footerRight: {
-    flex: 1,
+    flex: 3,
     paddingLeft: 12,
   },
   footerTitle: {
@@ -240,7 +240,28 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 4,
   },
+  websiteFooter: {
+    position: 'absolute',
+    bottom: 15,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  websiteFooterText: {
+    fontSize: 8,
+    color: '#888',
+    textAlign: 'center',
+  },
 });
+
+function formatPaymentMethod(method: string): string {
+  if (!method) return '';
+  if (method.toLowerCase() === 'upi') return 'UPI';
+  return method.replace(/\b\w/g, c => c.toUpperCase());
+}
 
 // Helper to format currency
 const fmt = (val: number | undefined | null) =>
@@ -356,6 +377,7 @@ interface BusinessInfo {
   pan?: string;
   phoneNumber?: string;
   email?: string;
+  website?: string;
 }
 
 interface InvoiceData {
@@ -386,6 +408,7 @@ interface InvoiceData {
     notes?: string;
   };
   termsAndConditions?: string;
+  footerText?: string | null;
   business?: BusinessInfo;
   logoDataUri?: string;
   amountInWords?: string;
@@ -462,6 +485,7 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
               <Text style={{ fontWeight: 'bold' }}>Bill To: </Text>
               {invoice.customer.name}
               {invoice.customer.phone ? ` - ${invoice.customer.phone}` : ''}
+              {invoice.customer.address ? `\n${invoice.customer.address}` : ''}
             </Text>
           </View>
 
@@ -571,7 +595,8 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
             </View>
           </View>
 
-          {/* Tax Breakup Grid */}
+          {/* Tax Breakup Grid — only show when there are taxable items */}
+          {taxBreakup.length > 0 && (
           <View style={styles.taxGrid} wrap>
             <View style={styles.taxHeader}>
               <Text style={styles.taxColHsn}>HSN/SAC</Text>
@@ -582,30 +607,19 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
               <Text style={styles.taxColAmt}>SGST (Amt)</Text>
               <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>Total Tax</Text>
             </View>
-            {taxBreakup.length === 0 ? (
-              <View style={styles.taxRow}>
-                <Text style={styles.taxColHsn}>N/A</Text>
-                <Text style={styles.taxColVal}>N/A</Text>
-                <Text style={styles.taxColRate}>N/A</Text>
-                <Text style={styles.taxColAmt}>N/A</Text>
-                <Text style={styles.taxColRate}>N/A</Text>
-                <Text style={styles.taxColAmt}>N/A</Text>
-                <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>N/A</Text>
+            {taxBreakup.map((row, i) => (
+              <View key={i} style={styles.taxRow}>
+                <Text style={styles.taxColHsn}>{row.hsn || 'N/A'}</Text>
+                <Text style={styles.taxColVal}>{fmt(row.taxableValue)}</Text>
+                <Text style={styles.taxColRate}>{row.cgstRate}%</Text>
+                <Text style={styles.taxColAmt}>{fmt(row.cgstAmount)}</Text>
+                <Text style={styles.taxColRate}>{row.sgstRate}%</Text>
+                <Text style={styles.taxColAmt}>{fmt(row.sgstAmount)}</Text>
+                <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>{fmt(row.totalTax)}</Text>
               </View>
-            ) : (
-              taxBreakup.map((row, i) => (
-                <View key={i} style={styles.taxRow}>
-                  <Text style={styles.taxColHsn}>{row.hsn || 'N/A'}</Text>
-                  <Text style={styles.taxColVal}>{fmt(row.taxableValue)}</Text>
-                  <Text style={styles.taxColRate}>{row.cgstRate}%</Text>
-                  <Text style={styles.taxColAmt}>{fmt(row.cgstAmount)}</Text>
-                  <Text style={styles.taxColRate}>{row.sgstRate}%</Text>
-                  <Text style={styles.taxColAmt}>{fmt(row.sgstAmount)}</Text>
-                  <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>{fmt(row.totalTax)}</Text>
-                </View>
-              ))
-            )}
+            ))}
           </View>
+          )}
 
           {/* Footer: Amount in Words + Terms */}
           <View style={styles.footerGrid}>
@@ -618,6 +632,9 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
                 </Text>
                 {paidAmount > 0 && (
                   <Text style={styles.footerText}>Paid Amount: {fmt(paidAmount)}</Text>
+                )}
+                {invoice.payment?.method && (
+                  <Text style={styles.footerText}>Payment Mode: {formatPaymentMethod(invoice.payment.method)}</Text>
                 )}
                 {dueAmount > 0 && (
                   <Text style={[styles.footerText, { fontWeight: 'bold', color: '#dc2626' }]}>
@@ -642,16 +659,22 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
           {/* Signature Area */}
           <View style={styles.signatureGrid}>
             <View style={styles.signatureLeft}>
-              <Text style={{ color: '#888' }}>Receiver&apos;s Signature</Text>
+              <Text style={{ color: '#888' }}>Receiver's Signature</Text>
               <View style={[styles.signatureLine, { marginTop: 20 }]} />
             </View>
             <View style={styles.signatureRight}>
               <Text style={{ color: '#888' }}>For {businessName}</Text>
               <View style={[styles.signatureLine, { marginTop: 20 }]} />
-              <Text style={{ fontWeight: 'bold', marginTop: 2 }}>Authorised Signatory</Text>
             </View>
           </View>
         </View>
+
+        {/* Footer Text — repeats on every page */}
+        {invoice.footerText && (
+          <View style={styles.websiteFooter} fixed>
+            <Text style={styles.websiteFooterText}>{invoice.footerText}</Text>
+          </View>
+        )}
       </Page>
     </Document>
   );

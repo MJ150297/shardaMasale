@@ -162,7 +162,7 @@ export function StockReport({ shopId }: StockReportProps) {
       </div>
 
       <Tabs defaultValue="current">
-        <TabsList>
+        <TabsList variant="segmented">
           <TabsTrigger value="current">Current Stock</TabsTrigger>
           <TabsTrigger value="lowstock">Low Stock Alert</TabsTrigger>
           <TabsTrigger value="movements">Movement History</TabsTrigger>

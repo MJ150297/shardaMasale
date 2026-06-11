@@ -37,6 +37,8 @@ interface Party {
   phoneNumber?: string | null;
   status: string;
   partyType: 'customer' | 'supplier' | 'both';
+  currentBalance: number;
+  creditLimit: number;
 }
 
 interface Pagination {
@@ -140,7 +142,7 @@ export default function PartiesClient() {
       </div>
 
       <Tabs defaultValue="all" value={partyTypeFilter} onValueChange={setPartyTypeFilter} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList variant="segmented" className="grid w-full grid-cols-4">
           <TabsTrigger value="all">All Parties</TabsTrigger>
           <TabsTrigger value="customer">Customers</TabsTrigger>
           <TabsTrigger value="supplier">Suppliers</TabsTrigger>
@@ -210,9 +212,9 @@ export default function PartiesClient() {
                 role="button"
                 tabIndex={0}
               >
-                <div className="space-y-3">
+                <div className="space-y-1 sm:space-y-2">
                   {/* Main row: left info + right meta */}
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
                       <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
                         <Users className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
@@ -239,8 +241,35 @@ export default function PartiesClient() {
                       </div>
                     </div>
 
-                    {/* Right side: status + actions */}
+                    {/* Right side: credit + status + actions */}
                     <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                      {/* Desktop credit info — same line as name */}
+                      {(party.currentBalance !== 0 || party.creditLimit > 0) && (
+                        <div className="hidden sm:flex items-center gap-2">
+                          {party.currentBalance !== 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                {party.currentBalance > 0 ? 'Due' : 'Adv'}
+                              </span>
+                              <span className={`text-xs font-semibold ${party.currentBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                                ₹{Math.abs(party.currentBalance).toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                          {party.creditLimit > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">Lim</span>
+                              <span className={`text-xs font-medium ${party.creditLimit > 0 && party.currentBalance >= party.creditLimit ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                                ₹{party.creditLimit.toLocaleString()}
+                              </span>
+                              {party.creditLimit > 0 && party.currentBalance >= party.creditLimit && (
+                                <span className="text-[10px] text-red-500 dark:text-red-400 font-medium">⚠</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Status badge */}
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusBadgeClass(party.status)}`}>
                         {party.status}
@@ -332,6 +361,33 @@ export default function PartiesClient() {
                       </DropdownMenu>
                     </div>
                   </div>
+
+                  {/* Mobile credit info — vertical stack below */}
+                  {(party.currentBalance !== 0 || party.creditLimit > 0) && (
+                    <div className="sm:hidden flex items-center gap-3 pl-11">
+                      {party.currentBalance !== 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                            {party.currentBalance > 0 ? 'Due' : 'Advance'}
+                          </span>
+                          <span className={`text-[10px] font-semibold ${party.currentBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                            ₹{Math.abs(party.currentBalance).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {party.creditLimit > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider">Limit</span>
+                          <span className={`text-[10px] font-medium ${party.creditLimit > 0 && party.currentBalance >= party.creditLimit ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                            ₹{party.creditLimit.toLocaleString()}
+                          </span>
+                          {party.creditLimit > 0 && party.currentBalance >= party.creditLimit && (
+                            <span className="text-[10px] text-red-500 dark:text-red-400 font-medium">⚠ Over</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

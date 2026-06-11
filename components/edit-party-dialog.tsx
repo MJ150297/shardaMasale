@@ -26,6 +26,16 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
+const billingAddressSchema = z.object({
+  line1: z.string().min(1, 'Address line 1 is required'),
+  line2: z.string().optional().nullable(),
+  landmark: z.string().optional().nullable(),
+  city: z.string().min(1, 'City is required'),
+  state: z.string().min(1, 'State is required'),
+  postalCode: z.string().min(1, 'Postal code is required'),
+  country: z.string().min(1, 'Country is required'),
+}).optional().nullable();
+
 const editPartySchema = z.object({
   name: z.string().min(1, 'Name is required').max(160),
   email: z.string().email('Invalid email address').optional().nullable(),
@@ -35,14 +45,26 @@ const editPartySchema = z.object({
   gstin: z.string().optional().nullable(),
   pan: z.string().optional().nullable(),
   address: z.string().max(300).optional().nullable(),
+  billingAddress: billingAddressSchema,
   creditLimit: z.coerce.number().min(0).default(0),
 });
 
 type EditPartyFormData = z.infer<typeof editPartySchema>;
 
+interface BillingAddress {
+  line1: string;
+  line2?: string | null;
+  landmark?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
 interface Party {
   _id: string;
-  name: string;
+  name?: string;
+  displayName?: string;
   email?: string | null;
   phoneNumber?: string | null;
   partyType: 'customer' | 'supplier' | 'both';
@@ -50,6 +72,7 @@ interface Party {
   gstin?: string | null;
   pan?: string | null;
   address?: string | null;
+  billingAddress?: BillingAddress | null;
   creditLimit?: number;
 }
 
@@ -84,7 +107,7 @@ export default function EditPartyDialog({
     // @ts-ignore - Zod v4 resolver type compatibility issue
     resolver: zodResolver(editPartySchema),
       defaultValues: {
-        name: party.name,
+        name: party.displayName || party.name || '',
         email: party.email || '',
         phoneNumber: party.phoneNumber || '',
         partyType: party.partyType,
@@ -92,6 +115,7 @@ export default function EditPartyDialog({
         gstin: party.gstin || '',
         pan: party.pan || '',
         address: party.address || '',
+        billingAddress: party.billingAddress || null,
         creditLimit: party.creditLimit || 0,
       },
   });
@@ -133,7 +157,7 @@ export default function EditPartyDialog({
           {children}
         </DialogTrigger>
       ) : null}
-      <DialogContent className="sm:max-w-2xl bg-white/80">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white/80">
         <DialogHeader>
           <DialogTitle>Edit Party</DialogTitle>
           <DialogDescription>
@@ -212,20 +236,102 @@ export default function EditPartyDialog({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl>
-                    <Input placeholder="123 Main St, Springfield, 12345" {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+            <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+              <div className="font-medium text-sm text-gray-700">Billing Address</div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="billingAddress.line1"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Address Line 1 *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Building, street, area" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.line2"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address Line 2</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Additional details" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.landmark"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Landmark</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Near..." {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="City" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="State" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.postalCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Postal Code *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Postal code" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="billingAddress.country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Country *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Country" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}

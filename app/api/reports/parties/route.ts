@@ -15,6 +15,8 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const partyType = searchParams.get('partyType');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     // Filter parties by created-at date range
     const match: any = { owner: user.id, isArchived: false };
@@ -26,10 +28,15 @@ export async function GET(request: Request) {
       if (endDate) match.createdAt.$lte = new Date(endDate);
     }
 
-    // Get parties within the date range with their balances
+    // Get total count for pagination
+    const total = await Party.countDocuments(match);
+
+    // Get parties within the date range with their balances (paginated)
     const parties = await Party.find(match)
       .select('displayName partyType status currentBalance creditLimit phoneNumber email')
       .sort({ displayName: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
       .lean();
 
     // Get transaction volume per party (no date filter — shows lifetime volume for these parties)
@@ -76,32 +83,67 @@ export async function GET(request: Request) {
       };
     });
 
-    // Summary stats
-    let totalReceivables = 0;
-    let totalPayables = 0;
+    // Calculate totals across all matched parties for summary (use aggregation for accuracy)
+    const [summaryResult] = await Party.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalParties: { $sum: 1 },
+          customers: {
+            $sum: {
+              $cond: [{ $in: ['$partyType', ['customer', 'both']] }, 1, 0],
+            },
+          },
+          suppliers: {
+            $sum: {
+              $cond: [{ $in: ['$partyType', ['supplier', 'both']] }, 1, 0],
+            },
+          },
+          totalReceivables: { $sum: { $max: ['$currentBalance', 0] } },
+          totalPayables: { $sum: { $abs: { $min: ['$currentBalance', 0] } } },
+        },
+      },
+    ]);
+
+    // Build summary
     let totalSalesAll = 0;
     let totalPurchasesAll = 0;
-
     for (const p of partiesWithVolume) {
-      if (p.currentBalance > 0) totalReceivables += p.currentBalance;
-      else totalPayables += Math.abs(p.currentBalance);
       totalSalesAll += p.totalSales;
       totalPurchasesAll += p.totalPurchases;
     }
 
-    const customerCount = partiesWithVolume.filter((p) => p.partyType === 'customer' || p.partyType === 'both').length;
-    const supplierCount = partiesWithVolume.filter((p) => p.partyType === 'supplier' || p.partyType === 'both').length;
+    const summary = summaryResult
+      ? {
+          totalParties: summaryResult.totalParties,
+          customers: summaryResult.customers,
+          suppliers: summaryResult.suppliers,
+          totalReceivables: roundCurrency(summaryResult.totalReceivables),
+          totalPayables: roundCurrency(summaryResult.totalPayables),
+          totalSales: roundCurrency(totalSalesAll),
+          totalPurchases: roundCurrency(totalPurchasesAll),
+        }
+      : {
+          totalParties: 0,
+          customers: 0,
+          suppliers: 0,
+          totalReceivables: 0,
+          totalPayables: 0,
+          totalSales: 0,
+          totalPurchases: 0,
+        };
+
+    const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
       parties: partiesWithVolume,
-      summary: {
-        totalParties: partiesWithVolume.length,
-        customers: customerCount,
-        suppliers: supplierCount,
-        totalReceivables: roundCurrency(totalReceivables),
-        totalPayables: roundCurrency(totalPayables),
-        totalSales: roundCurrency(totalSalesAll),
-        totalPurchases: roundCurrency(totalPurchasesAll),
+      summary,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
       },
     });
   } catch (error) {

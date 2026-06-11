@@ -30,6 +30,16 @@ import { Badge } from '@/components/ui/badge';
 import { X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
+const billingAddressSchema = z.object({
+  line1: z.string().min(1, 'Address line 1 is required'),
+  line2: z.string().optional().nullable(),
+  landmark: z.string().optional().nullable(),
+  city: z.string().min(1, 'City is required'),
+  state: z.string().min(1, 'State is required'),
+  postalCode: z.string().min(1, 'Postal code is required'),
+  country: z.string().min(1, 'Country is required'),
+}).optional().nullable();
+
 const createPartySchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(160),
   legalName: z.string().optional().nullable(),
@@ -42,6 +52,7 @@ const createPartySchema = z.object({
   pan: z.string().optional().nullable(),
   taxTreatment: z.enum(['registered', 'unregistered', 'consumer', 'overseas']).default('unregistered'),
   address: z.string().max(300).optional().nullable(),
+  billingAddress: billingAddressSchema,
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
@@ -99,6 +110,7 @@ function getDefaultPartyValues(defaultPartyType: 'customer' | 'supplier' | 'both
     pan: null,
     taxTreatment: 'unregistered',
     address: null,
+    billingAddress: null,
     creditLimit: 0,
     openingBalance: 0,
     notes: null,
@@ -207,7 +219,7 @@ export default function CreatePartyDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList variant="segmented" className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Basic</TabsTrigger>
                 <TabsTrigger value="contact">Contact</TabsTrigger>
                 <TabsTrigger value="financial">Financial</TabsTrigger>
@@ -341,19 +353,102 @@ export default function CreatePartyDialog({
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="123 Main St, Springfield, 12345" {...field} value={field.value || ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                  <div className="font-medium text-sm text-gray-700">Billing Address</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.line1"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Address Line 1 *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Building, street, area" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.line2"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address Line 2</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Additional details" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.landmark"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Landmark</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Near..." {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="City" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="State" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.postalCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postal Code *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Postal code" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="billingAddress.country"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Country *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Country" {...field} value={field.value || ''} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
 
                 {!isCustomerOnly && (
                   <div className="grid grid-cols-2 gap-4">

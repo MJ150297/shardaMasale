@@ -5,6 +5,16 @@ import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/au
 import { AppError } from '@/lib/utils';
 import Party from '@/models/Party';
 
+const billingAddressSchema = z.object({
+  line1: z.string().min(1, 'Address line 1 is required'),
+  line2: z.string().optional().nullable(),
+  landmark: z.string().optional().nullable(),
+  city: z.string().min(1, 'City is required'),
+  state: z.string().min(1, 'State is required'),
+  postalCode: z.string().min(1, 'Postal code is required'),
+  country: z.string().min(1, 'Country is required'),
+}).optional().nullable();
+
 const createPartySchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(160),
   legalName: z.string().optional().nullable(),
@@ -17,6 +27,7 @@ const createPartySchema = z.object({
   pan: z.string().optional().nullable(),
   taxTreatment: z.enum(['registered', 'unregistered', 'consumer', 'overseas']).default('unregistered'),
   address: z.string().max(300).optional().nullable(),
+  billingAddress: billingAddressSchema,
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),

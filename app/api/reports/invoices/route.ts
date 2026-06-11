@@ -15,6 +15,8 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const status = searchParams.get('status');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
 
     const ownerId = new Types.ObjectId(user.id);
     const shopId = shopIdParam ? new Types.ObjectId(shopIdParam) : null;
@@ -28,7 +30,10 @@ export async function GET(request: Request) {
       if (endDate) match.createdAt.$lte = new Date(endDate);
     }
 
-    // Get invoices with linked transaction data
+    // Get total count
+    const total = await Invoice.countDocuments(match);
+
+    // Get invoices with linked transaction data (paginated)
     const invoices = await Invoice.aggregate([
       { $match: match },
       {
@@ -50,6 +55,8 @@ export async function GET(request: Request) {
       },
       { $unwind: { path: '$party', preserveNullAndEmptyArrays: true } },
       { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
       {
         $project: {
           _id: 1,
@@ -97,23 +104,30 @@ export async function GET(request: Request) {
       },
     ]);
 
-    const totalInvoices = invoices.length;
     const totalAmount = invoiceStats.reduce((sum: number, s: any) => sum + (s.totalAmount || 0), 0);
     const totalDue = invoiceStats.reduce((sum: number, s: any) => sum + (s.totalDue || 0), 0);
 
     const paidStats = invoiceStats.find((s: any) => s._id === 'paid');
     const overdueStats = invoiceStats.find((s: any) => s._id === 'overdue');
 
+    const totalPages = Math.ceil(total / limit);
+
     return NextResponse.json({
       invoices,
       summary: {
-        totalInvoices,
+        totalInvoices: total,
         totalAmount: roundCurrency(totalAmount),
         totalDue: roundCurrency(totalDue),
         paidCount: paidStats?.count || 0,
         paidAmount: roundCurrency(paidStats?.totalAmount || 0),
         overdueCount: overdueStats?.count || 0,
         overdueAmount: roundCurrency(overdueStats?.totalAmount || 0),
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
       },
     });
   } catch (error) {

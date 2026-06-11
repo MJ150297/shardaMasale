@@ -51,26 +51,40 @@ export async function GET(
     }
 
     const business = settings?.business;
-    const defaultTerms = settings?.billing?.termsAndConditions || null;
+    const billingSettings = settings?.billing;
+    const defaultTerms = billingSettings?.termsAndConditions || null;
+    const settingsLogo = (settings?.business as any)?.logo || null;
 
-    // Build a formatted address string
+    // Build a formatted business address string
     let businessAddress = '';
     if (business?.address) {
       const addr = business.address;
       businessAddress = [addr.line1, addr.city, addr.state].filter(Boolean).join(', ');
     }
 
-    // Read logo and convert to base64 data URI
-    let logoDataUri: string | undefined;
-    try {
-      const logoPath = path.join(process.cwd(), 'public', 'logo.png');
-      if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        const ext = path.extname('logo.png').slice(1);
-        logoDataUri = `data:image/${ext};base64,${logoBuffer.toString('base64')}`;
+    // Build a formatted customer billing address from the structured billingAddress object
+    let customerAddress = '';
+    const billingAddr = transaction.party?.billingAddress;
+    if (billingAddr?.line1) {
+      const lineParts = [billingAddr.line1, billingAddr.line2, billingAddr.landmark].filter(Boolean);
+      customerAddress = lineParts.join(', ');
+      const cityLine = [billingAddr.city, billingAddr.state].filter(Boolean).join(', ');
+      if (cityLine) customerAddress += '\n' + cityLine;
+    }
+
+    // Use per-shop/business logo from settings, fall back to public/logo.png
+    let logoDataUri: string | undefined = settingsLogo || undefined;
+    if (!logoDataUri) {
+      try {
+        const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          const ext = path.extname('logo.png').slice(1);
+          logoDataUri = `data:image/${ext};base64,${logoBuffer.toString('base64')}`;
+        }
+      } catch {
+        // Logo is optional, silently skip if it fails
       }
-    } catch {
-      // Logo is optional, silently skip if it fails
     }
 
     // Build enriched line items with HSN codes and descriptions
@@ -119,7 +133,7 @@ export async function GET(
         name: transaction.party?.displayName || transaction.party?.name || 'Guest Customer',
         phone: transaction.party?.phone,
         email: transaction.party?.email,
-        address: transaction.party?.address,
+        address: customerAddress,
       },
       lineItems: enrichedLineItems,
       additionalCharges: (transaction.additionalCharges || []).map((charge: any) => ({
@@ -150,7 +164,9 @@ export async function GET(
         pan: business?.pan,
         phoneNumber: business?.phoneNumber,
         email: business?.email,
+        website: business?.website,
       },
+      footerText: billingSettings?.footerText || null,
       logoDataUri,
       amountInWords,
     };
