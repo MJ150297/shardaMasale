@@ -697,7 +697,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
 
       {/* Add Bill / Create Invoice Dialog - controlled from mobile action buttons */}
       <Dialog open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
-        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-background dark:bg-gray-900 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Invoice</DialogTitle>
           </DialogHeader>
