@@ -516,7 +516,7 @@ export default function TransactionsClient() {
                 New Transaction
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-white/80">
+            <DropdownMenuContent align="end" className="w-56 bg-background dark:bg-gray-900">
               <CreateSaleDialog onSaleCreated={loadTransactions}>
                 <DropdownMenuItem className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
                   New Sale
@@ -711,7 +711,7 @@ export default function TransactionsClient() {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuContent align="end" className="bg-background dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem
                             onSelect={(e) => { e.preventDefault(); e.stopPropagation(); viewTransaction(transaction); }}
                           >
@@ -820,7 +820,7 @@ export default function TransactionsClient() {
       </div>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="bg-white/90 max-w-none! w-[95vw] max-h-[95vh] overflow-y-auto">
+        <DialogContent className="bg-background dark:bg-gray-900 max-w-none! w-[95vw] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Draft Transaction</DialogTitle>
             <DialogDescription>
@@ -857,7 +857,7 @@ export default function TransactionsClient() {
 
       {/* Cancel Transaction Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Transaction</AlertDialogTitle>
             <AlertDialogDescription>
@@ -940,7 +940,7 @@ export default function TransactionsClient() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
             <AlertDialogDescription>

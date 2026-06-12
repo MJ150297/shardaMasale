@@ -411,13 +411,13 @@ export default function CreateItemDialog({
       {showTrigger && (
         <DialogTrigger asChild>
           {children || (
-            <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-4 rounded-md text-sm font-medium transition-colors'>
+            <Button className='px-4 py-4 rounded-md text-sm font-medium transition-colors'>
               + Add Item (Product/Service)
             </Button>
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
+      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Create New Item</DialogTitle>
           <DialogDescription>

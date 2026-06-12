@@ -134,7 +134,7 @@ export default function StockAdjustmentDialog({
           {children}
         </DialogTrigger>
       ) : null}
-      <DialogContent className="max-w-[425px] bg-white/80">
+      <DialogContent className="max-w-[425px] bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Adjust Stock</DialogTitle>
         </DialogHeader>
@@ -143,12 +143,12 @@ export default function StockAdjustmentDialog({
           <div className="mb-4">
             <div className="font-medium">{item.name}</div>
             {item.sku && (
-              <div className="text-sm text-gray-500">SKU: {item.sku}</div>
+              <div className="text-sm text-muted-foreground">SKU: {item.sku}</div>
             )}
           </div>
 
           <div className="flex items-center gap-2 mb-4">
-            <div className="text-sm text-gray-500">Current Stock:</div>
+            <div className="text-sm text-muted-foreground">Current Stock:</div>
             <Badge variant="secondary">
               {item.stock.currentQuantity} {item.unitOfMeasure}
             </Badge>
@@ -180,7 +180,7 @@ export default function StockAdjustmentDialog({
               />
 
               {difference !== 0 && (
-                <div className={`text-sm p-2 rounded ${difference > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                <div className={`text-sm p-2 rounded ${difference > 0 ? 'bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400'}`}>
                   {difference > 0 ? '+' : ''}{difference} {item.unitOfMeasure} {difference > 0 ? 'increase' : 'decrease'}
                 </div>
               )}

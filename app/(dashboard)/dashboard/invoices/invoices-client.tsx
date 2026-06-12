@@ -470,7 +470,7 @@ export default function InvoicesClient() {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuContent align="end" className="bg-background dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem
                             onSelect={(e) => { e.preventDefault(); e.stopPropagation(); viewInvoice(invoice); }}
                           >
@@ -590,7 +590,7 @@ export default function InvoicesClient() {
 
       {/* Create Invoice Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-background dark:bg-gray-900 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex justify-between items-center">
               <DialogTitle>Create New Invoice</DialogTitle>
@@ -609,7 +609,7 @@ export default function InvoicesClient() {
 
       {/* Edit Draft Invoice Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="bg-white/80 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-background dark:bg-gray-900 max-w-none! w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex justify-between items-center">
               <DialogTitle>Edit Draft Invoice</DialogTitle>
@@ -636,7 +636,7 @@ export default function InvoicesClient() {
 
       {/* Cancel Invoice Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Invoice</AlertDialogTitle>
             <AlertDialogDescription>
@@ -665,7 +665,7 @@ export default function InvoicesClient() {
 
       {/* Delete Draft Invoice Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent className='bg-white/80'>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Draft Invoice</AlertDialogTitle>
             <AlertDialogDescription>

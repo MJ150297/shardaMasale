@@ -193,7 +193,7 @@ export default function InvoicePreviewModal({
           </div>
         </DialogHeader>
 
-        <div className="overflow-y-auto p-4 sm:p-6 md:p-8 bg-gray-100 flex-1">
+        <div className="overflow-y-auto p-4 sm:p-6 md:p-8 bg-gray-100 dark:bg-gray-100 flex-1">
           <div className="mx-auto shadow-xl" style={{ maxWidth: '210mm' }}>
             <div className="relative bg-white p-2 sm:p-3 md:p-4" style={{ minHeight: '297mm' }}>
 
@@ -215,31 +215,29 @@ export default function InvoicePreviewModal({
               {/* MAIN CONTENT */}
               <div className="relative z-10">
 
-
-
                 {/* TAX INVOICE TAG */}
                 <div className="text-center mb-1">
-                  <span className="inline-block px-3 py-0.5 text-[10px] font-semibold tracking-wider border border-gray-400 rounded-sm uppercase">
+                  <span className="inline-block px-3 py-0.5 text-[10px] font-semibold tracking-wider border border-gray-400 dark:border-gray-400 rounded-sm uppercase text-gray-900 dark:text-gray-900">
                     TAX INVOICE | ORIGINAL FOR RECIPIENT
                   </span>
                 </div>
 
                 {/* Vendor & Invoice Meta Split Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 border border-gray-300 mb-4 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 border border-gray-300 dark:border-gray-300 mb-4 text-[11px] text-gray-900 dark:text-gray-900">
                   <div className="p-2 sm:p-3 border-gray-300 space-y-0.5 leading-tight">
                     <p className="font-bold text-sm">{businessName}</p>
-                    <p className="text-gray-600">{businessAddress}</p>
+                    <p className="text-gray-600 dark:text-gray-600">{businessAddress}</p>
                     {business?.phoneNumber && (
-                      <p className="text-gray-600">Mobile: {business.phoneNumber}</p>
+                      <p className="text-gray-600 dark:text-gray-600">Mobile: {business.phoneNumber}</p>
                     )}
                     {business?.pan && (
-                      <p className="text-gray-600">PAN: {business.pan}</p>
+                      <p className="text-gray-600 dark:text-gray-600">PAN: {business.pan}</p>
                     )}
                     {business?.gstin && (
-                      <p className="text-gray-600">GSTIN: {business.gstin}</p>
+                      <p className="text-gray-600 dark:text-gray-600">GSTIN: {business.gstin}</p>
                     )}
                     {business?.email && (
-                      <p className="text-gray-600">Email: {business.email}</p>
+                      <p className="text-gray-600 dark:text-gray-600">Email: {business.email}</p>
                     )}
                   </div>
                   {/* Center Header Logo */}
@@ -258,16 +256,16 @@ export default function InvoicePreviewModal({
                   )}
                   <div className="flex justify-end items-center text-[11px]">
                     <div className="p-2 sm:p-3 text-right sm:text-left">
-                      <p className="text-gray-500 text-[10px]">Invoice No.</p>
-                      <p className="font-semibold">{invoice?.invoiceNumber}</p>
-                      <p className="text-gray-500 text-[10px]">Invoice Date</p>
-                      <p className="font-semibold">{transactionDate ? formatDate(transactionDate) : ''}</p>
+                      <p className="text-gray-500 dark:text-gray-500 text-[10px]">Invoice No.</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-900">{invoice?.invoiceNumber}</p>
+                      <p className="text-gray-500 dark:text-gray-500 text-[10px]">Invoice Date</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-900">{transactionDate ? formatDate(transactionDate) : ''}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Bill To */}
-                <div className="mb-3 border-b border-gray-200 pb-2">
+                <div className="mb-3 border-b border-gray-200 dark:border-gray-200 pb-2 text-gray-900 dark:text-gray-900">
                   <div className="text-[11px]">
                     <span className="font-semibold">Bill To: </span>
                     <span>
@@ -283,11 +281,11 @@ export default function InvoicePreviewModal({
                       return (
                         <>
                           <br />
-                          <span className="text-gray-600">{lineParts}</span>
+                          <span className="text-gray-600 dark:text-gray-600">{lineParts}</span>
                           {cityLine && (
                             <>
                               <br />
-                              <span className="text-gray-600">{cityLine}</span>
+                              <span className="text-gray-600 dark:text-gray-600">{cityLine}</span>
                             </>
                           )}
                         </>
@@ -300,7 +298,7 @@ export default function InvoicePreviewModal({
                 <div className="overflow-x-auto -mx-2 sm:mx-0">
                 <div className="border border-gray-100 text-[10px] mb-4 flex flex-col" style={{ minHeight: '125mm' }}>
                   {/* Table Header */}
-                  <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] bg-gray-200 font-semibold border-b border-gray-300">
+                  <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] bg-gray-200 dark:bg-gray-200 font-semibold border-b border-gray-300 dark:border-gray-300 text-gray-900 dark:text-gray-900">
                     <div className="px-0.5 sm:px-1.5 py-2 text-center">#</div>
                     <div className="px-0.5 sm:px-1.5 py-2">Items</div>
                     <div className="hidden sm:block px-1.5 py-2 text-center">HSN</div>
@@ -314,18 +312,18 @@ export default function InvoicePreviewModal({
                     {/* Table Rows */}
                     <div className="flex-1">
                       {lineItems.length === 0 && (
-                        <div className="px-3 py-4 text-center text-gray-400 text-[10px]">No items</div>
+                        <div className="px-3 py-4 text-center text-gray-400 dark:text-gray-400 text-[10px]">No items</div>
                       )}
                       {lineItems.map((item: any, index: number) => (
-                        <div key={index} className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200">
-                          <div className="px-0.5 sm:px-1.5 py-2 text-center text-gray-500">{index + 1}</div>
+                        <div key={index} className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200 dark:border-gray-200 text-gray-900 dark:text-gray-900">
+                          <div className="px-0.5 sm:px-1.5 py-2 text-center text-gray-500 dark:text-gray-500">{index + 1}</div>
                           <div className="px-0.5 sm:px-1.5 py-2">
                             <span className="font-medium leading-tight text-[10px] sm:text-[10px]">{item.itemName}</span>
                             {item.description && (
-                              <div className="text-gray-500 text-[8px] sm:text-[9px] leading-tight mt-0.5 whitespace-pre-line">{item.description}</div>
+                              <div className="text-gray-500 dark:text-gray-500 text-[8px] sm:text-[9px] leading-tight mt-0.5 whitespace-pre-line">{item.description}</div>
                             )}
                           </div>
-                          <div className="hidden sm:block px-1.5 py-2 text-center text-gray-500">{item.hsnCode || item.itemHsn || '-'}</div>
+                          <div className="hidden sm:block px-1.5 py-2 text-center text-gray-500 dark:text-gray-500">{item.hsnCode || item.itemHsn || '-'}</div>
                           <div className="px-0.5 sm:px-1.5 py-2 text-center text-[9px] sm:text-[10px]">{Number(item.quantity).toFixed(2)}</div>
                           <div className="px-0.5 sm:px-1.5 py-2 text-right text-[9px] sm:text-[10px]">{fmt(item.unitPrice)}</div>
                           <div className="hidden sm:block px-1.5 py-2 text-right">{(item.discountAmount || 0) > 0 ? fmt(item.discountAmount) : '-'}</div>
@@ -334,12 +332,12 @@ export default function InvoicePreviewModal({
                       ))}
                     </div>
 
-                    <div className="mt-auto border-t border-gray-300">
+                    <div className="mt-auto border-t border-gray-300 dark:border-gray-300">
                       {/* Additional Charges rows */}
                       {additionalCharges.map((charge: any, index: number) => (
-                        <div key={`charge-${index}`} className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200">
+                        <div key={`charge-${index}`} className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200 dark:border-gray-200 text-gray-900 dark:text-gray-900">
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
-                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 text-[9px] sm:text-[10px]">{charge.name}</div>
+                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 dark:text-gray-600 text-[9px] sm:text-[10px]">{charge.name}</div>
                           <div className="hidden sm:block px-1.5 py-2"></div>
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
@@ -350,9 +348,9 @@ export default function InvoicePreviewModal({
 
                       {/* Total Discount Row */}
                       {totalDiscount > 0 && (
-                        <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200">
+                        <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200 dark:border-gray-200 text-gray-900 dark:text-gray-900">
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
-                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 text-[9px] sm:text-[10px]">
+                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 dark:text-gray-600 text-[9px] sm:text-[10px]">
                             Discount
                             {totalDiscountType === 'percentage'
                               ? ` (${totalDiscountValue}%)`
@@ -364,15 +362,15 @@ export default function InvoicePreviewModal({
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
                           <div className="hidden sm:block px-1.5 py-2"></div>
-                          <div className="px-0.5 sm:px-1.5 py-2 text-right text-red-600 text-[9px] sm:text-[10px]">-{fmt(totalDiscount)}</div>
+                          <div className="px-0.5 sm:px-1.5 py-2 text-right text-red-600 dark:text-red-600 text-[9px] sm:text-[10px]">-{fmt(totalDiscount)}</div>
                         </div>
                       )}
 
                       {/* Round Off Row */}
                       {roundOff !== 0 && (
-                        <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200">
+                        <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] border-b border-gray-200 dark:border-gray-200 text-gray-900 dark:text-gray-900">
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
-                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 text-[9px] sm:text-[10px]">Round Off</div>
+                          <div className="px-0.5 sm:px-1.5 py-2 italic text-gray-600 dark:text-gray-600 text-[9px] sm:text-[10px]">Round Off</div>
                           <div className="hidden sm:block px-1.5 py-2"></div>
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
                           <div className="px-0.5 sm:px-1.5 py-2"></div>
@@ -382,7 +380,7 @@ export default function InvoicePreviewModal({
                       )}
 
                       {/* Grand Total Bar */}
-                      <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] font-bold border-t-2 border-gray-800 text-[10px] sm:text-xs">
+                      <div className="grid grid-cols-[20px_1fr_35px_55px_55px] sm:grid-cols-[32px_1fr_60px_50px_70px_55px_70px] font-bold border-t-2 border-gray-800 dark:border-gray-800 text-[10px] sm:text-xs text-gray-900 dark:text-gray-900">
                         <div className="px-0.5 sm:px-1.5 py-2"></div>
                         <div className="px-0.5 sm:px-1.5 py-2 uppercase tracking-wide">TOTAL</div>
                         <div className="hidden sm:block px-1.5 py-2"></div>
@@ -399,8 +397,8 @@ export default function InvoicePreviewModal({
                 {/* Tax Breakup Grid — only show when there are taxable items */}
                 {taxBreakup.length > 0 && (
                 <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <div className="border border-gray-300 text-[9px] sm:text-[10px] mb-4 w-full">
-                  <div className="grid w-full grid-cols-[14%_18%_12%_14%_12%_14%_16%] sm:grid-cols-[16.67%_18.75%_11.46%_13.54%_11.46%_13.54%_14.58%] bg-gray-100 font-semibold border-b border-gray-300">
+                <div className="border border-gray-300 dark:border-gray-300 text-[9px] sm:text-[10px] mb-4 w-full text-gray-900 dark:text-gray-900">
+                  <div className="grid w-full grid-cols-[14%_18%_12%_14%_12%_14%_16%] sm:grid-cols-[16.67%_18.75%_11.46%_13.54%_11.46%_13.54%_14.58%] bg-gray-100 dark:bg-gray-100 font-semibold border-b border-gray-300 dark:border-gray-300">
                     <div className="px-1 sm:px-2 py-1 sm:py-1.5">HSN/SAC</div>
                     <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-right">Taxable Value</div>
                     <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-right">CGST (Rate)</div>
@@ -410,7 +408,7 @@ export default function InvoicePreviewModal({
                     <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-right">Total Tax</div>
                   </div>
                   {taxBreakup.map((row, i) => (
-                    <div key={i} className="grid w-full grid-cols-[14%_18%_12%_14%_12%_14%_16%] sm:grid-cols-[16.67%_18.75%_11.46%_13.54%_11.46%_13.54%_14.58%] border-b border-gray-200 last:border-b-0">
+                    <div key={i} className="grid w-full grid-cols-[14%_18%_12%_14%_12%_14%_16%] sm:grid-cols-[16.67%_18.75%_11.46%_13.54%_11.46%_13.54%_14.58%] border-b border-gray-200 dark:border-gray-200 last:border-b-0 text-gray-900 dark:text-gray-900">
                       <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-[8px] sm:text-[10px]">{row.hsn || "-"}</div>
                       <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-right text-[8px] sm:text-[10px]">{fmt(row.taxableValue) || "N/A"}</div>
                       <div className="px-1 sm:px-2 py-1 sm:py-1.5 text-right text-[8px] sm:text-[10px]">{row.cgstRate || "N/A"}%</div>
@@ -425,12 +423,12 @@ export default function InvoicePreviewModal({
                 )}
 
                 {/* Footer: Amount in Words + Terms — Left 40% / Right 60% */}
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-6 text-[9px] sm:text-[10px] border-t border-gray-200 pt-2 sm:pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-6 text-[9px] sm:text-[10px] border-t border-gray-200 dark:border-gray-200 pt-2 sm:pt-3 text-gray-900 dark:text-gray-900">
                   <div className="sm:col-span-2 space-y-1">
                     <p className="font-semibold">Amount in Words</p>
-                    <p className="text-gray-700 leading-tight">{numberToWords(grandTotal)}</p>
+                    <p className="text-gray-700 dark:text-gray-700 leading-tight">{numberToWords(grandTotal)}</p>
                     <div className="mt-2 space-y-0.5">
-                      <p className={dueAmount > 0 ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                      <p className={dueAmount > 0 ? 'text-red-600 dark:text-red-600 font-semibold' : 'text-green-600 dark:text-green-600 font-semibold'}>
                         Payment Status: {dueAmount > 0 ? 'UNPAID' : 'PAID'}
                       </p>
                       {paidAmount > 0 && (
@@ -451,13 +449,13 @@ export default function InvoicePreviewModal({
                     {notes && (
                       <div className="space-y-1">
                         <p className="font-semibold">Notes</p>
-                        <p className="text-gray-700 leading-tight whitespace-pre-line">{notes}</p>
+                        <p className="text-gray-700 dark:text-gray-700 leading-tight whitespace-pre-line">{notes}</p>
                       </div>
                     )}
                     {resolvedTermsAndConditions && (
                       <div className="space-y-1">
                         <p className="font-semibold">Terms & Conditions</p>
-                        <p className="text-gray-700 leading-tight whitespace-pre-line">{resolvedTermsAndConditions}</p>
+                        <p className="text-gray-700 dark:text-gray-700 leading-tight whitespace-pre-line">{resolvedTermsAndConditions}</p>
                       </div>
                     )}
                   </div>
@@ -465,7 +463,7 @@ export default function InvoicePreviewModal({
 
                 {/* Footer Text */}
                 {footerText && (
-                  <div className="border-t border-gray-300 pt-2 mt-4 text-center text-[9px] text-gray-500">
+                  <div className="border-t border-gray-300 dark:border-gray-300 pt-2 mt-4 text-center text-[9px] text-gray-500 dark:text-gray-500">
                     {footerText}
                   </div>
                 )}

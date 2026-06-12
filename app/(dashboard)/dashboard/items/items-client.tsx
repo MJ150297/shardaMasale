@@ -308,7 +308,7 @@ export default function ItemsClient() {
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white/90 dark:bg-gray-900/90" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuContent align="end" className="bg-background dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
                             {(item.itemType === 'product' || (item.itemType === 'compound' && item.bundleType === 'product')) && (
                               <DropdownMenuItem
                                 onSelect={(e) => {
@@ -340,7 +340,7 @@ export default function ItemsClient() {
                                   Delete
                                 </DropdownMenuItem>
                               </AlertDialogTrigger>
-                              <AlertDialogContent onClick={(e) => e.stopPropagation()} className="bg-white/80 dark:bg-gray-900/80">
+                              <AlertDialogContent onClick={(e) => e.stopPropagation()} className="bg-background dark:bg-gray-900">
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Delete Item</AlertDialogTitle>
                                   <AlertDialogDescription>

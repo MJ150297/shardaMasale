@@ -233,9 +233,9 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
         <SidebarProvider>
           {/* Sidebar - Hidden on mobile */}
           {!isMobile && (
-            <Sidebar variant="inset" collapsible="icon" className="font-sans dark:bg-gray-900 dark:border-gray-800">
+            <Sidebar variant="inset" collapsible="icon" className="font-sans dark:bg-gray-950 dark:border-gray-800">
 
-              <SidebarHeader className="border-b border-border dark:border-gray-800">
+              <SidebarHeader className="border-b border-border dark:bg-gray-950 dark:border-gray-800">
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton size="lg" asChild>
@@ -255,7 +255,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                 </SidebarMenu>
               </SidebarHeader>
 
-              <SidebarContent>
+              <SidebarContent className='dark:bg-gray-950'>
                 <SidebarGroup>
                   <SidebarGroupLabel className="font-medium dark:text-gray-400">Navigation</SidebarGroupLabel>
                   <SidebarGroupContent>
@@ -288,7 +288,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                 </SidebarGroup>
               </SidebarContent>
 
-              <SidebarFooter className="border-t border-border dark:border-gray-800">
+              <SidebarFooter className="border-t border-border dark:bg-gray-950 dark:border-gray-800">
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <DropdownMenu>
@@ -363,7 +363,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
           <SidebarInset className="min-w-0 font-sans">
 
             {/* Header */}
-            <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b dark:border-gray-800 dark:bg-gray-900/50">
+            <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 border-b dark:border-gray-800 dark:bg-gray-900">
               {!isMobile && <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />}
               <div className="flex flex-1 items-center justify-between">
                 <div>
@@ -380,7 +380,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                         <ChevronDown className="size-3.5 ml-1 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 bg-white/90">
+                    <DropdownMenuContent align="end" className="w-56 bg-background dark:bg-gray-900">
                       <DropdownMenuLabel>Select Shop</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {availableShops.length > 0 ? (
@@ -528,7 +528,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
             {isMobile && (
               <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background dark:bg-gray-900 dark:border-gray-800 pb-safe">
                 <div className="flex justify-around items-center h-16 px-2">
-                      {mobileNavItems.map((item) => {
+                  {mobileNavItems.map((item) => {
                     const isActive = pathname === item.url;
 
                     // Map to filled icon variants
@@ -595,7 +595,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                       side="top"
                       align="end"
                       sideOffset={8}
-                      className="mb-2 w-56 rounded-xl bg-white"
+                      className="mb-2 w-56 rounded-xl bg-background dark:bg-gray-900"
                     >
                       <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
                         More Options

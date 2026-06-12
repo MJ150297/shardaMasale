@@ -147,12 +147,12 @@ export default function TransactionDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-none! w-[95vw] md:w-[90vw] p-0 bg-white/90 max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-none! w-[95vw] md:w-[90vw] p-0 bg-background dark:bg-gray-900 max-h-[85vh] overflow-y-auto">
         <DialogTitle className="sr-only">
           Transaction Details - {transaction.transactionNumber}
         </DialogTitle>
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-background/95 dark:bg-gray-900/95 backdrop-blur-sm border-b px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <h2 className="text-base sm:text-lg font-bold truncate">Transaction Details</h2>
             <span className="text-xs sm:text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded-md font-mono truncate">
@@ -185,7 +185,7 @@ export default function TransactionDetailDialog({
               </Badge>
             )}
             {transaction.invoiceId && (
-              <Badge className="bg-blue-100 text-blue-800 text-xs px-2.5 py-1">
+              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2.5 py-1">
                 <FileText className="h-3 w-3 mr-1 inline" />
                 {transaction.invoiceId.invoiceNumber}
               </Badge>
@@ -236,8 +236,8 @@ export default function TransactionDetailDialog({
               </h4>
               <p className="text-base font-bold">₹{transaction.summary.grandTotal?.toFixed(2)}</p>
               <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                <div className="flex justify-between"><span>Paid</span><span className="text-green-600 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Due</span><span className={(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>₹{transaction.summary.dueAmount?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Paid</span><span className="text-green-600 dark:text-green-400 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Due</span><span className={(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>₹{transaction.summary.dueAmount?.toFixed(2)}</span></div>
               </div>
             </div>
           </div>
@@ -284,7 +284,7 @@ export default function TransactionDetailDialog({
             {/* Financial breakdown under the table on mobile */}
             <div className="border-t px-3 py-2 space-y-1 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{transaction.summary.subtotal?.toFixed(2)}</span></div>
-              {transaction.summary.discountTotal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-red-500">-₹{transaction.summary.discountTotal?.toFixed(2)}</span></div>}
+              {transaction.summary.discountTotal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-red-500 dark:text-red-400">-₹{transaction.summary.discountTotal?.toFixed(2)}</span></div>}
               {transaction.summary.taxTotal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">GST</span><span>₹{transaction.summary.taxTotal?.toFixed(2)}</span></div>}
               {transaction.summary.roundOff !== 0 && <div className="flex justify-between"><span className="text-muted-foreground">Round Off</span><span>₹{transaction.summary.roundOff?.toFixed(2)}</span></div>}
             </div>
@@ -438,10 +438,10 @@ export default function TransactionDetailDialog({
                               </td>
                               <td className="px-3 py-2 text-right text-sm whitespace-nowrap">₹{Number(item.unitPrice).toFixed(2)}</td>
                               <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
-                                {item.discountAmount > 0 ? <span className="text-red-500">-₹{Number(item.discountAmount).toFixed(2)}</span> : '-'}
+                                {item.discountAmount > 0 ? <span className="text-red-500 dark:text-red-400">-₹{Number(item.discountAmount).toFixed(2)}</span> : '-'}
                               </td>
                               <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
-                                {item.taxRate > 0 ? <span className="text-amber-600">{item.taxRate}%</span> : '-'}
+                                {item.taxRate > 0 ? <span className="text-amber-600 dark:text-amber-400">{item.taxRate}%</span> : '-'}
                               </td>
                               <td className="px-3 py-2 text-right text-sm font-medium whitespace-nowrap">₹{Number(item.lineTotal).toFixed(2)}</td>
                             </tr>
@@ -493,7 +493,7 @@ export default function TransactionDetailDialog({
                   {transaction.summary.discountTotal > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Discount</span>
-                      <span className="text-red-500">-₹{transaction.summary.discountTotal?.toFixed(2)}</span>
+                      <span className="text-red-500 dark:text-red-400">-₹{transaction.summary.discountTotal?.toFixed(2)}</span>
                     </div>
                   )}
                   {transaction.summary.taxTotal > 0 && (
@@ -526,11 +526,11 @@ export default function TransactionDetailDialog({
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Paid Amount</span>
-                    <span className="text-green-600 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span>
+                    <span className="text-green-600 dark:text-green-400 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Due Amount</span>
-                    <span className={`font-medium ${(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <span className={`font-medium ${(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                       ₹{transaction.summary.dueAmount?.toFixed(2)}
                     </span>
                   </div>

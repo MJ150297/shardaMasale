@@ -300,7 +300,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
         )}
       </DialogTrigger>
       <DialogContent
-        className={`bg-white ${
+        className={`bg-background dark:bg-gray-900 ${
           step === 'form' ? 'sm:max-w-5xl' : 'sm:max-w-2xl'
         } max-h-dvh overflow-y-auto p-4 sm:p-6`}
       >
@@ -322,7 +322,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
 
             <div className="space-y-5">
               {/* Party Selector */}
-              <div className="space-y-2 bg-white">
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Customer</label>
                 <Popover open={partyPopoverOpen} onOpenChange={setPartyPopoverOpen}>
                   <PopoverTrigger asChild>
@@ -338,7 +338,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-full p-0 bg-white">
+                  <PopoverContent className="w-full p-0">
                     <Command shouldFilter={false}>
                       <CommandInput
                         placeholder="Search customer by name or phone..."
@@ -443,7 +443,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                             className={cn(
                               'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
                               checked
-                                ? 'border-emerald-300 bg-emerald-50/60'
+                                ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/40'
                                 : 'border-border hover:bg-muted/40',
                             )}
                           >
@@ -491,7 +491,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
               )}
 
               {manualEntry && (
-                <div className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+                <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
                   You chose to enter items manually. Click proceed to add return items.
                 </div>
               )}
@@ -504,7 +504,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
               )}
 
               {selectedLineItems.length > 0 && (
-                <div className="rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+                <div className="rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 px-4 py-3 text-sm text-green-800 dark:text-green-200">
                   Loaded {selectedLineItems.length} item(s) from invoice {selectedInvoiceNumber}. You can adjust quantities and prices before confirming.
                 </div>
               )}

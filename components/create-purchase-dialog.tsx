@@ -19,12 +19,12 @@ export default function CreatePurchaseDialog({ onPurchaseCreated, children, init
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {children || (
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button variant="default">
             + New Purchase
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto bg-white">
+      <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Create New Purchase</DialogTitle>
           <DialogDescription>

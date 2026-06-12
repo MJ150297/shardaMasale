@@ -73,11 +73,11 @@ export default function ItemPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-white/80 overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-background dark:bg-gray-900 overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl">{item.name}</DialogTitle>
           {item.description && (
-            <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+            <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
           )}
         </DialogHeader>
 
@@ -87,10 +87,10 @@ export default function ItemPreviewDialog({
             <Badge
               className={`${
                 item.status === 'active'
-                  ? 'bg-green-100 text-green-800'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                   : item.status === 'discontinued'
-                  ? 'bg-red-100 text-red-800'
-                  : 'bg-gray-100 text-gray-800'
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                  : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
               }`}
             >
               {item.status}
@@ -99,10 +99,10 @@ export default function ItemPreviewDialog({
               variant="secondary"
               className={
                 isCompound
-                  ? 'bg-amber-100 text-amber-800 capitalize'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 capitalize'
                   : item.itemType === 'product'
-                  ? 'bg-blue-100 text-blue-800 capitalize'
-                  : 'bg-purple-100 text-purple-800 capitalize'
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 capitalize'
+                  : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 capitalize'
               }
             >
               {isCompound && item.bundleType
@@ -120,34 +120,34 @@ export default function ItemPreviewDialog({
           {/* Identifiers */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-500 uppercase font-medium">SKU</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">SKU</p>
               <p className="font-medium">{item.sku || '-'}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase font-medium">Barcode</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">Barcode</p>
               <p className="font-medium">{item.barcode || '-'}</p>
             </div>
             {isProductLike ? (
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">HSN Code</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">HSN Code</p>
                 <p className="font-medium">{item.hsnCode || '-'}</p>
               </div>
             ) : (
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">SAC Code</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">SAC Code</p>
                 <p className="font-medium">{item.sacCode || '-'}</p>
               </div>
             )}
             <div>
-              <p className="text-xs text-gray-500 uppercase font-medium">Unit</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">Unit</p>
               <p className="font-medium">{item.unitOfMeasure}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase font-medium">Purchase Tax</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">Purchase Tax</p>
               <p className="font-medium">{item.purchaseTaxRate ?? item.taxRate ?? 0}%</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase font-medium">Sale Tax</p>
+              <p className="text-xs text-muted-foreground uppercase font-medium">Sale Tax</p>
               <p className="font-medium">{item.saleTaxRate ?? item.taxRate ?? 0}%</p>
             </div>
           </div>
@@ -160,29 +160,29 @@ export default function ItemPreviewDialog({
               <h3 className="font-semibold mb-3">Stock Information</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Current Quantity</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Current Quantity</p>
                   <p className="font-medium">{item.stock.currentQuantity} {item.unitOfMeasure}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Reserved</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Reserved</p>
                   <p className="font-medium">{item.stock.reservedQuantity} {item.unitOfMeasure}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Available</p>
-                  <p className={`font-medium ${availableQuantity <= item.stock.reorderLevel ? 'text-red-600' : ''}`}>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Available</p>
+                  <p className={`font-medium ${availableQuantity <= item.stock.reorderLevel ? 'text-red-600 dark:text-red-400' : ''}`}>
                     {availableQuantity} {item.unitOfMeasure}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Reorder Level</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Reorder Level</p>
                   <p className="font-medium">{item.stock.reorderLevel} {item.unitOfMeasure}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Location</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Location</p>
                   <p className="font-medium">{item.stock.location || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Reorder Quantity</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Reorder Quantity</p>
                   <p className="font-medium">{item.stock.reorderQuantity} {item.unitOfMeasure}</p>
                 </div>
               </div>
@@ -196,15 +196,15 @@ export default function ItemPreviewDialog({
               <div>
                 <h3 className="font-semibold mb-3">Components ({item.components?.length ?? 0})</h3>
                 {loadingComponents ? (
-                  <p className="text-sm text-gray-500">Loading components...</p>
+                  <p className="text-sm text-muted-foreground">Loading components...</p>
                 ) : componentDetails.length === 0 ? (
-                  <p className="text-sm text-gray-500">No components</p>
+                  <p className="text-sm text-muted-foreground">No components</p>
                 ) : (
                   <div className="space-y-2">
                     {componentDetails.map((comp) => (
                       <div
                         key={comp._id}
-                        className="flex items-center justify-between p-2 rounded-lg border bg-gray-50"
+                        className="flex items-center justify-between p-2 rounded-lg border bg-muted/30"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <Badge variant="outline" className="shrink-0 text-[10px]">
@@ -213,7 +213,7 @@ export default function ItemPreviewDialog({
                           <span className="text-sm font-medium truncate">{comp.name}</span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0 text-sm">
-                          <span className="text-gray-500">×{comp.quantity}</span>
+                          <span className="text-muted-foreground">×{comp.quantity}</span>
                           <span className="font-medium">₹{(comp.sellingPrice * comp.quantity).toFixed(2)}</span>
                         </div>
                       </div>
@@ -222,7 +222,7 @@ export default function ItemPreviewDialog({
                       <span>Total Selling Price:</span>
                       <span>₹{item.pricing.sellingPrice.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-gray-500">
+                    <div className="flex justify-between text-sm text-muted-foreground">
                       <span>Total Cost:</span>
                       <span>₹{item.pricing.costPrice.toFixed(2)}</span>
                     </div>
@@ -239,19 +239,19 @@ export default function ItemPreviewDialog({
             <h3 className="font-semibold mb-3">Pricing Details</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">Cost Price</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">Cost Price</p>
                 <p className="font-medium">₹{item.pricing.costPrice.toFixed(2)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">Purchase Price</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">Purchase Price</p>
                 <p className="font-medium">₹{item.pricing.purchasePrice.toFixed(2)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">Selling Price</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">Selling Price</p>
                 <p className="font-medium">₹{item.pricing.sellingPrice.toFixed(2)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">MRP</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">MRP</p>
                 <p className="font-medium">{item.pricing.mrp ? `₹${item.pricing.mrp.toFixed(2)}` : '-'}</p>
               </div>
             </div>
@@ -265,15 +265,15 @@ export default function ItemPreviewDialog({
               <h3 className="font-semibold mb-3">Inventory Settings</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${item.trackInventory ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <div className={`w-2 h-2 rounded-full ${item.trackInventory ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
                   <p className="text-sm">Track Inventory</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${item.trackBatch ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <div className={`w-2 h-2 rounded-full ${item.trackBatch ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
                   <p className="text-sm">Track Batch</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${item.trackExpiry ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <div className={`w-2 h-2 rounded-full ${item.trackExpiry ? 'bg-green-500 dark:bg-green-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
                   <p className="text-sm">Track Expiry</p>
                 </div>
               </div>
@@ -299,7 +299,7 @@ export default function ItemPreviewDialog({
             <>
               <Separator />
               <div>
-                <p className="text-xs text-gray-500 uppercase font-medium">Expiry Date</p>
+                <p className="text-xs text-muted-foreground uppercase font-medium">Expiry Date</p>
                 <p className="font-medium">{formatDate(item.expiryDate)}</p>
               </div>
             </>

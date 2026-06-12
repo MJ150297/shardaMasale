@@ -202,13 +202,13 @@ export default function CreatePartyDialog({
       {showTrigger && (
         <DialogTrigger asChild>
           {children || (
-            <Button className='bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors'>
+            <Button>
               + Add New Customer/Supplier
             </Button>
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Create New Party / Customer</DialogTitle>
           <DialogDescription>
@@ -353,8 +353,8 @@ export default function CreatePartyDialog({
                   />
                 </div>
 
-                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-                  <div className="font-medium text-sm text-gray-700">Billing Address</div>
+                <div className="border rounded-lg p-4 space-y-4">
+                  <div className="font-medium text-sm text-muted-foreground">Billing Address</div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}

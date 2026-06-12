@@ -399,7 +399,7 @@ export default function EditItemDialog({
           {children}
         </DialogTrigger>
       ) : null}
-      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
+      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Edit Item</DialogTitle>
           <DialogDescription>

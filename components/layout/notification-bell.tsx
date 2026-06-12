@@ -47,7 +47,7 @@ export function NotificationBell() {
     fetchNotifications();
 
     // Refresh every 5 minutes
-    const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
+    const interval = setInterval(fetchNotifications, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -185,7 +185,7 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative text-foreground dark:text-white dark:hover:text-foreground">
           <Bell className="size-4" />
           {unreadCount > 0 && (
             <Badge
@@ -197,7 +197,7 @@ export function NotificationBell() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" className="w-80 bg-background dark:bg-gray-900">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notifications</span>
           {unreadCount > 0 && (

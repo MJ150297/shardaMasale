@@ -670,7 +670,7 @@ export default function TransactionForm({
         className="space-y-6"
       >
         {sourceLabel && (
-          <div className="rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
             {sourceLabel}
           </div>
         )}

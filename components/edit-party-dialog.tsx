@@ -157,7 +157,7 @@ export default function EditPartyDialog({
           {children}
         </DialogTrigger>
       ) : null}
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white/80">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Edit Party</DialogTitle>
           <DialogDescription>
@@ -236,8 +236,8 @@ export default function EditPartyDialog({
               />
             </div>
 
-            <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-              <div className="font-medium text-sm text-gray-700">Billing Address</div>
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="font-medium text-sm text-muted-foreground">Billing Address</div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}

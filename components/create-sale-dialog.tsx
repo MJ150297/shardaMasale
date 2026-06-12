@@ -19,12 +19,12 @@ export default function CreateSaleDialog({ onSaleCreated, children, initialParty
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {children || (
-          <Button className="bg-green-600 hover:bg-green-700 text-white">
+          <Button variant="default">
             + New Sale
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto bg-white">
+      <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto bg-background dark:bg-gray-900">
         <DialogHeader>
           <DialogTitle>Create New Sale</DialogTitle>
           <DialogDescription>

@@ -505,13 +505,13 @@ export default function CreatePaymentOutDialog({
       {controlledOpen === undefined && (
         <DialogTrigger asChild>
           {children || (
-            <Button className="bg-rose-600 hover:bg-rose-700 text-white">
+            <Button variant="default">
               + Payment Out
             </Button>
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-2xl bg-white rounded-none sm:rounded-lg p-4 sm:p-6">
+      <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-2xl bg-background dark:bg-gray-900 rounded-none sm:rounded-lg p-4 sm:p-6">
         <CreatePartyDialog
           defaultPartyType="supplier"
           onPartyCreated={handleCreatedParty}
@@ -539,7 +539,7 @@ export default function CreatePaymentOutDialog({
                 control={form.control}
                 name="party"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col bg-white">
+                  <FormItem className="flex flex-col">
                     <FormLabel>Supplier *</FormLabel>
                     <Popover open={partyPopoverOpen} onOpenChange={setPartyPopoverOpen}>
                       <PopoverTrigger asChild>
@@ -572,7 +572,7 @@ export default function CreatePaymentOutDialog({
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 bg-white">
+                      <PopoverContent className="w-full p-0">
                         <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="Search supplier by name or phone..."
@@ -728,7 +728,7 @@ export default function CreatePaymentOutDialog({
                         className={cn(
                           'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
                           checked
-                            ? 'border-rose-300 bg-rose-50/60'
+                            ? 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/40'
                             : 'border-border hover:bg-muted/40',
                         )}
                       >
@@ -783,7 +783,7 @@ export default function CreatePaymentOutDialog({
                           </div>
 
                           {checked && preview && preview.settledAmount > 0 && (
-                            <div className="rounded-md bg-white/80 px-3 py-2 text-xs text-muted-foreground">
+                            <div className="rounded-md bg-background/80 px-3 py-2 text-xs text-muted-foreground">
                               <span className="font-medium text-foreground">
                                 Will settle:
                               </span>{' '}
@@ -819,7 +819,7 @@ export default function CreatePaymentOutDialog({
                     <span>₹{totalRemainingDueAfterSettlement.toFixed(2)}</span>
                   </div>
                   {settlementPreview.remainingCashAmount > 0 && (
-                    <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <div className="mt-2 rounded-md bg-amber-50 dark:bg-amber-950 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
                       Unapplied balance: cash ₹{settlementPreview.remainingCashAmount.toFixed(2)}
                     </div>
                   )}
