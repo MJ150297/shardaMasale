@@ -194,7 +194,11 @@ export async function GET(request: Request) {
     }
     
     if (type) query.type = type;
-    if (status) query.status = status;
+    if (status) {
+      // Support comma-separated status values (e.g. "confirmed,draft")
+      const statusValues = status.split(',').map(s => s.trim()).filter(Boolean);
+      query.status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
+    }
     if (party) query.party = party;
     if (settlement === 'open') {
       query.status = 'confirmed';

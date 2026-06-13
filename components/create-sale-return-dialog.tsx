@@ -157,7 +157,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
       try {
         setLoadingInvoices(true);
         const res = await fetch(
-          `/api/invoices?party=${selectedPartyId}&limit=100`,
+          `/api/invoices?party=${selectedPartyId}&status=sent,paid,overdue&limit=100`,
         );
         const data: { data?: InvoiceOption[] } = await res.json();
 
@@ -165,7 +165,12 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
           throw new Error('Failed to load invoices');
         }
 
-        setInvoices(data.data || []);
+        // Defense-in-depth: only show invoices that are in returnable statuses
+        // (sent, paid, overdue) — exclude draft and cancelled
+        const returnableInvoices = (data.data || []).filter(
+          (inv) => !['draft', 'cancelled'].includes(inv.status),
+        );
+        setInvoices(returnableInvoices);
       } catch (error) {
         console.error('Failed to load invoices', error);
         setInvoices([]);
@@ -338,7 +343,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
+                  <PopoverContent className="w-full p-0 bg-background dark:bg-gray-900 border border-border" align="start" side="bottom" avoidCollisions={false}>
                     <Command shouldFilter={false}>
                       <CommandInput
                         placeholder="Search customer by name or phone..."

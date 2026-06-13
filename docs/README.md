@@ -25,6 +25,10 @@
 | 17 | [API Reference](./17-api-reference.md) | Detailed endpoint reference (method, path, body, response, errors) |
 | 18 | [Extending the System](./18-extending-the-system.md) | Guide for adding new models, routes, and pages |
 | 19 | [Glossary](./19-glossary.md) | Key terms and definitions |
+| 20 | [Notification Service Roadmap](./20-notification-service-roadmap.md) | Notification service planning and roadmap |
+| 21 | [Notification Ticket List](./21-notification-ticket-list.md) | Notification ticket tracking |
+| 22 | [Subscription](./22-subscription.md) | Subscription plans, credits, and limits |
+| 23 | [PWA](./23-pwa.md) | Progressive Web App: manifest, service worker, caching, offline, installation |
 
 ---
 

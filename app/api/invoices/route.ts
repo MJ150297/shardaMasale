@@ -181,7 +181,11 @@ export async function GET(request: Request) {
       query.shopId = user.activeShopId;
     }
     
-    if (status) query.status = status;
+    if (status) {
+      // Support comma-separated status values (e.g. "sent,paid,overdue")
+      const statusValues = status.split(',').map(s => s.trim()).filter(Boolean);
+      query.status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
+    }
 
     const transactionMatch: Record<string, unknown> = {};
 

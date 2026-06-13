@@ -141,7 +141,7 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
       try {
         setLoadingTransactions(true);
         const res = await fetch(
-          `/api/transactions?party=${selectedPartyId}&type=purchase&limit=100`,
+          `/api/transactions?party=${selectedPartyId}&type=purchase&status=confirmed&limit=100`,
         );
         const data: { data?: PurchaseTransactionOption[] } = await res.json();
 
@@ -149,7 +149,12 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
           throw new Error('Failed to load purchase transactions');
         }
 
-        setPurchaseTransactions(data.data || []);
+        // Defense-in-depth: only show confirmed transactions with active payment status
+        // Exclude void paymentStatus as those are not valid for returns
+        const returnableTransactions = (data.data || []).filter(
+          (txn) => txn.paymentStatus !== 'void',
+        );
+        setPurchaseTransactions(returnableTransactions);
       } catch (error) {
         console.error('Failed to load purchase transactions', error);
         setPurchaseTransactions([]);
@@ -311,7 +316,7 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
+                  <PopoverContent className="w-full p-0 bg-background dark:bg-gray-900 border border-border" align="start" side="bottom" avoidCollisions={false}>
                     <Command shouldFilter={false}>
                       <CommandInput
                         placeholder="Search supplier by name or phone..."
