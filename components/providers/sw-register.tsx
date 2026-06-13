@@ -1,35 +1,76 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 export default function ServiceWorkerRegistration() {
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((registration) => {
-          console.log("SW registered:", registration.scope);
+  const updatePromptShown = useRef(false);
 
-          // Check for updates periodically
-          registration.addEventListener("updatefound", () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener("statechange", () => {
-                if (
-                  newWorker.state === "installed" &&
-                  navigator.serviceWorker.controller
-                ) {
-                  // New content available, could show an update prompt
-                  console.log("New SW content available");
-                }
-              });
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    // Track if a SW update is waiting
+    let waitingWorker: ServiceWorker | null = null;
+
+    function showUpdateToast() {
+      if (updatePromptShown.current) return;
+      updatePromptShown.current = true;
+
+      toast("Update Available", {
+        description:
+          "A new version of GSMS is ready. Refresh to get the latest features.",
+        duration: Infinity,
+        action: {
+          label: "Refresh",
+          onClick: () => {
+            if (waitingWorker) {
+              waitingWorker.postMessage({ type: "SKIP_WAITING" });
+            }
+            window.location.reload();
+          },
+        },
+      });
+    }
+
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        console.log("SW registered:", registration.scope);
+
+        // If a waiting worker already exists, show the update prompt
+        if (registration.waiting) {
+          waitingWorker = registration.waiting;
+          showUpdateToast();
+        }
+
+        // Listen for new SW being installed
+        registration.addEventListener("updatefound", () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+
+          waitingWorker = newWorker;
+
+          newWorker.addEventListener("statechange", () => {
+            if (
+              newWorker.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
+              showUpdateToast();
             }
           });
-        })
-        .catch((error) => {
-          console.error("SW registration failed:", error);
         });
-    }
+      })
+      .catch((error) => {
+        console.error("SW registration failed:", error);
+      });
+
+    // Listen for controller change (e.g., after skipWaiting)
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
   }, []);
 
   return null;

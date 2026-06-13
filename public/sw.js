@@ -1,9 +1,8 @@
-const CACHE_NAME = "gsms-v1";
-const STATIC_CACHE = "gsms-static-v1";
-const DYNAMIC_CACHE = "gsms-dynamic-v1";
+const CACHE_NAME = "gsms-v2";
+const STATIC_CACHE = "gsms-static-v2";
+const DYNAMIC_CACHE = "gsms-dynamic-v2";
 
 const PRECACHE_URLS = [
-  "/",
   "/icon-192.png",
   "/icon-512.png",
 ];
@@ -98,44 +97,36 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation requests: stale-while-revalidate
+  // Navigation requests: network-first
+  // Always try network first for HTML pages to ensure fresh content
+  // Falls back to cache when offline
   if (request.mode === "navigate") {
     event.respondWith(
-      caches.match(request).then(
-        (cached) => {
-          const networkFetch = fetch(request)
-            .then((response) => {
-              const clone = response.clone();
-              caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-              return response;
-            })
-            .catch(() => {
-              // If both cache and network fail, show offline page
-              if (cached) return cached;
-              return caches.match("/offline.html");
-            });
-
-          return cached || networkFetch;
-        }
-      )
+      fetch(request)
+        .then((response) => {
+          // Cache the fresh response for offline fallback
+          const clone = response.clone();
+          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => {
+          // Network failed — try cache, then offline fallback
+          return caches.match(request).then(
+            (cached) => cached || caches.match("/offline.html")
+          );
+        })
     );
     return;
   }
 
-  // Everything else: stale-while-revalidate
+  // Everything else: network-first
   event.respondWith(
-    caches.match(request).then(
-      (cached) => {
-        const networkFetch = fetch(request)
-          .then((response) => {
-            const clone = response.clone();
-            caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-            return response;
-          })
-          .catch(() => cached);
-
-        return cached || networkFetch;
-      }
-    )
+    fetch(request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
