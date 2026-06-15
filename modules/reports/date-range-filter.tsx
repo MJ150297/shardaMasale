@@ -177,7 +177,7 @@ export function DateRangeFilter({ startDate, endDate, onDateChange }: DateRangeF
         )}>
           <SelectValue placeholder="Select range" />
         </SelectTrigger>
-        <SelectContent className="max-h-72 bg-white/80">
+        <SelectContent className="max-h-72 bg-background/80">
           {predefinedRanges.map(range => (
             <SelectItem key={range.label} value={range.label} className="h-8">
               {range.label}

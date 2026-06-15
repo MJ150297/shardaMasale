@@ -162,3 +162,7 @@ export class InvoiceOverdueWorker {
 
   // Manual trigger for testing
 }
+
+if (process.env.NODE_ENV === 'production') {
+  InvoiceOverdueWorker.start();
+}

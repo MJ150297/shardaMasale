@@ -3,10 +3,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { Lock, Crown, Sparkles, ArrowRight } from 'lucide-react';
+import { Lock, Crown, Sparkles, ArrowRight, Store } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useActiveShop } from '@/components/providers/shop-provider';
 import { StockReport } from '@/modules/reports/stock-report';
 import { TransactionReport } from '@/modules/reports/transaction-report';
 import { ProfitLossReport } from '@/modules/reports/profit-loss-report';
@@ -33,29 +35,29 @@ import { cn } from '@/lib/utils';
 const REPORT_TABS: Array<{
   value: string;
   label: string;
-  Component: React.ComponentType;
+  Component: React.ComponentType<{ shopId?: string }>;
 }> = [
-  { value: 'snapshot', label: 'Dashboard', Component: SnapshotReport },
-  { value: 'balance-sheet', label: 'Balance Sheet', Component: BalanceSheetReport },
-  { value: 'cash-flow', label: 'Cash Flow', Component: CashFlowReport },
-  { value: 'profit-loss', label: 'P&L', Component: ProfitLossReport },
-  { value: 'tax', label: 'Tax/GST', Component: TaxReport },
-  { value: 'invoices', label: 'Invoices', Component: InvoiceReport },
-  { value: 'daily-sales', label: 'Daily Sales', Component: DailySalesReport },
-  { value: 'sales-by-item', label: 'Sales by Item', Component: SalesByItemReport },
-  { value: 'sales-returns', label: 'Returns', Component: SalesReturnsReport },
-  { value: 'stock', label: 'Stock', Component: StockReport },
-  { value: 'stock-aging', label: 'Stock Aging', Component: StockAgingReport },
-  { value: 'wastage', label: 'Wastage', Component: WastageReport },
-  { value: 'purchase-orders', label: 'PO History', Component: PurchaseOrdersReport },
-  { value: 'payables-aging', label: 'Payables', Component: PayablesAgingReport },
-  { value: 'supplier-performance', label: 'Suppliers', Component: SupplierPerformanceReport },
-  { value: 'parties', label: 'Parties', Component: PartyReport },
-  { value: 'transactions', label: 'Transactions', Component: TransactionReport },
-  { value: 'receivables-aging', label: 'Receivables', Component: ReceivablesAgingReport },
-  { value: 'customer-ledger', label: 'Ledger', Component: CustomerLedgerReport },
-  { value: 'top-spenders', label: 'Top Spenders', Component: TopSpendersReport },
-];
+    { value: 'snapshot', label: 'Dashboard', Component: SnapshotReport },
+    { value: 'balance-sheet', label: 'Balance Sheet', Component: BalanceSheetReport },
+    { value: 'cash-flow', label: 'Cash Flow', Component: CashFlowReport },
+    { value: 'profit-loss', label: 'P&L', Component: ProfitLossReport },
+    { value: 'tax', label: 'Tax/GST', Component: TaxReport },
+    { value: 'invoices', label: 'Invoices', Component: InvoiceReport },
+    { value: 'daily-sales', label: 'Daily Sales', Component: DailySalesReport },
+    { value: 'sales-by-item', label: 'Sales by Item', Component: SalesByItemReport },
+    { value: 'sales-returns', label: 'Returns', Component: SalesReturnsReport },
+    { value: 'stock', label: 'Stock', Component: StockReport },
+    { value: 'stock-aging', label: 'Stock Aging', Component: StockAgingReport },
+    { value: 'wastage', label: 'Wastage', Component: WastageReport },
+    { value: 'purchase-orders', label: 'PO History', Component: PurchaseOrdersReport },
+    { value: 'payables-aging', label: 'Payables', Component: PayablesAgingReport },
+    { value: 'supplier-performance', label: 'Suppliers', Component: SupplierPerformanceReport },
+    { value: 'parties', label: 'Parties', Component: PartyReport },
+    { value: 'transactions', label: 'Transactions', Component: TransactionReport },
+    { value: 'receivables-aging', label: 'Receivables', Component: ReceivablesAgingReport },
+    { value: 'customer-ledger', label: 'Ledger', Component: CustomerLedgerReport },
+    { value: 'top-spenders', label: 'Top Spenders', Component: TopSpendersReport },
+  ];
 
 function UpgradePrompt({ reportName }: { reportName: string }) {
   return (
@@ -111,6 +113,8 @@ function UpgradePrompt({ reportName }: { reportName: string }) {
 export default function ConsolidatedReportsPage() {
   const [activeTab, setActiveTab] = useState('snapshot');
   const { data: session } = useSession();
+  const { availableShops } = useActiveShop();
+  const [selectedShopId, setSelectedShopId] = useState<string | undefined>(undefined);
 
   const plan = (session?.user?.subscription?.plan as string | undefined) ?? 'free';
   const features = useMemo(() => getPlanFeatures(plan), [plan]);
@@ -148,12 +152,39 @@ export default function ConsolidatedReportsPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-        <p className="text-muted-foreground">
-          View and export business reports
-        </p>
+      <div className='flex flex-col md:flex-row gap-2 justify-between'>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+          <p className="text-muted-foreground">
+            View and export business reports
+          </p>
+        </div>
+        <div>
+          {/* Shop filter */}
+          {availableShops.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Store className="size-4 text-muted-foreground shrink-0" />
+              <Select
+                value={selectedShopId || 'all'}
+                onValueChange={(v) => setSelectedShopId(v === 'all' ? undefined : v)}
+              >
+                <SelectTrigger className="w-48 h-9">
+                  <SelectValue placeholder="All Shops" />
+                </SelectTrigger>
+                <SelectContent className='dark:bg-gray-900'>
+                  <SelectItem value="all">All Shops</SelectItem>
+                  {availableShops.map((shop) => (
+                    <SelectItem key={shop.id} value={shop.id}>
+                      {shop.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
       </div>
+
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full min-w-0 space-y-4">
         <TabsList variant="segmented" className="w-full max-w-full overflow-x-auto flex-nowrap justify-start">
@@ -183,7 +214,7 @@ export default function ConsolidatedReportsPage() {
               {isLocked ? (
                 <UpgradePrompt reportName={label} />
               ) : (
-                <Component />
+                <Component shopId={selectedShopId} />
               )}
             </TabsContent>
           );

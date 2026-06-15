@@ -68,7 +68,7 @@ const addressSchema = new Schema<PartyAddress>(
   {
     line1: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
       maxlength: 200,
     },
@@ -86,27 +86,26 @@ const addressSchema = new Schema<PartyAddress>(
     },
     city: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
       maxlength: 100,
     },
     state: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
       maxlength: 100,
     },
     postalCode: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
       maxlength: 20,
     },
     country: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
-      default: "India",
       maxlength: 100,
     },
   },

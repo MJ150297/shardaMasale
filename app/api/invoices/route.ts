@@ -182,7 +182,6 @@ export async function GET(request: Request) {
     }
     
     if (status) {
-      // Support comma-separated status values (e.g. "sent,paid,overdue")
       const statusValues = status.split(',').map(s => s.trim()).filter(Boolean);
       query.status = statusValues.length === 1 ? statusValues[0] : { $in: statusValues };
     }
@@ -191,6 +190,17 @@ export async function GET(request: Request) {
 
     if (party) {
       transactionMatch.party = party;
+    }
+
+    // Overdue tab: dynamically check transactions with dueDate < today and unpaid/partial
+    if (status === 'overdue') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      // Include invoices already marked overdue, plus sent invoices whose transaction is past due
+      query.status = { $in: ['sent', 'overdue'] };
+      transactionMatch.paymentStatus = { $in: ['unpaid', 'partial'] };
+      transactionMatch.status = 'confirmed';
+      transactionMatch.dueDate = { $lt: today };
     }
 
     if (settlement === 'open') {

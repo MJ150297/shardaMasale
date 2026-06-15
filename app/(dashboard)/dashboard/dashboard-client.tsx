@@ -7,10 +7,14 @@ import {
   AreaChart, Area
 } from 'recharts';
 import {
-  Package, Receipt,
-  ArrowDownRight, Clock, DollarSign,
+  Receipt,
+  ArrowDownRight, Clock,
   ReceiptIndianRupee,
   FileText,
+  CalendarClock,
+  AlertTriangle,
+  IndianRupee,
+  TrendingUp,
 } from 'lucide-react';
 import { usePageActions } from '@/components/layout/dashboard-shell';
 import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
@@ -28,7 +32,6 @@ import { DateRangeFilter } from '@/modules/reports/date-range-filter';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { getPartyId, getPartyName, getPartyPhone, getInvoiceId, type PartyLike } from '@/lib/party-helpers';
-import { cn } from '@/lib/utils';
 import TransactionDetailDialog, { TransactionDialogData } from '@/components/transaction-detail-dialog';
 import { useActiveShop } from '@/components/providers/shop-provider';
 import OnboardingBanner from '@/components/onboarding-banner';
@@ -138,12 +141,28 @@ interface DashboardClientProps {
     todayTransactions: number;
     todayRevenue: number;
   };
+  dueToday: {
+    unpaid: number;
+    partial: number;
+    total: number;
+    totalDue: number;
+  };
+  overdue: {
+    count: number;
+    totalDue: number;
+  };
+  outstanding: {
+    count: number;
+    totalDue: number;
+  };
+  monthlySales: number;
+  lastMonthSales: number;
   lowStockItems: LowStockItem[];
   recentTransactions: RecentTransaction[];
 }
 
 
-export default function DashboardClient({ userName, stats, lowStockItems, recentTransactions: initialTransactions }: DashboardClientProps) {
+export default function DashboardClient({ userName, stats, dueToday, overdue, outstanding, monthlySales, lastMonthSales, lowStockItems, recentTransactions: initialTransactions }: DashboardClientProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const { setActions } = usePageActions();
@@ -326,38 +345,52 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
   const totalPages = recordData.pagination?.totalPages || 0;
   const total = recordData.pagination?.total || 0;
 
+  const monthlySalesChange = lastMonthSales > 0
+    ? ((monthlySales - lastMonthSales) / lastMonthSales) * 100
+    : monthlySales > 0 ? 100 : 0;
+
   const statsCards = [
     {
-      title: 'Today Revenue',
-      value: `₹ ${stats.todayRevenue.toLocaleString('en-IN')}`,
-      change: 'Today',
-      positive: true,
-      icon: <DollarSign className="h-6 w-6" />,
-      gradient: 'from-blue-500 to-cyan-500',
+      title: 'Due Today',
+      value: dueToday.total.toString(),
+      subtitle: dueToday.total > 0
+        ? `${dueToday.unpaid} unpaid · ${dueToday.partial} partial`
+        : 'No payments due',
+      change: dueToday.totalDue > 0 ? `₹ ${dueToday.totalDue.toLocaleString('en-IN')} pending` : 'All clear',
+      positive: dueToday.total === 0,
+      icon: <CalendarClock className="h-6 w-6" />,
+      gradient: dueToday.total > 0 ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-green-500',
     },
     {
-      title: 'Today Transactions',
-      value: stats.todayTransactions.toString(),
-      change: 'Today',
-      positive: true,
-      icon: <Receipt className="h-6 w-6" />,
-      gradient: 'from-green-500 to-emerald-500',
+      title: 'Outstanding Dues',
+      value: `₹ ${outstanding.totalDue.toLocaleString('en-IN')}`,
+      subtitle: outstanding.count > 0 ? `${outstanding.count} transactions` : 'No pending dues',
+      change: outstanding.count > 0 ? `${outstanding.count} need attention` : 'All settled',
+      positive: outstanding.count === 0,
+      icon: <IndianRupee className="h-6 w-6" />,
+      gradient: outstanding.count > 0 ? 'from-red-500 to-rose-500' : 'from-emerald-500 to-green-500',
     },
     {
-      title: 'Low Stock Items',
-      value: stats.lowStockCount.toString(),
-      change: stats.lowStockCount > 0 ? 'Attention' : 'Good',
-      positive: stats.lowStockCount === 0,
-      icon: <Package className="h-6 w-6" />,
-      gradient: stats.lowStockCount > 0 ? 'from-red-500 to-orange-500' : 'from-emerald-500 to-green-500',
+      title: 'Overdue',
+      value: overdue.count.toString(),
+      subtitle: overdue.count > 0
+        ? `₹ ${overdue.totalDue.toLocaleString('en-IN')} overdue`
+        : 'No overdue payments',
+      change: overdue.count > 0 ? 'Action needed' : 'On track',
+      positive: overdue.count === 0,
+      icon: <AlertTriangle className="h-6 w-6" />,
+      gradient: overdue.count > 0 ? 'from-red-600 to-red-400' : 'from-emerald-500 to-green-500',
     },
     {
-      title: 'Total Items',
-      value: stats.totalItems.toString(),
-      change: 'Active',
-      positive: true,
-      icon: <Package className="h-6 w-6" />,
-      gradient: 'from-purple-500 to-pink-500',
+      title: "This Month's Sales",
+      value: `₹ ${monthlySales.toLocaleString('en-IN')}`,
+      subtitle: lastMonthSales > 0 ? `Last month: ₹ ${lastMonthSales.toLocaleString('en-IN')}` : 'First month data',
+      change: monthlySalesChange !== 0
+        ? `${monthlySalesChange > 0 ? '↑' : '↓'} ${Math.abs(monthlySalesChange).toFixed(1)}% vs last month`
+        : 'No change',
+      positive: monthlySalesChange >= 0,
+      icon: <TrendingUp className="h-6 w-6" />,
+      gradient: monthlySalesChange >= 0 ? 'from-blue-500 to-indigo-500' : 'from-orange-500 to-red-500',
     },
   ];
 
@@ -382,8 +415,19 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
           <div key={index} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden hover:shadow-md transition-shadow">
             <div className="px-2 md:px-3">
               <div className="mt-3 md:mt-4">
-                <h3 className="text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400">{stat.title}</h3>
+                <div className="flex items-center gap-1.5">
+                  <span className={`${stat.positive ? 'text-emerald-500' : 'text-red-500'}`}>{stat.icon}</span>
+                  <h3 className="text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400">{stat.title}</h3>
+                </div>
                 <p className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
+                {stat.subtitle && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{stat.subtitle}</p>
+                )}
+                {stat.change && (
+                  <p className={`text-xs font-medium mt-1 ${stat.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {stat.change}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -522,7 +566,7 @@ export default function DashboardClient({ userName, stats, lowStockItems, recent
                 </div>
 
                 {(transaction.paymentStatus === 'unpaid' || transaction.paymentStatus === 'partial') && (
-                  <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
                     {transaction.type === 'sale' ? (
                       <CreatePaymentInDialog
                         initialPartyId={transaction.partyId}

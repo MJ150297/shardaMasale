@@ -210,3 +210,7 @@ export class SubscriptionExpiryWorker {
     }
   }
 }
+
+if (process.env.NODE_ENV === 'production') {
+  SubscriptionExpiryWorker.start();
+}

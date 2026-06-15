@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import "@/lib/workers/startup";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import ServiceWorkerRegistration from "@/components/providers/sw-register";
 import { Toaster } from "sonner";

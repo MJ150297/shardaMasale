@@ -6,13 +6,13 @@ import { AppError } from '@/lib/utils';
 import Party from '@/models/Party';
 
 const billingAddressSchema = z.object({
-  line1: z.string().min(1, 'Address line 1 is required'),
-  line2: z.string().optional().nullable(),
-  landmark: z.string().optional().nullable(),
-  city: z.string().min(1, 'City is required'),
-  state: z.string().min(1, 'State is required'),
-  postalCode: z.string().min(1, 'Postal code is required'),
-  country: z.string().min(1, 'Country is required'),
+  line1: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  line2: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  landmark: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  city: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  state: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  postalCode: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  country: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
 }).optional().nullable();
 
 const createPartySchema = z.object({

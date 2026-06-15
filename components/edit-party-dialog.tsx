@@ -27,13 +27,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 
 const billingAddressSchema = z.object({
-  line1: z.string().min(1, 'Address line 1 is required'),
-  line2: z.string().optional().nullable(),
-  landmark: z.string().optional().nullable(),
-  city: z.string().min(1, 'City is required'),
-  state: z.string().min(1, 'State is required'),
-  postalCode: z.string().min(1, 'Postal code is required'),
-  country: z.string().min(1, 'Country is required'),
+  line1: z.string().optional().default(''),
+  line2: z.string().optional().default(''),
+  landmark: z.string().optional().default(''),
+  city: z.string().optional().default(''),
+  state: z.string().optional().default(''),
+  postalCode: z.string().optional().default(''),
+  country: z.string().optional().default(''),
 }).optional().nullable();
 
 const editPartySchema = z.object({
@@ -115,7 +115,17 @@ export default function EditPartyDialog({
         gstin: party.gstin || '',
         pan: party.pan || '',
         address: party.address || '',
-        billingAddress: party.billingAddress || null,
+        billingAddress: party.billingAddress
+          ? {
+              line1: party.billingAddress.line1 || '',
+              line2: party.billingAddress.line2 || '',
+              landmark: party.billingAddress.landmark || '',
+              city: party.billingAddress.city || '',
+              state: party.billingAddress.state || '',
+              postalCode: party.billingAddress.postalCode || '',
+              country: party.billingAddress.country || '',
+            }
+          : null,
         creditLimit: party.creditLimit || 0,
       },
   });
@@ -123,15 +133,33 @@ export default function EditPartyDialog({
   const onSubmit = async (formData: EditPartyFormData) => {
     setIsSubmitting(true);
     try {
+      // Sanitize billingAddress: convert null/empty object to null to avoid Zod errors
+      const payload: Record<string, unknown> = { id: party._id, ...formData };
+      if (payload.billingAddress && typeof payload.billingAddress === 'object') {
+        const addr = payload.billingAddress as Record<string, string | null | undefined>;
+        // If all fields are empty/blank, set to null
+        if (!addr.line1 && !addr.city && !addr.state && !addr.postalCode && !addr.country) {
+          payload.billingAddress = null;
+        } else {
+          // Ensure no null values - convert to empty string
+          payload.billingAddress = {
+            line1: addr.line1 || '',
+            line2: addr.line2 || '',
+            landmark: addr.landmark || '',
+            city: addr.city || '',
+            state: addr.state || '',
+            postalCode: addr.postalCode || '',
+            country: addr.country || '',
+          };
+        }
+      }
+
       const response = await fetch('/api/parties', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          id: party._id,
-          ...formData,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -244,9 +272,9 @@ export default function EditPartyDialog({
                   name="billingAddress.line1"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Address Line 1 *</FormLabel>
+                      <FormLabel>Address Line 1</FormLabel>
                       <FormControl>
-                        <Input placeholder="Building, street, area" {...field} value={field.value || ''} />
+                        <Input placeholder="Building, street, area" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -259,7 +287,7 @@ export default function EditPartyDialog({
                     <FormItem>
                       <FormLabel>Address Line 2</FormLabel>
                       <FormControl>
-                        <Input placeholder="Additional details" {...field} value={field.value || ''} />
+                        <Input placeholder="Additional details" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -272,7 +300,7 @@ export default function EditPartyDialog({
                     <FormItem>
                       <FormLabel>Landmark</FormLabel>
                       <FormControl>
-                        <Input placeholder="Near..." {...field} value={field.value || ''} />
+                        <Input placeholder="Near..." {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -283,9 +311,9 @@ export default function EditPartyDialog({
                   name="billingAddress.city"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>City *</FormLabel>
+                      <FormLabel>City</FormLabel>
                       <FormControl>
-                        <Input placeholder="City" {...field} value={field.value || ''} />
+                        <Input placeholder="City" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -296,9 +324,9 @@ export default function EditPartyDialog({
                   name="billingAddress.state"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>State *</FormLabel>
+                      <FormLabel>State</FormLabel>
                       <FormControl>
-                        <Input placeholder="State" {...field} value={field.value || ''} />
+                        <Input placeholder="State" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -309,9 +337,9 @@ export default function EditPartyDialog({
                   name="billingAddress.postalCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Postal Code *</FormLabel>
+                      <FormLabel>Postal Code</FormLabel>
                       <FormControl>
-                        <Input placeholder="Postal code" {...field} value={field.value || ''} />
+                        <Input placeholder="Postal code" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -322,9 +350,9 @@ export default function EditPartyDialog({
                   name="billingAddress.country"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Country *</FormLabel>
+                      <FormLabel>Country</FormLabel>
                       <FormControl>
-                        <Input placeholder="Country" {...field} value={field.value || ''} />
+                        <Input placeholder="Country" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

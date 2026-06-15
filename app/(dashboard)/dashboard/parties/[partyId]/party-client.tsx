@@ -21,7 +21,8 @@ import { Button } from '@/components/ui/button';
 import TransactionDetailDialog from '@/components/transaction-detail-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown, Eye, Printer } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Edit, Trash2, ChevronLeft, ChevronRight, Clock, FileText, ShoppingCart, ArrowUpDown, Eye, Printer } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import DataTableToolbar from '@/components/data-table-toolbar';
 import CreateSaleDialog from '@/components/create-sale-dialog';
@@ -302,19 +303,28 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{party.displayName}</h1>
-            <Badge className={partyStatusColors[party.status]}>
-              {party.status}
-            </Badge>
-            <Badge variant="secondary">
-              {partyTypeLabels[party.partyType]}
-            </Badge>
+        <div className='flex items-start gap-2'>
+          <div className='mt-1'>
+            <Link href="/dashboard/parties" className="text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="size-5" />
+            </Link>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Created {formatDate(party.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}
-          </p>
+
+          <div className='flex flex-col'>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">{party.displayName}</h1>
+              <Badge className={partyStatusColors[party.status]}>
+                {party.status}
+              </Badge>
+              <Badge variant="secondary">
+                {partyTypeLabels[party.partyType]}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Created {formatDate(party.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+
         </div>
 
         <div className="flex gap-2">
@@ -360,44 +370,40 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
         <div className="flex gap-1 bg-muted rounded-lg p-1" role="tablist">
           <button
             role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === 'overview'
-                ? 'bg-white dark:bg-gray-800 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview'
+              ? 'bg-white dark:bg-gray-800 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
             onClick={() => setActiveTab('overview')}
           >
             Overview
           </button>
           <button
             role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === 'transactions'
-                ? 'bg-white dark:bg-gray-800 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'transactions'
+              ? 'bg-white dark:bg-gray-800 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
             onClick={() => setActiveTab('transactions')}
           >
             Transactions
           </button>
           <button
             role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === 'invoices'
-                ? 'bg-white dark:bg-gray-800 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'invoices'
+              ? 'bg-white dark:bg-gray-800 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
             onClick={() => setActiveTab('invoices')}
           >
             Invoices
           </button>
           <button
             role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === 'notes'
-                ? 'bg-white dark:bg-gray-800 shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'notes'
+              ? 'bg-white dark:bg-gray-800 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+              }`}
             onClick={() => setActiveTab('notes')}
           >
             Notes

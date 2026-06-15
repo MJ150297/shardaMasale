@@ -31,13 +31,13 @@ import { X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const billingAddressSchema = z.object({
-  line1: z.string().min(1, 'Address line 1 is required'),
-  line2: z.string().optional().nullable(),
-  landmark: z.string().optional().nullable(),
-  city: z.string().min(1, 'City is required'),
-  state: z.string().min(1, 'State is required'),
-  postalCode: z.string().min(1, 'Postal code is required'),
-  country: z.string().min(1, 'Country is required'),
+  line1: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  line2: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  landmark: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  city: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  state: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  postalCode: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
+  country: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
 }).optional().nullable();
 
 const createPartySchema = z.object({
@@ -157,12 +157,33 @@ export default function CreatePartyDialog({
   const onSubmit = async (data: CreatePartyFormData) => {
     setIsSubmitting(true);
     try {
+      // Sanitize billingAddress: convert null/empty object to null to avoid Zod errors
+      const payload = { ...data };
+      if (payload.billingAddress) {
+        const addr = payload.billingAddress;
+        // If all fields are empty/blank, set to null
+        if (!addr.line1 && !addr.city && !addr.state && !addr.postalCode && !addr.country) {
+          payload.billingAddress = null;
+        } else {
+          // Ensure no null values - convert to empty string
+          payload.billingAddress = {
+            line1: addr.line1 || '',
+            line2: addr.line2 || '',
+            landmark: addr.landmark || '',
+            city: addr.city || '',
+            state: addr.state || '',
+            postalCode: addr.postalCode || '',
+            country: addr.country || '',
+          };
+        }
+      }
+
       const response = await fetch('/api/parties', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       const party = (await response.json()) as CreatedPartyInput | { error?: string };
