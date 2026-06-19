@@ -296,7 +296,6 @@ export default function DashboardClient({
 
     const shareKey = transaction.transactionId || transaction.id;
     setSharingTransactionId(shareKey);
-    const popup = window.open('about:blank', '_blank');
 
     try {
       let detailedTransaction: DetailedTransactionRecord | null = null;
@@ -344,16 +343,9 @@ export default function DashboardClient({
         notes: detailedTransaction?.notes || undefined,
       });
 
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-      if (popup) {
-        popup.location.replace(url);
-      } else {
-        window.open(url, '_blank');
-      }
+      const url = `https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(message)}&type=phone_number&app_absent=0`;
+      window.open(url, '_blank');
     } catch (error) {
-      if (popup) {
-        popup.close();
-      }
       console.error('Failed to build share message:', error);
       toast.error('Could not prepare the share message.');
     } finally {
