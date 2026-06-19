@@ -82,6 +82,8 @@ gsms_next/
 │   ├── create-purchase-dialog.tsx
 │   ├── create-shop-dialog.tsx
 │   ├── transaction-form.tsx      # Shared transaction form
+│   ├── settings/
+│   │   └── share-message-templates-editor.tsx
 │   ├── require-shop-guard.tsx    # UI guard for shop selection
 │   ├── onboarding-banner.tsx
 │   ├── data-table-toolbar.tsx
@@ -94,6 +96,7 @@ gsms_next/
 │   ├── party-balance.ts          # Party balance calculations
 │   ├── party-helpers.ts          # Party utility functions
 │   ├── payment-settlement.ts     # Invoice settlement allocation
+│   ├── share-messages.ts         # Share-sheet / WhatsApp template rendering
 │   ├── transaction-inventory.ts  # Inventory logic for transactions
 │   └── workers/                  # Background job workers
 │       ├── invoice-overdue-worker.ts

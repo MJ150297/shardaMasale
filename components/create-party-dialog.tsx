@@ -382,7 +382,7 @@ export default function CreatePartyDialog({
                       name="billingAddress.line1"
                       render={({ field }) => (
                         <FormItem className="col-span-2">
-                          <FormLabel>Address Line 1 *</FormLabel>
+                          <FormLabel>Address Line 1</FormLabel>
                           <FormControl>
                             <Input placeholder="Building, street, area" {...field} value={field.value || ''} />
                           </FormControl>
@@ -421,7 +421,7 @@ export default function CreatePartyDialog({
                       name="billingAddress.city"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>City *</FormLabel>
+                          <FormLabel>City</FormLabel>
                           <FormControl>
                             <Input placeholder="City" {...field} value={field.value || ''} />
                           </FormControl>
@@ -434,7 +434,7 @@ export default function CreatePartyDialog({
                       name="billingAddress.state"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>State *</FormLabel>
+                          <FormLabel>State</FormLabel>
                           <FormControl>
                             <Input placeholder="State" {...field} value={field.value || ''} />
                           </FormControl>
@@ -447,7 +447,7 @@ export default function CreatePartyDialog({
                       name="billingAddress.postalCode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Postal Code *</FormLabel>
+                          <FormLabel>Postal Code</FormLabel>
                           <FormControl>
                             <Input placeholder="Postal code" {...field} value={field.value || ''} />
                           </FormControl>
@@ -460,7 +460,7 @@ export default function CreatePartyDialog({
                       name="billingAddress.country"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Country *</FormLabel>
+                          <FormLabel>Country</FormLabel>
                           <FormControl>
                             <Input placeholder="Country" {...field} value={field.value || ''} />
                           </FormControl>

@@ -3,6 +3,14 @@ import mongoose from "mongoose";
 import { requireUser, requireActiveBusinessSubscription } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Settings from "@/models/Settings";
+import { DEFAULT_SHARE_MESSAGE_TEMPLATES } from "@/lib/share-messages";
+
+function normalizeShareMessageTemplates(templates: Record<string, unknown> | null | undefined) {
+  return {
+    ...DEFAULT_SHARE_MESSAGE_TEMPLATES,
+    ...(templates || {}),
+  };
+}
 
 function normalizeBillingSettings(settings: Record<string, unknown> | null | undefined) {
   if (!settings) {
@@ -17,6 +25,7 @@ function normalizeBillingSettings(settings: Record<string, unknown> | null | und
   delete legacyFreeBilling.quotationPrefix;
 
   const business = (settings.business as Record<string, unknown> | undefined) || {};
+  const shareMessageTemplates = (billing.shareMessageTemplates as Record<string, unknown> | undefined) || {};
 
   return {
     ...settings,
@@ -24,6 +33,7 @@ function normalizeBillingSettings(settings: Record<string, unknown> | null | und
       ...legacyFreeBilling,
       salePrefix,
       footerText: legacyFreeBilling.footerText ?? null,
+      shareMessageTemplates: normalizeShareMessageTemplates(shareMessageTemplates),
     },
     business: {
       ...business,
@@ -90,7 +100,7 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json(normalizeBillingSettings(settings as Record<string, unknown>));
+    return NextResponse.json(normalizeBillingSettings(settings as unknown as Record<string, unknown>));
   } catch (error) {
     console.error("Error fetching settings:", error);
     return NextResponse.json(
@@ -132,7 +142,7 @@ export async function PUT(request: Request) {
       { returnDocument: 'after', upsert: true, runValidators: true }
     );
 
-    return NextResponse.json(settings);
+    return NextResponse.json(normalizeBillingSettings(settings as unknown as Record<string, unknown>));
   } catch (error) {
     console.error("Error updating settings:", error);
     return NextResponse.json(

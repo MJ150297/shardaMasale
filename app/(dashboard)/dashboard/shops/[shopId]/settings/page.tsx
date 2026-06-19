@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { ChevronLeft, Save } from "lucide-react";
 import type { ISettings } from "@/models/Settings";
+import ShareMessageTemplatesEditor from "@/components/settings/share-message-templates-editor";
+import { DEFAULT_SHARE_MESSAGE_TEMPLATES } from "@/lib/share-messages";
 
 interface ShopSettingsPageProps {
   params: {
@@ -75,6 +77,8 @@ export default function ShopSettingsPage({ params }: ShopSettingsPageProps) {
         nextSaleSequence: 1,
         autoRoundOff: true,
         termsAndConditions: "",
+        footerText: "",
+        shareMessageTemplates: { ...DEFAULT_SHARE_MESSAGE_TEMPLATES },
       },
       enabledModules: ["inventory", "billing", "crm", "reports"],
       featureFlags: {},
@@ -496,7 +500,26 @@ export default function ShopSettingsPage({ params }: ShopSettingsPageProps) {
                       {...register("billing.termsAndConditions")} 
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="billing.footerText">Footer Text</Label>
+                    <Textarea
+                      id="billing.footerText"
+                      rows={2}
+                      placeholder="e.g. Thank you for your business! Visit us again."
+                      {...register("billing.footerText")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This text will be displayed at the bottom of invoices (PDF & preview).
+                    </p>
+                  </div>
                 </div>
+
+                <ShareMessageTemplatesEditor
+                  register={register}
+                  watch={watch}
+                  setValue={setValue}
+                />
               </CardContent>
             </Card>
           </TabsContent>

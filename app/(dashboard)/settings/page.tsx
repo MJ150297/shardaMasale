@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { useActiveShop } from "@/components/providers/shop-provider";
 import type { ISettings } from "@/models/Settings";
+import ShareMessageTemplatesEditor from "@/components/settings/share-message-templates-editor";
+import { DEFAULT_SHARE_MESSAGE_TEMPLATES } from "@/lib/share-messages";
 
 type SettingsFormData = Omit<ISettings, '_id' | 'owner' | 'shopId' | 'createdAt' | 'updatedAt' | '__v'>;
 
@@ -73,6 +75,7 @@ export default function SettingsPage() {
         autoRoundOff: true,
         termsAndConditions: "",
         footerText: "",
+        shareMessageTemplates: { ...DEFAULT_SHARE_MESSAGE_TEMPLATES },
       },
       security: {
         sessionTimeoutMinutes: 480,
@@ -576,6 +579,12 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
+
+                <ShareMessageTemplatesEditor
+                  register={register}
+                  watch={watch}
+                  setValue={setValue}
+                />
               </CardContent>
             </Card>
           </TabsContent>

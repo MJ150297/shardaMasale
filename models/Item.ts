@@ -9,7 +9,7 @@ import StockMovement from "./StockMovement";
 
 export const ITEM_TYPES = ["product", "service", "compound"] as const;
 export const BUNDLE_TYPES = ["product", "service"] as const;
-export const ITEM_STATUSES = ["draft", "active", "discontinued", "archived"] as const;
+export const ITEM_STATUSES = ["active", "discontinued"] as const;
 
 export type ItemType = (typeof ITEM_TYPES)[number];
 export type BundleType = (typeof BUNDLE_TYPES)[number];
@@ -468,6 +468,9 @@ itemSchema.pre("validate", async function preValidate() {
       );
       if (!componentItem) continue;
 
+      // Skip discontinued items from pricing calculation
+      if ((componentItem as any).status === 'discontinued') continue;
+
       totalCostPrice += (componentItem.pricing.costPrice || 0) * comp.quantity;
       totalSellingPrice += (componentItem.pricing.sellingPrice || 0) * comp.quantity;
       totalPurchasePrice += (componentItem.pricing.purchasePrice || 0) * comp.quantity;
@@ -519,6 +522,134 @@ itemSchema.post("save" as any, async function (doc: any) {
       createdBy: doc.owner,
       metadata: {},
     });
+  }
+});
+
+// ========== AUTO-RECALCULATE COMPOUND PRICING ==========
+// When any item is updated (e.g., component status changed to discontinued),
+// automatically recalculate pricing of all compound items that reference it
+itemSchema.post("save" as any, async function (doc: any) {
+  try {
+    // Skip if this is a compound item (already handled in pre-validate)
+    if (doc.itemType === "compound") return;
+
+    // Find all compound items that reference this item as a component
+    const compoundItems = await mongoose
+      .model("Item")
+      .find({ "components.item": doc._id, itemType: "compound" })
+      .select("components owner pricing");
+
+    for (const compoundItem of compoundItems) {
+      if (!compoundItem.components || compoundItem.components.length === 0) continue;
+
+      // Fetch all component items to recalculate pricing
+      const componentIds = compoundItem.components.map(
+        (c: any) => c.item
+      );
+      const componentItems = await mongoose
+        .model("Item")
+        .find({ _id: { $in: componentIds } });
+
+      let totalCostPrice = 0;
+      let totalSellingPrice = 0;
+      let totalPurchasePrice = 0;
+
+      for (const comp of compoundItem.components) {
+        const componentItem = componentItems.find(
+          (ci: any) => ci._id.toString() === comp.item.toString()
+        );
+        if (!componentItem) continue;
+
+        // Skip discontinued items from pricing calculation
+        if ((componentItem as any).status === "discontinued") continue;
+
+        totalCostPrice +=
+          (componentItem.pricing?.costPrice || 0) * comp.quantity;
+        totalSellingPrice +=
+          (componentItem.pricing?.sellingPrice || 0) * comp.quantity;
+        totalPurchasePrice +=
+          (componentItem.pricing?.purchasePrice || 0) * comp.quantity;
+      }
+
+      // Update the compound item's pricing directly without triggering another save
+      await mongoose.model("Item").updateOne(
+        { _id: compoundItem._id },
+        {
+          $set: {
+            "pricing.costPrice": roundCurrency(totalCostPrice),
+            "pricing.sellingPrice": roundCurrency(totalSellingPrice),
+            "pricing.purchasePrice": roundCurrency(totalPurchasePrice),
+          },
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Error recalculating compound pricing:", error);
+  }
+});
+
+// ========== AUTO-RECALCULATE COMPOUND PRICING (findOneAndUpdate) ==========
+// The API uses findByIdAndUpdate which bypasses post("save") hooks.
+// This hook runs after findOneAndUpdate/updateOne operations.
+itemSchema.post("findOneAndUpdate" as any, async function (doc: any) {
+  try {
+    if (!doc) return;
+    // doc is the updated document
+    // Skip compound items (already handled in pre-validate when saved)
+    if (doc.itemType === "compound") return;
+
+    // Find all compound items that reference this item as a component
+    const compoundItems = await mongoose
+      .model("Item")
+      .find({ "components.item": doc._id, itemType: "compound" })
+      .select("components owner pricing");
+
+    for (const compoundItem of compoundItems) {
+      if (!compoundItem.components || compoundItem.components.length === 0) continue;
+
+      // Fetch all component items to recalculate pricing
+      const componentIds = compoundItem.components.map(
+        (c: any) => c.item
+      );
+      const componentItems = await mongoose
+        .model("Item")
+        .find({ _id: { $in: componentIds } });
+
+      let totalCostPrice = 0;
+      let totalSellingPrice = 0;
+      let totalPurchasePrice = 0;
+
+      for (const comp of compoundItem.components) {
+        const componentItem = componentItems.find(
+          (ci: any) => ci._id.toString() === comp.item.toString()
+        );
+        if (!componentItem) continue;
+
+        // Skip discontinued items from pricing calculation
+        if ((componentItem as any).status === "discontinued") continue;
+
+        totalCostPrice +=
+          (componentItem.pricing?.costPrice || 0) * comp.quantity;
+        totalSellingPrice +=
+          (componentItem.pricing?.sellingPrice || 0) * comp.quantity;
+        totalPurchasePrice +=
+          (componentItem.pricing?.purchasePrice || 0) * comp.quantity;
+      }
+
+      // Update the compound item's pricing directly
+      await mongoose.model("Item").updateOne(
+        { _id: compoundItem._id },
+        {
+          $set: {
+            "pricing.costPrice": roundCurrency(totalCostPrice),
+            "pricing.sellingPrice": roundCurrency(totalSellingPrice),
+            "pricing.purchasePrice": roundCurrency(totalPurchasePrice),
+          },
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Error recalculating compound pricing (findOneAndUpdate):", error);
   }
 });
 

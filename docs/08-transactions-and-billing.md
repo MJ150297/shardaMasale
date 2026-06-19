@@ -224,3 +224,44 @@ The billing module (`modules/billing/invoice-pdf.tsx`) uses `@react-pdf/renderer
 - Tax breakdown
 - Payment terms
 - QR code for digital payments (optional)
+
+## Share Messages
+
+GSMS also generates configurable share messages for WhatsApp, Telegram, and the invoice share sheet.
+
+### Template Source
+
+- Templates are stored in `Settings.billing.shareMessageTemplates`
+- The Billing settings screen lets each shop customize message text per transaction kind
+- `lib/share-messages.ts` renders the final message using named placeholders and live transaction data
+
+### Supported Transaction Templates
+
+- `invoice`
+- `sale`
+- `purchase`
+- `sale-return`
+- `purchase-return`
+- `payment-in`
+- `payment-out`
+- `adjustment`
+- `opening-balance`
+
+### Available Placeholders
+
+Common tokens include:
+
+- `{{business_name}}`
+- `{{document_title}}`
+- `{{reference_no}}`
+- `{{secondary_reference_no}}`
+- `{{document_date}}`
+- `{{due_date}}`
+- `{{party_name}}`
+- `{{line_items}}`
+- `{{summary}}`
+- `{{payment_details}}`
+- `{{notes}}`
+- `{{footer}}`
+
+The renderer removes blank sections automatically, so templates can be as short or as detailed as needed without leaving awkward gaps.

@@ -429,13 +429,15 @@ Super owner impersonates another user.
 
 - **Path**: `GET /api/settings`
 - **Auth**: Required
-- **Response**: User settings object
+- **Query Parameters**: `shopId` (optional)
+- **Response**: User settings object, including `business` and `billing.shareMessageTemplates`
 
 ### Update Settings
 
 - **Path**: `PUT /api/settings`
 - **Auth**: Required
 - **Body**: Partial settings object
+- **Common fields**: billing prefixes, sequence counters, terms and conditions, footer text, and `billing.shareMessageTemplates`
 - **Response**: Updated settings
 
 ---

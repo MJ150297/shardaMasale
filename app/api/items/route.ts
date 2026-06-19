@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import connectToDatabase from '@/lib/db';
 import { requireBusinessUser, requireActiveBusinessSubscription } from '@/lib/auth';
-import { AppError } from '@/lib/utils';
+import { AppError, roundCurrency } from '@/lib/utils';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
 import { validateQuantityForUnit } from '@/lib/unit-utils';
@@ -41,7 +41,7 @@ const createItemSchema = z.object({
   batchNumber: z.string().optional(),
   expiryDate: z.coerce.date().optional(),
   tags: z.array(z.string()).default([]),
-  status: z.enum(['draft', 'active', 'discontinued', 'archived']).default('active'),
+  status: z.enum(['active', 'discontinued']).default('active'),
   components: z.array(z.object({
     item: z.string(),
     quantity: z.coerce.number().min(0.01),
@@ -210,7 +210,7 @@ export async function GET(request: Request) {
       query.itemType = type;
     }
 
-    if (status && ['draft', 'active', 'discontinued', 'archived'].includes(status)) {
+    if (status && ['active', 'discontinued'].includes(status)) {
       query.status = status;
     }
 
@@ -420,7 +420,59 @@ export async function PUT(request: Request) {
       { returnDocument: 'after', runValidators: true }
     );
 
-    return NextResponse.json(updatedItem);
+    // Auto-recalculate pricing of all compound items that reference this item
+    if (updatedItem && updatedItem.itemType !== 'compound') {
+      const compoundItems = await Item.find({
+        'components.item': updatedItem._id,
+        itemType: 'compound',
+      });
+
+      for (const compoundItem of compoundItems) {
+        const componentIds = compoundItem.components.map(
+          (c: { item: any }) => c.item
+        );
+        const componentItems = await Item.find({
+          _id: { $in: componentIds },
+        });
+
+        let totalCostPrice = 0;
+        let totalSellingPrice = 0;
+        let totalPurchasePrice = 0;
+
+        for (const comp of compoundItem.components) {
+          const componentItem = componentItems.find(
+            (ci: any) => ci._id.toString() === comp.item.toString()
+          );
+          if (!componentItem) continue;
+
+          // Skip discontinued items from pricing calculation
+          if (componentItem.status === 'discontinued') continue;
+
+          totalCostPrice +=
+            (componentItem.pricing?.costPrice || 0) * comp.quantity;
+          totalSellingPrice +=
+            (componentItem.pricing?.sellingPrice || 0) * comp.quantity;
+          totalPurchasePrice +=
+            (componentItem.pricing?.purchasePrice || 0) * comp.quantity;
+        }
+
+        await Item.updateOne(
+          { _id: compoundItem._id },
+          {
+            $set: {
+              'pricing.costPrice': roundCurrency(totalCostPrice),
+              'pricing.sellingPrice': roundCurrency(totalSellingPrice),
+              'pricing.purchasePrice': roundCurrency(totalPurchasePrice),
+            },
+          }
+        );
+      }
+    }
+
+    // Re-fetch the updated item to return the latest data
+    const finalItem = await Item.findById(id);
+
+    return NextResponse.json(finalItem);
   } catch (error) {
     console.error('Error updating item:', error);
 

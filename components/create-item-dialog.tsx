@@ -40,6 +40,7 @@ const componentItemSchema = z.object({
   quantity: z.coerce.number().min(0.01, 'Quantity must be at least 0.01'),
   costPrice: z.coerce.number().default(0),
   sellingPrice: z.coerce.number().default(0),
+  status: z.string().optional().default('active'),
 });
 
 type ComponentItem = z.infer<typeof componentItemSchema>;
@@ -77,7 +78,7 @@ const createItemSchema = z.object({
   batchNumber: z.string().optional(),
   expiryDate: z.union([z.date(), z.string()]).optional().transform(val => val ? new Date(val) : undefined),
   tags: z.array(z.string()).default([]),
-  status: z.enum(['draft', 'active', 'discontinued', 'archived']).default('active'),
+  status: z.enum(['active', 'discontinued']).default('active'),
 });
 
 type CreateItemFormData = z.infer<typeof createItemSchema>;
@@ -152,8 +153,7 @@ export default function CreateItemDialog({
   }
 
   const form = useForm<CreateItemFormData>({
-    // @ts-ignore - Zod v4 resolver type compatibility issue
-    resolver: zodResolver(createItemSchema),
+    resolver: zodResolver(createItemSchema) as never,
     defaultValues: {
       name: '',
       description: '',
@@ -230,7 +230,7 @@ export default function CreateItemDialog({
   async function loadAvailableItems() {
     setLoadingAvailableItems(true);
     try {
-      const res = await fetch('/api/items?limit=5000');
+      const res = await fetch('/api/items?limit=5000&status=active');
       const data = await res.json();
       if (res.ok) {
         // Only show products and services (not compounds)
@@ -246,11 +246,11 @@ export default function CreateItemDialog({
     }
   }
 
-  // Calculate compound pricing from components
+  // Calculate compound pricing from components (exclude discontinued items)
   const compoundPricing = components.reduce(
     (acc, comp) => ({
-      costPrice: acc.costPrice + comp.costPrice * comp.quantity,
-      sellingPrice: acc.sellingPrice + comp.sellingPrice * comp.quantity,
+      costPrice: acc.costPrice + (comp.status === 'discontinued' ? 0 : comp.costPrice * comp.quantity),
+      sellingPrice: acc.sellingPrice + (comp.status === 'discontinued' ? 0 : comp.sellingPrice * comp.quantity),
     }),
     { costPrice: 0, sellingPrice: 0 }
   );
@@ -275,6 +275,7 @@ export default function CreateItemDialog({
         quantity: 1,
         costPrice: item.pricing?.costPrice || 0,
         sellingPrice: item.pricing?.sellingPrice || 0,
+        status: item.status || 'active',
       },
     ]);
     setShowItemSearch(false);
@@ -431,7 +432,6 @@ export default function CreateItemDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* @ts-ignore - Zod v4 + React Hook Form type incompatibility */}
         <Form {...(form as any)}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs defaultValue="basic" className="w-full">
@@ -449,7 +449,6 @@ export default function CreateItemDialog({
               <TabsContent value="basic" className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                  <FormField
-                   // @ts-ignore - Zod v4 resolver type incompatibility
                    control={form.control as any}
                     name="name"
                     render={({ field }) => (
@@ -1108,9 +1107,7 @@ export default function CreateItemDialog({
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="draft">Draft</SelectItem>
                           <SelectItem value="discontinued">Discontinued</SelectItem>
-                          <SelectItem value="archived">Archived</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormDescription>

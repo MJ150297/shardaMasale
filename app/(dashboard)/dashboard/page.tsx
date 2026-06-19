@@ -3,8 +3,10 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import Item from '@/models/Item';
 import Transaction from '@/models/Transaction';
+import Settings from '@/models/Settings';
 import DashboardClient from './dashboard-client';
 import { getPartyId, getPartyName, getPartyPhone, getInvoiceId, type PartyLike } from '@/lib/party-helpers';
+import type { ShareBusinessProfile, ShareMessageTemplates } from '@/lib/share-messages';
 
 interface RecentTransactionRecord {
   _id: string | { toString(): string };
@@ -34,6 +36,39 @@ export default async function DashboardPage() {
   const shopFilter = user.activeShopId
     ? { shopId: new mongoose.Types.ObjectId(user.activeShopId) }
     : {};
+
+  // Fetch shop name from settings (business profile legal name) with cascading fallback
+  let shopSettings = await Settings.findOne({
+    owner: user.id,
+    ...(user.activeShopId ? { shopId: user.activeShopId } : { shopId: null }),
+  })
+    .select('business billing.footerText billing.shareMessageTemplates')
+    .lean();
+
+  // Cascading fallback: if shop-level settings not found, try owner-level
+  if (!shopSettings && user.activeShopId) {
+    shopSettings = await Settings.findOne({
+      owner: user.id,
+      shopId: null,
+    })
+      .select('business billing.footerText billing.shareMessageTemplates')
+      .lean();
+  }
+
+  const shopBusiness = (shopSettings as {
+    business?: ShareBusinessProfile;
+    billing?: { footerText?: string | null; shareMessageTemplates?: ShareMessageTemplates | null };
+  } | null)?.business;
+  const shopName = shopBusiness?.displayName || shopBusiness?.legalName || 'GSMS Shop Management System';
+  const businessProfile: ShareBusinessProfile | null = shopBusiness
+    ? {
+        ...shopBusiness,
+        footerText: (shopSettings as { billing?: { footerText?: string | null } } | null)?.billing?.footerText ?? null,
+      }
+    : null;
+  const shareMessageTemplates = (shopSettings as {
+    billing?: { shareMessageTemplates?: ShareMessageTemplates | null };
+  } | null)?.billing?.shareMessageTemplates ?? null;
 
   // Run all queries in parallel
   const [
@@ -262,6 +297,9 @@ export default async function DashboardPage() {
   return (
     <DashboardClient 
       userName={user.name}
+      shopName={shopName}
+      businessProfile={businessProfile}
+      shareMessageTemplates={shareMessageTemplates}
       stats={{
         totalItems,
         lowStockCount,

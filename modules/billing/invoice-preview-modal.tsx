@@ -100,6 +100,7 @@ export default function InvoicePreviewModal({
   const [business, setBusiness] = useState<BusinessSettings | null>(null);
   const [billingTerms, setBillingTerms] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
+  const [invoiceShareTemplate, setInvoiceShareTemplate] = useState<string | null>(null);
   const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,6 +110,7 @@ export default function InvoicePreviewModal({
       try {
         setBillingTerms(null);
         setFooterText(null);
+        setInvoiceShareTemplate(null);
         setLogoDataUri(null);
         const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
         const res = await fetch(`/api/settings${queryParam}`);
@@ -117,6 +119,7 @@ export default function InvoicePreviewModal({
           setBusiness(settings.business);
           setBillingTerms(settings?.billing?.termsAndConditions ?? null);
           setFooterText(settings?.billing?.footerText ?? null);
+          setInvoiceShareTemplate(settings?.billing?.shareMessageTemplates?.invoice ?? null);
           setLogoDataUri(settings?.business?.logo ?? null);
         }
       } catch (error) {
@@ -127,6 +130,7 @@ export default function InvoicePreviewModal({
   }, [open, activeShopId]);
 
   const businessName = business?.displayName || business?.legalName || 'BUSINESS NAME';
+  const shopName = business?.legalName || 'GSMS Shop Management System';
   const businessAddress = business?.address
     ? [business.address.line1, business.address.city, business.address.state]
       .filter(Boolean)
@@ -181,6 +185,9 @@ export default function InvoicePreviewModal({
                 termsAndConditions: resolvedTermsAndConditions,
               }}
               variant="button"
+              shopName={shopName}
+              businessProfile={business ? { ...business, footerText: footerText ?? null } : null}
+              messageTemplate={invoiceShareTemplate}
             />
             <Button size="sm" onClick={onDownload} className="px-2 sm:px-3">
               <Download className="h-4 w-4 sm:mr-2" />

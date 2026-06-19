@@ -185,6 +185,19 @@ Report endpoints accept date ranges and filters in the request body, returning a
 | `GET` | `/api/settings` | Get user settings |
 | `PUT` | `/api/settings` | Update user settings |
 
+### GET /api/settings
+**Query parameters:**
+- `shopId` - Optional shop scope. If omitted, returns the owner-level settings.
+
+The response includes the `business` profile and the `billing` block, including `billing.shareMessageTemplates` for each supported transaction kind. Those templates power the WhatsApp/share-sheet messages used across the dashboard and invoice flows.
+
+### PUT /api/settings
+Accepts the full settings payload. When you update the Billing tab, the request can include:
+- billing prefixes and sequence counters
+- terms and conditions
+- footer text
+- `billing.shareMessageTemplates` for custom share-copy templates
+
 ## Notifications
 
 | Method | Path | Description |

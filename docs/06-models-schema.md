@@ -262,7 +262,33 @@ User notifications with status tracking (unread/read/dismissed), types, and opti
 
 ## 9. Settings Model (`models/Settings.ts`)
 
-User-level settings including security configuration (max login attempts), preferences, and feature flags.
+User-level settings including business profile, billing prefixes, share-message templates, security configuration, preferences, and feature flags.
+
+### Key Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `business` | Embedded `BusinessProfileSettings` | Legal name, display name, contact details, logo, and address |
+| `billing` | Embedded `BillingSettings` | Prefixes, sequence counters, round-off, terms, footer text, and share templates |
+| `billing.shareMessageTemplates` | Embedded map | Per-transaction share templates for invoice, sale, purchase, returns, payments, adjustments, and opening balance |
+| `notifications` | Embedded `NotificationSettings` | Alerts and digest preferences |
+| `featureFlags` | Record | Feature toggles used by the UI |
+
+### Billing Share Templates
+
+The billing settings store a reusable WhatsApp/share-sheet message template for each transaction kind:
+
+- `invoice`
+- `sale`
+- `purchase`
+- `sale-return`
+- `purchase-return`
+- `payment-in`
+- `payment-out`
+- `adjustment`
+- `opening-balance`
+
+Each template is rendered from a shared context in `lib/share-messages.ts`, so placeholders like `{{party_name}}`, `{{reference_no}}`, `{{line_items}}`, `{{summary}}`, and `{{footer}}` are filled automatically from the live transaction data.
 
 ## Common Patterns
 

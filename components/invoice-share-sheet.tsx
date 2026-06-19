@@ -33,7 +33,14 @@ import {
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useActiveShop } from '@/components/providers/shop-provider';
 import { getPartyPhone as getPartyPhoneUtil } from '@/lib/party-helpers';
+import {
+  buildEnterpriseShareMessage,
+  type ShareBusinessProfile,
+  type ShareLineItem,
+  type ShareSummary,
+} from '@/lib/share-messages';
 import QRCode from 'qrcode';
 
 interface InvoiceLineItem {
@@ -53,6 +60,7 @@ interface Invoice {
   invoiceNumber: string;
   grandTotal: number;
   dueDate: Date | string;
+  status?: string;
   party?: {
     name?: string;
     phone?: string;
@@ -73,18 +81,75 @@ interface InvoiceShareSheetProps {
   invoice: Invoice;
   children?: React.ReactNode;
   variant?: 'button' | 'icon' | 'menu-item';
+  shopName?: string;
+  businessProfile?: ShareBusinessProfile | null;
+  messageTemplate?: string | null;
 }
 
-export default function InvoiceShareSheet({ invoice, children, variant = 'button' }: InvoiceShareSheetProps) {
+export default function InvoiceShareSheet({ invoice, children, variant = 'button', shopName, businessProfile, messageTemplate }: InvoiceShareSheetProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [sharing, setSharing] = useState<string | null>(null);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState(false);
+  const [resolvedBusiness, setResolvedBusiness] = useState<ShareBusinessProfile | null>(
+    businessProfile || (shopName ? { legalName: shopName } : null)
+  );
+  const [resolvedMessageTemplate, setResolvedMessageTemplate] = useState<string | null>(messageTemplate ?? null);
   const isMobile = useIsMobile();
+  const { activeShopId } = useActiveShop();
 
   const invoiceUrl = `${window.location.origin}/api/invoices/${invoice.id}/pdf`;
   const publicUrl = `${window.location.origin}/invoices/${invoice.id}`;
+
+  useEffect(() => {
+    if (businessProfile) {
+      setResolvedBusiness(businessProfile);
+    }
+
+    if (messageTemplate !== undefined) {
+      setResolvedMessageTemplate(messageTemplate);
+    }
+
+    if (businessProfile && messageTemplate !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchShopName() {
+      try {
+        const queryParam = activeShopId ? `?shopId=${activeShopId}` : '';
+        const response = await fetch(`/api/settings${queryParam}`);
+        if (!response.ok) return;
+
+        const settings = await response.json();
+        const business = settings?.business || {};
+        if (!cancelled) {
+          setResolvedBusiness({
+            legalName: business.legalName || shopName || 'GSMS Shop Management System',
+            displayName: business.displayName || '',
+            email: business.email || null,
+            phoneNumber: business.phoneNumber || null,
+            website: business.website || null,
+            gstin: business.gstin || null,
+            pan: business.pan || null,
+            address: business.address || null,
+            footerText: settings?.billing?.footerText || null,
+          });
+          setResolvedMessageTemplate(settings?.billing?.shareMessageTemplates?.invoice || null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch shop name for share sheet:', error);
+      }
+    }
+
+    fetchShopName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeShopId, businessProfile, messageTemplate, shopName]);
 
   // Generate QR code when the sheet opens
   useEffect(() => {
@@ -195,11 +260,41 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
   }
 
   function buildTextMessage(): string {
-    const invoiceNo = invoice.invoiceNumber || '';
-    const customerName = getPartyName();
-    const amount = `₹ ${invoice.grandTotal.toFixed(2)}`;
-    const status = getPaymentStatus();
-    return `*Transaction Details*\n-------------------\nInvoice #: ${invoiceNo}\nCustomer: ${customerName}\nAmount: ${amount}\nStatus: ${status}\n\nSent from GSMS Shop Management System`;
+    return buildEnterpriseShareMessage({
+      kind: 'invoice',
+      business: resolvedBusiness,
+      template: resolvedMessageTemplate,
+      referenceNumber: invoice.invoiceNumber || '',
+      referenceLabel: 'Invoice No.',
+      secondaryReferenceNumber: invoice.transactionId?.transactionNumber || undefined,
+      secondaryReferenceLabel: invoice.transactionId?.transactionNumber ? 'Transaction No.' : undefined,
+      documentDate: invoice.transactionId?.transactionDate || invoice.dueDate,
+      dueDate: invoice.dueDate,
+      documentStatus: invoice.status || invoice.transactionId?.status || undefined,
+      paymentStatus: getPaymentStatus(),
+      party: {
+        displayName: getPartyName(),
+        name: getPartyName(),
+        phoneNumber: getPartyPhone(),
+        email: getPartyEmail(),
+      },
+      lineItems: getLineItems() as ShareLineItem[],
+      additionalCharges: getAdditionalCharges(),
+      summary: {
+        subtotal: getSubtotal(),
+        discountTotal: getDiscountTotal(),
+        taxTotal: getTaxTotal(),
+        roundOff: invoice.transactionId?.summary?.roundOff || 0,
+        grandTotal: invoice.grandTotal,
+        paidAmount: invoice.transactionId?.summary?.paidAmount || 0,
+        dueAmount: invoice.transactionId?.summary?.dueAmount || Math.max(invoice.grandTotal - (invoice.transactionId?.summary?.paidAmount || 0), 0),
+      } as ShareSummary,
+      payment: invoice.transactionId?.payment || undefined,
+      notes: invoice.notes || undefined,
+      termsAndConditions: invoice.termsAndConditions || undefined,
+      footerText: resolvedBusiness?.footerText || undefined,
+      maxLineItems: 4,
+    });
   }
 
   async function shareViaWhatsApp() {

@@ -106,7 +106,7 @@ export default function EditOwnerDialog({
   const [shopSearchQuery, setShopSearchQuery] = useState('');
 
   const form = useForm<EditOwnerFormValues>({
-    resolver: zodResolver(editOwnerSchema) as any,
+    resolver: zodResolver(editOwnerSchema) as never,
     defaultValues: {
       name: owner.name,
       email: owner.email,

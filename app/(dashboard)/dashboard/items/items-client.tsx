@@ -146,7 +146,6 @@ export default function ItemsClient() {
             label: 'Status',
             options: [
               { value: 'active', label: 'Active' },
-              { value: 'draft', label: 'Draft' },
               { value: 'discontinued', label: 'Discontinued' },
             ]
           },

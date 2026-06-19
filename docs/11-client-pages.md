@@ -121,6 +121,12 @@ Each section follows the same pattern:
 - **Actions**: Create new shop, edit shop details
 - **Features**: Shop name, display name, contact info, currency, timezone
 
+### Settings Pages
+- `app/(dashboard)/settings/page.tsx` and `app/(dashboard)/dashboard/shops/[shopId]/settings/page.tsx`
+- Business profile, localization, inventory, tax, billing, security, notifications, and POS configuration
+- Billing now includes configurable share-message templates for each transaction kind
+- The invoice and transaction share flows read these templates at runtime, so the UI settings directly control the text sent through WhatsApp and share sheets
+
 ## Dashboard Home
 
 ### dashboard-client.tsx

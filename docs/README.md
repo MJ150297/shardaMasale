@@ -1,6 +1,6 @@
 # GSMS Next — Documentation
 
-**Generic Shop Management System (GSMS)** — a multi-tenant, Next.js 16 application for managing shops, items, parties, transactions, inventory, invoices, and reports.
+**Generic Shop Management System (GSMS)** — a multi-tenant, Next.js 16 application for managing shops, items, parties, transactions, inventory, invoices, share-message templates, and reports.
 
 ## Table of Contents
 

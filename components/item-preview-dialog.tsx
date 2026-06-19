@@ -20,6 +20,7 @@ interface ComponentDetail {
   quantity: number;
   costPrice: number;
   sellingPrice: number;
+  status?: string;
 }
 
 interface ItemPreviewDialogProps {
@@ -58,6 +59,7 @@ export default function ItemPreviewDialog({
               quantity: comp.quantity,
               costPrice: found?.pricing?.costPrice || 0,
               sellingPrice: found?.pricing?.sellingPrice || 0,
+              status: found?.status || 'active',
             };
           });
           setComponentDetails(details);
@@ -211,6 +213,11 @@ export default function ItemPreviewDialog({
                             {comp.itemType}
                           </Badge>
                           <span className="text-sm font-medium truncate">{comp.name}</span>
+                          {comp.status === 'discontinued' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0">
+                              Discontinued
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 shrink-0 text-sm">
                           <span className="text-muted-foreground">×{comp.quantity}</span>

@@ -5,6 +5,7 @@ import {
   normalizeEmail,
   normalizePhoneNumber,
 } from "@/lib/utils";
+import { DEFAULT_SHARE_MESSAGE_TEMPLATES, type ShareMessageTemplates } from "@/lib/share-messages";
 
 export interface SettingsAddress {
   line1: string;
@@ -54,6 +55,7 @@ export interface BillingSettings {
   autoRoundOff: boolean;
   termsAndConditions?: string | null;
   footerText?: string | null;
+  shareMessageTemplates?: ShareMessageTemplates;
 }
 
 export interface TaxationSettings {
@@ -373,10 +375,54 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             trim: true,
             maxlength: 500,
           },
+          shareMessageTemplates: {
+            type: new Schema<ShareMessageTemplates>(
+              {
+                invoice: {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES.invoice,
+                },
+                sale: {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES.sale,
+                },
+                purchase: {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES.purchase,
+                },
+                'sale-return': {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES['sale-return'],
+                },
+                'purchase-return': {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES['purchase-return'],
+                },
+                'payment-in': {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES['payment-in'],
+                },
+                'payment-out': {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES['payment-out'],
+                },
+                adjustment: {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES.adjustment,
+                },
+                'opening-balance': {
+                  type: String,
+                  default: DEFAULT_SHARE_MESSAGE_TEMPLATES['opening-balance'],
+                },
+              },
+              { _id: false },
+            ),
+            default: () => ({ ...DEFAULT_SHARE_MESSAGE_TEMPLATES }),
+          },
         },
         { _id: false },
       ),
-        default: () => ({
+      default: () => ({
         invoicePrefix: "INV",
         purchasePrefix: "PUR",
         paymentPrefix: "PAY",
@@ -389,6 +435,7 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         autoRoundOff: true,
         termsAndConditions: null,
         footerText: null,
+        shareMessageTemplates: { ...DEFAULT_SHARE_MESSAGE_TEMPLATES },
       }),
     },
     taxation: {

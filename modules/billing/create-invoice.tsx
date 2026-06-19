@@ -178,7 +178,7 @@ export default function CreateInvoice({ onSuccess, onCancel, editingInvoiceId, i
         }
 
         // Load Items
-        const itemsRes = await fetch('/api/items?limit=5000');
+        const itemsRes = await fetch('/api/items?limit=5000&status=active');
         console.log('✅ Items response status:', itemsRes.status);
 
         if (itemsRes.ok) {

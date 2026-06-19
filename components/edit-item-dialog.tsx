@@ -1,5 +1,4 @@
 'use client';
-// @ts-nocheck - Zod v4 and React Hook Form type incompatibility, same as create-item-dialog
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -67,7 +66,7 @@ const editItemSchema = z.object({
   batchNumber: z.string().optional(),
   expiryDate: z.union([z.date(), z.string()]).optional().transform(val => val ? new Date(val) : undefined),
   tags: z.array(z.string()).default([]),
-  status: z.enum(['draft', 'active', 'discontinued', 'archived']).default('active'),
+  status: z.enum(['active', 'discontinued']).default('active'),
 });
 
 type EditItemFormData = z.infer<typeof editItemSchema>;
@@ -117,6 +116,7 @@ export default function EditItemDialog({
     quantity: number;
     costPrice: number;
     sellingPrice: number;
+    status?: string;
   }>>([]);
   const [componentSearchQuery, setComponentSearchQuery] = useState('');
   const [availableItems, setAvailableItems] = useState<any[]>([]);
@@ -126,8 +126,7 @@ export default function EditItemDialog({
   const isCompound = item.itemType === 'compound';
 
   const form = useForm<EditItemFormData>({
-    // @ts-ignore - Zod v4 resolver type compatibility issue
-    resolver: zodResolver(editItemSchema),
+    resolver: zodResolver(editItemSchema) as never,
     defaultValues: {
       name: item.name,
       description: item.description || '',
@@ -197,6 +196,7 @@ export default function EditItemDialog({
             quantity: c.quantity,
             costPrice: found?.pricing?.costPrice || 0,
             sellingPrice: found?.pricing?.sellingPrice || 0,
+            status: found?.status || 'active',
           };
         });
         setComponents(mapped);
@@ -227,7 +227,7 @@ export default function EditItemDialog({
   async function loadAvailableItems() {
     setLoadingAvailableItems(true);
     try {
-      const res = await fetch('/api/items?limit=5000');
+      const res = await fetch('/api/items?limit=5000&status=active');
       const data = await res.json();
       if (res.ok) {
         const itemsList = (data.items || data.data || []).filter(
@@ -245,8 +245,8 @@ export default function EditItemDialog({
   // Calculate compound pricing from components
   const compoundPricing = components.reduce(
     (acc, comp) => ({
-      costPrice: acc.costPrice + comp.costPrice * comp.quantity,
-      sellingPrice: acc.sellingPrice + comp.sellingPrice * comp.quantity,
+      costPrice: acc.costPrice + (comp.status === 'discontinued' ? 0 : comp.costPrice * comp.quantity),
+      sellingPrice: acc.sellingPrice + (comp.status === 'discontinued' ? 0 : comp.sellingPrice * comp.quantity),
     }),
     { costPrice: 0, sellingPrice: 0 }
   );
@@ -1088,9 +1088,7 @@ export default function EditItemDialog({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
                         <SelectItem value="discontinued">Discontinued</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormDescription>
@@ -1229,6 +1227,11 @@ export default function EditItemDialog({
                               </Badge>
                               <div className="min-w-0">
                                 <p className="text-sm font-medium truncate">{comp.itemName}</p>
+                                {comp.status === 'discontinued' && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 mt-0.5">
+                                    Discontinued
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">

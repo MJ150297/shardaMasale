@@ -183,7 +183,7 @@ export default function TransactionForm({
   const [additionalChargesExpanded, setAdditionalChargesExpanded] = useState(false);
 
   const form = useForm<TransactionFormValues>({
-    resolver: zodResolver(transactionFormSchema) as any,
+    resolver: zodResolver(transactionFormSchema) as never,
     defaultValues: {
       type: mode,
       transactionDate: new Date(),
@@ -269,7 +269,7 @@ export default function TransactionForm({
     async function loadItems() {
       setLoadingItems(true);
       try {
-        const res = await fetch('/api/items?limit=5000');
+        const res = await fetch('/api/items?limit=5000&status=active');
         const data = await res.json();
         
         if (res.ok) {
