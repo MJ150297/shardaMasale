@@ -7,19 +7,15 @@ import {
   AreaChart, Area
 } from 'recharts';
 import {
-  Receipt,
   ArrowDownRight, Clock,
-  ReceiptIndianRupee,
   FileText,
   CalendarClock,
   AlertTriangle,
   IndianRupee,
   TrendingUp,
-  Loader2,
 } from 'lucide-react';
 import { usePageActions } from '@/components/layout/dashboard-shell';
 import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
-import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
 import CreateInvoice from '@/modules/billing/create-invoice';
 import {
   Dialog,
@@ -27,16 +23,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { useTheme } from 'next-themes';
 import { DateRangeFilter } from '@/modules/reports/date-range-filter';
-import Link from 'next/link';
-import { toast } from 'sonner';
 import { getPartyId, getPartyName, getPartyPhone, getInvoiceId, type PartyLike } from '@/lib/party-helpers';
-import TransactionDetailDialog, { TransactionDialogData } from '@/components/transaction-detail-dialog';
 import { useActiveShop } from '@/components/providers/shop-provider';
 import OnboardingBanner from '@/components/onboarding-banner';
-import { buildEnterpriseShareMessage, type ShareBusinessProfile, type ShareLineItem, type ShareMessageTemplates, type ShareSummary } from '@/lib/share-messages';
+import RecentTransactionsCard, { type RecentTransactionItem } from '@/components/recent-transactions-card';
+import type { ShareBusinessProfile, ShareMessageTemplates } from '@/lib/share-messages';
 
 interface LowStockItem {
   _id: string;
@@ -61,56 +54,6 @@ interface RecentTransaction {
   date: string;
   dateIso: string;
   time: string;
-}
-
-interface DetailedTransactionRecord {
-  _id: string;
-  transactionNumber: string;
-  type: string;
-  status: string;
-  paymentStatus: string;
-  party?: (PartyLike & { email?: string | null }) | null;
-  transactionDate: string | Date;
-  dueDate?: string | Date | null;
-  lineItems: Array<{
-    item?: string | null;
-    itemName: string;
-    sku?: string | null;
-    description?: string | null;
-    unit: string;
-    quantity: number;
-    unitPrice: number;
-    discountAmount: number;
-    taxRate: number;
-    taxAmount: number;
-    lineTotal: number;
-    costPrice?: number | null;
-    itemType?: string;
-  }>;
-  additionalCharges?: Array<{ name: string; amount: number }>;
-  summary: {
-    subtotal: number;
-    discountTotal: number;
-    taxTotal: number;
-    roundOff: number;
-    grandTotal: number;
-    paidAmount: number;
-    dueAmount: number;
-  };
-  payment?: {
-    method?: string | null;
-    referenceNumber?: string | null;
-    notes?: string | null;
-  } | null;
-  notes?: string | null;
-  tags: string[];
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  invoiceId?: {
-    _id: string;
-    invoiceNumber: string;
-    status: string;
-  } | null;
 }
 
 interface DashboardTransactionRecord {
@@ -198,9 +141,6 @@ export default function DashboardClient({
   // Dialog open states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [selectedDetailTransaction, setSelectedDetailTransaction] = useState<TransactionDialogData | null>(null);
-  const [sharingTransactionId, setSharingTransactionId] = useState<string | null>(null);
 
   // Set page action buttons
   useEffect(() => {
@@ -270,152 +210,42 @@ export default function DashboardClient({
     }
   );
 
-  // Format raw transaction data to match display format
-  const formatTransaction = (tx: DashboardTransactionRecord): RecentTransaction => ({
+  // Format raw transaction data to match RecentTransactionItem for the card component
+  const formatForCard = (tx: DashboardTransactionRecord): RecentTransactionItem => ({
+    _id: tx._id,
     transactionId: tx._id,
-    id: tx.transactionNumber,
+    transactionNumber: tx.transactionNumber,
     type: tx.type,
     customer: getPartyName(tx.party, 'Cash Sale'),
     partyId: getPartyId(tx.party),
     invoiceId: getInvoiceId(tx.invoiceId),
     customerPhone: getPartyPhone(tx.party),
-    amount: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
+    amount: tx.summary.grandTotal,
+    amountFormatted: `₹ ${tx.summary.grandTotal.toLocaleString('en-IN')}`,
     paymentStatus: tx.paymentStatus,
     date: new Date(tx.transactionDate).toLocaleDateString('en-IN'),
     dateIso: new Date(tx.transactionDate).toISOString(),
-    time: new Date(tx.createdAt).toLocaleString()
   });
-
-  const handleShareTransaction = async (transaction: RecentTransaction) => {
-    const phone = transaction.customerPhone?.replace(/\D/g, '');
-
-    if (!phone) {
-      toast.error(`No phone number found for ${transaction.customer}.`);
-      return;
-    }
-
-    const shareKey = transaction.transactionId || transaction.id;
-    setSharingTransactionId(shareKey);
-
-    try {
-      let detailedTransaction: DetailedTransactionRecord | null = null;
-      if (transaction.transactionId) {
-        const response = await fetch(`/api/transactions/${transaction.transactionId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch transaction details');
-        }
-
-        const payload = await response.json();
-        detailedTransaction = payload.data || payload;
-      }
-
-      const message = buildEnterpriseShareMessage({
-        kind: detailedTransaction?.type || transaction.type,
-        business: businessProfile || (shopName ? { legalName: shopName } : null),
-        templates: shareMessageTemplates,
-        referenceNumber: detailedTransaction?.invoiceId
-          ? detailedTransaction.invoiceId.invoiceNumber
-          : transaction.id,
-        referenceLabel: detailedTransaction?.invoiceId ? 'Invoice No.' : 'Transaction No.',
-        secondaryReferenceNumber: detailedTransaction?.invoiceId ? detailedTransaction.transactionNumber : undefined,
-        secondaryReferenceLabel: detailedTransaction?.invoiceId ? 'Transaction No.' : undefined,
-        documentDate: detailedTransaction?.transactionDate || transaction.dateIso,
-        dueDate: detailedTransaction?.dueDate,
-        documentStatus: detailedTransaction?.status,
-        paymentStatus: detailedTransaction?.paymentStatus || transaction.paymentStatus,
-        party: detailedTransaction?.party
-          ? {
-              displayName: detailedTransaction.party.displayName || detailedTransaction.party.name,
-              name: detailedTransaction.party.name || detailedTransaction.party.displayName,
-              phone: detailedTransaction.party.phone || detailedTransaction.party.phoneNumber,
-              phoneNumber: detailedTransaction.party.phoneNumber || detailedTransaction.party.phone,
-              email: detailedTransaction.party.email,
-            }
-          : {
-              displayName: transaction.customer,
-              name: transaction.customer,
-              phoneNumber: transaction.customerPhone || undefined,
-            },
-        lineItems: detailedTransaction?.lineItems as ShareLineItem[] | undefined,
-        additionalCharges: detailedTransaction?.additionalCharges,
-        summary: detailedTransaction?.summary as ShareSummary | undefined,
-        payment: detailedTransaction?.payment || undefined,
-        notes: detailedTransaction?.notes || undefined,
-      });
-
-      const url = `https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(message)}&type=phone_number&app_absent=0`;
-      window.open(url, '_blank');
-    } catch (error) {
-      console.error('Failed to build share message:', error);
-      toast.error('Could not prepare the share message.');
-    } finally {
-      setSharingTransactionId(null);
-    }
-  };
-
-  const handleViewTransaction = async (transaction: RecentTransaction) => {
-    try {
-      // Fetch the full transaction details from the API
-      const url = transaction.transactionId
-        ? `/api/transactions/${transaction.transactionId}`
-        : null;
-      if (!url) return;
-
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch transaction details');
-
-      const fullTransaction: DetailedTransactionRecord = await res.json().then(r => r.data || r);
-
-      // Map to TransactionDialogData
-      const dialogData: TransactionDialogData = {
-        _id: fullTransaction._id,
-        transactionNumber: fullTransaction.transactionNumber,
-        type: fullTransaction.type as TransactionDialogData['type'],
-        status: fullTransaction.status as TransactionDialogData['status'],
-        paymentStatus: fullTransaction.paymentStatus as TransactionDialogData['paymentStatus'],
-        party: fullTransaction.party
-          ? {
-              id: getPartyId(fullTransaction.party) || '',
-              name: getPartyName(fullTransaction.party),
-              phone: getPartyPhone(fullTransaction.party) || undefined,
-            }
-          : null,
-        transactionDate: fullTransaction.transactionDate,
-        dueDate: fullTransaction.dueDate,
-        lineItems: fullTransaction.lineItems.map((item) => ({
-          ...item,
-          itemType: item.itemType as 'product' | 'service' | undefined,
-        })),
-        summary: fullTransaction.summary,
-        notes: fullTransaction.notes,
-        tags: fullTransaction.tags,
-        createdAt: fullTransaction.createdAt,
-        updatedAt: fullTransaction.updatedAt,
-        invoiceId: fullTransaction.invoiceId
-          ? (typeof fullTransaction.invoiceId === 'string'
-              ? { _id: fullTransaction.invoiceId, invoiceNumber: '', status: 'sent' as const }
-              : {
-                  _id: fullTransaction.invoiceId._id,
-                  invoiceNumber: fullTransaction.invoiceId.invoiceNumber,
-                  status: fullTransaction.invoiceId.status as 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled',
-                }
-            )
-          : null,
-      };
-
-      setSelectedDetailTransaction(dialogData);
-      setDetailDialogOpen(true);
-    } catch (error) {
-      console.error('Failed to fetch transaction details:', error);
-      toast.error('Could not load transaction details');
-    }
-  };
 
   const recordData = data ?? initialFallback;
   // Use SSR data as initial display, SWR updates seamlessly
-  const transactions = recordData.data && recordData.data.length > 0
-    ? recordData.data.map(formatTransaction)
-    : initialTransactions;
+  const cardTransactions = recordData.data && recordData.data.length > 0
+    ? recordData.data.map(formatForCard)
+    : initialTransactions.map((tx): RecentTransactionItem => ({
+        _id: tx.transactionId || tx.id,
+        transactionId: tx.transactionId,
+        transactionNumber: tx.id,
+        type: tx.type,
+        customer: tx.customer,
+        partyId: tx.partyId,
+        invoiceId: tx.invoiceId,
+        customerPhone: tx.customerPhone,
+        amount: parseFloat(tx.amount.replace(/[₹,]/g, '')) || 0,
+        amountFormatted: tx.amount,
+        paymentStatus: tx.paymentStatus,
+        date: tx.date,
+        dateIso: tx.dateIso,
+      }));
   const totalPages = recordData.pagination?.totalPages || 0;
   const total = recordData.pagination?.total || 0;
 
@@ -549,180 +379,32 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* Recent Orders */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="px-4 md:px-6 py-4 md:py-5 border-b border-gray-100 dark:border-gray-800">
-
-          {/* Desktop Layout */}
-          <div className="hidden md:flex items-start justify-between">
-            <DateRangeFilter
-              startDate={startDate}
-              endDate={endDate}
-              onDateChange={(start, end) => {
-                setStartDate(start);
-                setEndDate(end);
-                setPage(1);
-              }}
-            />
-            <div className="text-right">
-              <Link href="/dashboard/transactions" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-1">
-                View all
-              </Link>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Latest Transactions</h3>
-            </div>
-          </div>
-
-          {/* Mobile Layout */}
-          <div className="md:hidden space-y-3">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Latest Transactions</h3>
-            <div className="flex items-center justify-between">
-              <DateRangeFilter
-                startDate={startDate}
-                endDate={endDate}
-                onDateChange={(start, end) => {
-                  setStartDate(start);
-                  setEndDate(end);
-                  setPage(1);
-                }}
-              />
-              <Link href="/dashboard/transactions" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-                View all
-              </Link>
-            </div>
-          </div>
-
-        </div>
-        <div className="divide-y divide-gray-50 dark:divide-gray-800">
-          {transactions.map((transaction: RecentTransaction, index: number) => (
-            <div
-              key={index}
-              className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-              onClick={() => handleViewTransaction(transaction)}
-              onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); handleViewTransaction(transaction); } }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <Receipt className="w-4 h-4 md:w-5 md:h-5 text-gray-500 dark:text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs md:text-sm font-medium text-gray-900 dark:text-white">
-                        <span className="hidden sm:inline">{transaction.id} - </span>{transaction.customer}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${transaction.type === 'sale' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                          transaction.type === 'purchase' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                            transaction.type === 'payment-in' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                              transaction.type === 'payment-out' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}>
-                          {transaction.type}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {transaction.date}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs md:text-sm font-semibold text-gray-900 dark:text-white">{transaction.amount}</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${transaction.paymentStatus === 'paid' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                      transaction.paymentStatus === 'partial' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
-                        transaction.paymentStatus === 'unpaid' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
-                          'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                      }`}>
-                      {transaction.paymentStatus}
-                    </span>
-                  </div>
-                </div>
-
-                {(transaction.paymentStatus === 'unpaid' || transaction.paymentStatus === 'partial') && (
-                  <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
-                    {transaction.type === 'sale' ? (
-                      <CreatePaymentInDialog
-                        initialPartyId={transaction.partyId}
-                        initialPartyName={transaction.customer}
-                        initialPartyPhone={transaction.customerPhone}
-                        initialSelectedInvoiceIds={
-                          transaction.invoiceId ? [transaction.invoiceId] : []
-                        }
-                        onCreated={() => mutate()}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="flex-1 h-9 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
-                        >
-                          <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
-                          Record Payment
-                        </Button>
-                      </CreatePaymentInDialog>
-                    ) : (
-                      <CreatePaymentOutDialog
-                        initialPartyId={transaction.partyId}
-                        initialPartyName={transaction.customer}
-                        initialPartyPhone={transaction.customerPhone}
-                        initialSelectedTransactionIds={
-                          transaction.transactionId ? [transaction.transactionId] : []
-                        }
-                        onCreated={() => mutate()}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="flex-1 h-9 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-900/20"
-                        >
-                          <ReceiptIndianRupee className="h-4 w-4 mr-1.5" />
-                          Record Payment
-                        </Button>
-                      </CreatePaymentOutDialog>
-                    )}
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1 h-9 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
-                      onClick={() => handleShareTransaction(transaction)}
-                      disabled={sharingTransactionId === (transaction.transactionId || transaction.id)}
-                    >
-                      {sharingTransactionId === (transaction.transactionId || transaction.id) ? (
-                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                      ) : (
-                        <svg className="h-4 w-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
-                        </svg>
-                      )}
-                      Share
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Pagination buttons - ALL SCREEN SIZES */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-t border-gray-100 dark:border-gray-800">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page <= 1 || isLoading}
-            className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-500 dark:text-gray-400">Page {page} of {totalPages} ({total} total)</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || isLoading}
-            className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      {/* Recent Transactions */}
+      <RecentTransactionsCard
+        transactions={cardTransactions}
+        currentPage={page}
+        totalPages={totalPages}
+        total={total}
+        isLoading={isLoading}
+        onPageChange={setPage}
+        onMutate={mutate}
+        businessProfile={businessProfile}
+        shareMessageTemplates={shareMessageTemplates}
+        shopName={shopName}
+        title="Latest Transactions"
+        viewAllLink="/dashboard/transactions"
+        dateFilterComponent={
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            onDateChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+              setPage(1);
+            }}
+          />
+        }
+      />
 
       {/* Charts - Date Range Filter */}
       <div className="flex items-center justify-between">
@@ -833,13 +515,6 @@ export default function DashboardClient({
           />
         </DialogContent>
       </Dialog>
-
-      {/* Transaction Detail Dialog */}
-      <TransactionDetailDialog
-        open={detailDialogOpen}
-        onOpenChange={setDetailDialogOpen}
-        transaction={selectedDetailTransaction}
-      />
     </div>
   );
 }

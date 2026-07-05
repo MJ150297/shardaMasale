@@ -29,6 +29,10 @@ import CreateSaleDialog from '@/components/create-sale-dialog';
 import CreatePurchaseDialog from '@/components/create-purchase-dialog';
 import CreatePaymentInDialog from '@/components/create-payment-in-dialog';
 import CreatePaymentOutDialog from '@/components/create-payment-out-dialog';
+import RecentTransactionsCard, { type RecentTransactionItem } from '@/components/recent-transactions-card';
+import TransactionListCard, { type TransactionListItem, type TransactionListPagination } from '@/components/transaction-list-card';
+import { useTransactionActions, type ActionableTransaction } from '@/hooks/use-transaction-actions';
+import InvoiceListCard, { type InvoiceListItem, type InvoiceListPagination } from '@/components/invoice-list-card';
 
 interface Party {
   _id: string;
@@ -109,8 +113,10 @@ interface Pagination {
 
 export default function PartyClientWrapper({ party, children }: PartyClientWrapperProps) {
   const router = useRouter();
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const initialTab = searchParams.get('tab') === 'transactions' ? 'transactions' : 'overview';
   const [isDeleting, setIsDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // Transactions state (separate page state to avoid infinite loop with useCallback)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -124,17 +130,13 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
   const [invoicePage, setInvoicePage] = useState(1);
   const [invPagination, setInvPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
 
-  // Transaction detail dialog
-  const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
-  const [viewTxnDialogOpen, setViewTxnDialogOpen] = useState(false);
-
-  // Invoice preview modal
+  // Invoice preview modal (for invoices tab)
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Invoice preview for transactions tab
-  const [txnInvoicePreview, setTxnInvoicePreview] = useState<any>(null);
-  const [txnInvoicePreviewOpen, setTxnInvoicePreviewOpen] = useState(false);
+  // Overview recent transactions pagination (separate from full transactions tab)
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [overviewPagination, setOverviewPagination] = useState<Pagination>({ page: 1, limit: 4, total: 0, totalPages: 0 });
 
   // Search filters
   const [txnSearchQuery, setTxnSearchQuery] = useState('');
@@ -149,17 +151,13 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     try {
       const response = await fetch('/api/parties', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: party._id }),
       });
-
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to delete party');
       }
-
       toast.success('Party deleted successfully');
       router.push('/dashboard/parties');
       router.refresh();
@@ -184,10 +182,8 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
         limit: '20',
         party: partyIdRef.current,
       });
-
       const res = await fetch(`/api/transactions?${params}`);
       const data = await res.json();
-
       if (res.ok) {
         setTransactions(data.data || []);
         setTransPagination(data.pagination);
@@ -199,6 +195,11 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     }
   }, [transactionPage]);
 
+  // Shared transaction actions hook (uses ref to avoid stale closure)
+  const loadTransactionsRef = useRef(loadTransactions);
+  loadTransactionsRef.current = loadTransactions;
+  const partyActions = useTransactionActions({ onRefresh: () => loadTransactionsRef.current() });
+
   // Load invoices - stable callback, depends only on numeric page
   const loadInvoices = useCallback(async () => {
     try {
@@ -208,10 +209,8 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
         limit: '20',
         party: partyIdRef.current,
       });
-
       const res = await fetch(`/api/invoices?${params}`);
       const data = await res.json();
-
       if (res.ok) {
         setInvoices(data.data || []);
         setInvPagination(data.pagination);
@@ -223,12 +222,59 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
     }
   }, [invoicePage]);
 
-  // Trigger transaction load when tab is "transactions" or "overview"
+  // Load overview transactions with small page size
+  const [overviewTransactions, setOverviewTransactions] = useState<RecentTransactionItem[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  const loadOverviewTransactions = useCallback(async () => {
+    try {
+      setOverviewLoading(true);
+      const params = new URLSearchParams({
+        page: overviewPage.toString(),
+        limit: '4',
+        party: partyIdRef.current,
+      });
+      const res = await fetch(`/api/transactions?${params}`);
+      const data = await res.json();
+      if (res.ok) {
+        const txns: Transaction[] = data.data || [];
+        setOverviewTransactions(txns.map((txn) => ({
+          _id: txn._id,
+          transactionId: txn._id,
+          transactionNumber: txn.transactionNumber,
+          type: txn.type,
+          customer: party.displayName,
+          partyId: partyIdRef.current,
+          invoiceId: txn.invoiceId?._id || null,
+          customerPhone: party.phoneNumber,
+          amount: txn.summary.grandTotal,
+          amountFormatted: `₹${(txn.summary.grandTotal || 0).toFixed(2)}`,
+          paymentStatus: txn.paymentStatus || 'unpaid',
+          date: formatDate(txn.transactionDate),
+          dateIso: txn.transactionDate,
+        })));
+        setOverviewPagination(data.pagination || { page: 1, limit: 4, total: 0, totalPages: 0 });
+      }
+    } catch (error) {
+      console.error('Failed to load overview transactions:', error);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [overviewPage, party.displayName, party.phoneNumber, partyIdRef]);
+
+  // Trigger transaction load when tab is "transactions"
   useEffect(() => {
-    if (activeTab === 'transactions' || activeTab === 'overview') {
+    if (activeTab === 'transactions') {
       loadTransactions();
     }
   }, [activeTab, transactionPage, loadTransactions]);
+
+  // Trigger overview transaction load
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      loadOverviewTransactions();
+    }
+  }, [activeTab, overviewPage, loadOverviewTransactions]);
 
   // Trigger invoice load when tab is "invoices" or "overview"
   useEffect(() => {
@@ -309,54 +355,33 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
               <ArrowLeft className="size-5" />
             </Link>
           </div>
-
           <div className='flex flex-col'>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{party.displayName}</h1>
-              <Badge className={partyStatusColors[party.status]}>
-                {party.status}
-              </Badge>
-              <Badge variant="secondary">
-                {partyTypeLabels[party.partyType]}
-              </Badge>
+              <Badge className={partyStatusColors[party.status]}>{party.status}</Badge>
+              <Badge variant="secondary">{partyTypeLabels[party.partyType]}</Badge>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Created {formatDate(party.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}
             </p>
           </div>
-
         </div>
-
         <div className="flex gap-2">
           <EditPartyDialog party={party} onPartyUpdated={handlePartyUpdated}>
-            <Button variant="outline" size="sm">
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
+            <Button variant="outline" size="sm"><Edit className="w-4 h-4 mr-2" />Edit</Button>
           </EditPartyDialog>
-
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
+              <Button variant="destructive" size="sm"><Trash2 className="w-4 h-4 mr-2" />Delete</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete Party</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete this party? This action cannot be undone.
-                  All associated transactions and history will remain but this party will no longer be selectable.
-                </AlertDialogDescription>
+                <AlertDialogDescription>Are you sure you want to delete this party? This action cannot be undone. All associated transactions and history will remain but this party will no longer be selectable.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
+                <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                   {isDeleting ? 'Deleting...' : 'Delete'}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -368,69 +393,26 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
       {/* Tab Navigation + Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex gap-1 bg-muted rounded-lg p-1" role="tablist">
-          <button
-            role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview'
-              ? 'bg-white dark:bg-gray-800 shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-              }`}
-            onClick={() => setActiveTab('overview')}
-          >
-            Overview
-          </button>
-          <button
-            role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'transactions'
-              ? 'bg-white dark:bg-gray-800 shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-              }`}
-            onClick={() => setActiveTab('transactions')}
-          >
-            Transactions
-          </button>
-          <button
-            role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'invoices'
-              ? 'bg-white dark:bg-gray-800 shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-              }`}
-            onClick={() => setActiveTab('invoices')}
-          >
-            Invoices
-          </button>
-          <button
-            role="tab"
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'notes'
-              ? 'bg-white dark:bg-gray-800 shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-              }`}
-            onClick={() => setActiveTab('notes')}
-          >
-            Notes
-          </button>
+          {['overview', 'transactions', 'invoices', 'notes'].map((tab) => (
+            <button
+              key={tab}
+              role="tab"
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab ? 'bg-white dark:bg-gray-800 shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
-
         <div className="flex gap-2 shrink-0">
           {(party.partyType === 'customer' || party.partyType === 'both') && (
-            <CreateSaleDialog
-              onSaleCreated={() => { router.refresh(); }}
-              initialParty={party._id}
-            >
-              <Button variant="outline" size="sm">
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                New Sale
-              </Button>
+            <CreateSaleDialog onSaleCreated={() => { router.refresh(); }} initialParty={party._id}>
+              <Button variant="outline" size="sm"><ShoppingCart className="w-4 h-4 mr-2" />New Sale</Button>
             </CreateSaleDialog>
           )}
           {(party.partyType === 'supplier' || party.partyType === 'both') && (
-            <CreatePurchaseDialog
-              onPurchaseCreated={() => { router.refresh(); }}
-              initialParty={party._id}
-            >
-              <Button variant="outline" size="sm">
-                <ArrowUpDown className="w-4 h-4 mr-2" />
-                New Purchase
-              </Button>
+            <CreatePurchaseDialog onPurchaseCreated={() => { router.refresh(); }} initialParty={party._id}>
+              <Button variant="outline" size="sm"><ArrowUpDown className="w-4 h-4 mr-2" />New Purchase</Button>
             </CreatePurchaseDialog>
           )}
         </div>
@@ -440,161 +422,43 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
       {activeTab === 'transactions' && (
         <div className="space-y-4">
           {transactions.length > 0 && (
-            <DataTableToolbar
-              onSearch={setTxnSearchQuery}
-              searchPlaceholder="Search transactions..."
-            />
+            <DataTableToolbar onSearch={setTxnSearchQuery} searchPlaceholder="Search transactions..." />
           )}
-
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="relative overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left font-medium">Date</th>
-                    <th className="px-4 py-3 text-left font-medium">Transaction #</th>
-                    <th className="px-4 py-3 text-left font-medium">Type</th>
-                    <th className="px-4 py-3 text-left font-medium">Items</th>
-                    <th className="px-4 py-3 text-left font-medium">Amount</th>
-                    <th className="px-4 py-3 text-left font-medium">Payment</th>
-                    <th className="px-4 py-3 text-left font-medium">Status</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactionsLoading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="border-b">
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-12" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-8 w-16 ml-auto" /></td>
-                      </tr>
-                    ))
-                  ) : filteredTransactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center">
-                        <Clock className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
-                        <h3 className="text-lg font-medium text-gray-500">No transactions found</h3>
-                        <p className="text-sm text-gray-400 mt-1">No transactions for this party yet</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredTransactions.map((txn) => (
-                      <tr key={txn._id} className="border-b hover:bg-muted/50">
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {formatDate(txn.transactionDate)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-medium">
-                          {txn.transactionNumber}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge className={getTypeBadgeClass(txn.type)}>
-                            {txn.type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {txn.lineItems?.length || 0} items
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-medium">
-                          ₹{(txn.summary.grandTotal || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge className={getPaymentBadgeClass(txn.paymentStatus || 'unpaid')}>
-                            {txn.paymentStatus || 'unpaid'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge className={getStatusBadgeClass(txn.status)}>
-                            {txn.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                Actions
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white/80">
-                              <DropdownMenuItem onClick={() => {
-                                setViewTxn(txn);
-                                setViewTxnDialogOpen(true);
-                              }}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View
-                              </DropdownMenuItem>
-                              {txn.type === 'sale' && txn.status === 'confirmed' && !txn.invoiceId && (
-                                <DropdownMenuItem onClick={async () => {
-                                  try {
-                                    const res = await fetch('/api/invoices/generate', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ transactionId: txn._id || txn.transactionNumber }),
-                                    });
-                                    if (res.ok) {
-                                      toast.success('Invoice generated');
-                                      loadTransactions();
-                                    } else {
-                                      const err = await res.json();
-                                      toast.error(err.message || 'Failed to generate invoice');
-                                    }
-                                  } catch {
-                                    toast.error('Failed to generate invoice');
-                                  }
-                                }}>
-                                  <FileText className="mr-2 h-4 w-4" />
-                                  Generate Invoice
-                                </DropdownMenuItem>
-                              )}
-                              {txn.invoiceId && (
-                                <DropdownMenuItem onClick={() => {
-                                  setTxnInvoicePreview(txn.invoiceId);
-                                  setTxnInvoicePreviewOpen(true);
-                                }}>
-                                  <FileText className="mr-2 h-4 w-4" />
-                                  View Invoice
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {transPagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Showing {((transPagination.page - 1) * transPagination.limit) + 1} to {Math.min(transPagination.page * transPagination.limit, transPagination.total)} of {transPagination.total}
-                </p>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => setTransactionPage(prev => Math.max(prev - 1, 1))}
-                    disabled={transPagination.page <= 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => setTransactionPage(prev => Math.min(prev + 1, transPagination.totalPages))}
-                    disabled={transPagination.page >= transPagination.totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          <TransactionListCard
+            transactions={filteredTransactions.map((txn): TransactionListItem => ({
+              id: txn._id,
+              transactionNumber: txn.transactionNumber,
+              type: txn.type,
+              status: txn.status,
+              paymentStatus: txn.paymentStatus || 'unpaid',
+              partyName: party.displayName,
+              grandTotal: txn.summary.grandTotal || 0,
+              transactionDate: txn.transactionDate,
+              lineItemCount: txn.lineItems?.length || 0,
+              invoiceId: txn.invoiceId || null,
+            }))}
+            loading={transactionsLoading}
+            pagination={transPagination as TransactionListPagination}
+            onPageChange={(page) => setTransactionPage(page)}
+            onView={(item) => {
+              const txn = transactions.find(t => t._id === item.id);
+              if (txn) partyActions.viewTransaction(txn as unknown as ActionableTransaction);
+            }}
+            onGenerateInvoice={(item) => {
+              const txn = transactions.find(t => t._id === item.id);
+              if (txn) partyActions.generateInvoiceForTransaction(txn as unknown as ActionableTransaction);
+            }}
+            onViewInvoice={(item) => {
+              if (item.invoiceId) partyActions.handleViewInvoice(item.invoiceId._id);
+            }}
+            extraActions={(item) => {
+              const txn = transactions.find(t => t._id === item.id);
+              if (!txn) return null;
+              return partyActions.renderExtraActions(txn as unknown as ActionableTransaction);
+            }}
+            emptyMessage="No transactions found"
+            emptyDescription="No transactions for this party yet"
+          />
         </div>
       )}
 
@@ -602,169 +466,114 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
       {activeTab === 'invoices' && (
         <div className="space-y-4">
           {invoices.length > 0 && (
-            <DataTableToolbar
-              onSearch={setInvSearchQuery}
-              searchPlaceholder="Search invoices..."
-            />
+            <DataTableToolbar onSearch={setInvSearchQuery} searchPlaceholder="Search invoices..." />
           )}
-
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="relative overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left font-medium">Date</th>
-                    <th className="px-4 py-3 text-left font-medium">Invoice #</th>
-                    <th className="px-4 py-3 text-left font-medium">Due Date</th>
-                    <th className="px-4 py-3 text-left font-medium">Amount</th>
-                    <th className="px-4 py-3 text-left font-medium">Payment</th>
-                    <th className="px-4 py-3 text-left font-medium">Status</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoicesLoading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="border-b">
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-5 w-16 rounded-full" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-8 w-16 ml-auto" /></td>
-                      </tr>
-                    ))
-                  ) : filteredInvoices.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center">
-                        <FileText className="w-12 h-12 mx-auto mb-4 opacity-50 text-gray-400" />
-                        <h3 className="text-lg font-medium text-gray-500">No invoices found</h3>
-                        <p className="text-sm text-gray-400 mt-1">No invoices for this party yet</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredInvoices.map((inv) => (
-                      <tr key={inv._id} className="border-b hover:bg-muted/50">
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {formatDate(inv.createdAt)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-medium">
-                          {inv.invoiceNumber}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {formatDate(inv.dueDate)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-medium">
-                          ₹{(inv.transactionId?.summary?.grandTotal || 0).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge className={getPaymentBadgeClass(inv.transactionId?.paymentStatus || 'unpaid')}>
-                            {inv.transactionId?.paymentStatus || 'unpaid'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge className={getInvoiceStatusBadgeClass(inv.status)}>
-                            {inv.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                Actions
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white/80">
-                              <DropdownMenuItem onClick={() => {
-                                window.open(`/api/invoices/${inv._id}/pdf`, '_blank');
-                              }}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                View PDF
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setPreviewInvoice(inv);
-                                setPreviewOpen(true);
-                              }}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                Preview
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Printer className="mr-2 h-4 w-4" />
-                                Print
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {invPagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Showing {((invPagination.page - 1) * invPagination.limit) + 1} to {Math.min(invPagination.page * invPagination.limit, invPagination.total)} of {invPagination.total}
-                </p>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => setInvoicePage(prev => Math.max(prev - 1, 1))}
-                    disabled={invPagination.page <= 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost" size="sm"
-                    onClick={() => setInvoicePage(prev => Math.min(prev + 1, invPagination.totalPages))}
-                    disabled={invPagination.page >= invPagination.totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          <InvoiceListCard
+            invoices={filteredInvoices.map((inv): InvoiceListItem => ({
+              id: inv._id,
+              invoiceNumber: inv.invoiceNumber,
+              status: inv.status,
+              partyName: party.displayName,
+              grandTotal: inv.transactionId?.summary?.grandTotal || 0,
+              paymentStatus: inv.transactionId?.paymentStatus || 'unpaid',
+              createdAt: inv.createdAt,
+              dueDate: inv.dueDate,
+            }))}
+            loading={invoicesLoading}
+            pagination={invPagination as unknown as InvoiceListPagination}
+            onPageChange={(page) => setInvoicePage(page)}
+            onView={(item) => {
+              const inv = invoices.find(i => i._id === item.id);
+              if (inv) { setPreviewInvoice(inv); setPreviewOpen(true); }
+            }}
+            onDownload={(item) => {
+              const inv = invoices.find(i => i._id === item.id);
+              if (inv) window.open(`/api/invoices/${inv._id}/pdf`, '_blank');
+            }}
+            onPrint={(item) => {
+              const inv = invoices.find(i => i._id === item.id);
+              if (inv) window.open(`/api/invoices/${inv._id}/pdf#toolbar=0`, '_blank');
+            }}
+            emptyMessage="No invoices found"
+            emptyDescription="No invoices for this party yet"
+          />
         </div>
       )}
 
-      {/* Transaction Detail Dialog - shared component */}
+      {/* Dialogs from shared hook */}
       <TransactionDetailDialog
-        open={viewTxnDialogOpen}
-        onOpenChange={setViewTxnDialogOpen}
-        transaction={viewTxn ? (viewTxn as any) : null}
+        open={partyActions.viewDialogOpen}
+        onOpenChange={partyActions.setViewDialogOpen}
+        transaction={partyActions.selectedTransaction as any}
       />
 
-      {/* Invoice Preview Modal for Transactions tab */}
-      {txnInvoicePreview && (
+      {/* Cancel Transaction Confirmation Dialog */}
+      <AlertDialog open={partyActions.cancelDialogOpen} onOpenChange={partyActions.setCancelDialogOpen}>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this transaction?
+              {partyActions.transactionToCancel && (
+                <>
+                  <span className="mt-2 font-medium block">{partyActions.transactionToCancel.transactionNumber}</span>
+                  {partyActions.transactionToCancel.invoiceId && (
+                    <span className="mt-1 text-amber-600 block">The linked invoice will also be cancelled.</span>
+                  )}
+                </>
+              )}
+              This will reverse any inventory movements and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={partyActions.isCancelling}>Keep Transaction</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" disabled={partyActions.isCancelling} onClick={(e) => { e.preventDefault(); partyActions.handleConfirmCancel(); }}>
+              {partyActions.isCancelling ? 'Cancelling...' : 'Yes, Cancel Transaction'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={partyActions.deleteDialogOpen} onOpenChange={partyActions.setDeleteDialogOpen}>
+        <AlertDialogContent className="bg-background dark:bg-gray-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+              {partyActions.transactionToDelete && (
+                <span className="mt-2 font-medium block">{partyActions.transactionToDelete.transactionNumber}</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={partyActions.isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={partyActions.handleDeleteTransaction} disabled={partyActions.isDeleting}>
+              {partyActions.isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Invoice Preview Modal from shared hook */}
+      {partyActions.invoiceToPreview && (
         <InvoicePreviewModal
-          open={txnInvoicePreviewOpen}
-          onOpenChange={setTxnInvoicePreviewOpen}
-          invoice={txnInvoicePreview}
-          onDownload={() => {
-            window.open(`/api/invoices/${txnInvoicePreview._id}/pdf`, '_blank');
-          }}
-          onPrint={() => {
-            window.open(`/api/invoices/${txnInvoicePreview._id}/pdf`, '_blank');
-          }}
+          open={!!partyActions.invoiceToPreview}
+          onOpenChange={(open) => { if (!open) partyActions.setInvoiceToPreview(null); }}
+          invoice={partyActions.invoiceToPreview}
+          onDownload={() => partyActions.downloadInvoice(partyActions.invoiceToPreview!)}
+          onPrint={() => partyActions.printInvoice(partyActions.invoiceToPreview!)}
         />
       )}
 
-      {/* Invoice Preview Modal */}
+      {/* Invoice Preview Modal (for invoices tab) */}
       {previewInvoice && (
         <InvoicePreviewModal
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           invoice={previewInvoice}
-          onDownload={() => {
-            window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank');
-          }}
-          onPrint={() => {
-            window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank');
-          }}
+          onDownload={() => window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank')}
+          onPrint={() => window.open(`/api/invoices/${previewInvoice._id}/pdf`, '_blank')}
         />
       )}
 
@@ -772,8 +581,6 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {children}
-
-          {/* Activity Summary */}
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
             <h3 className="text-lg font-semibold mb-4">Activity Summary</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -787,9 +594,7 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Active Since</p>
-                <p className="text-lg font-medium">
-                  {formatDate(party.createdAt, { month: 'short', year: 'numeric' })}
-                </p>
+                <p className="text-lg font-medium">{formatDate(party.createdAt, { month: 'short', year: 'numeric' })}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Party Type</p>
@@ -797,59 +602,151 @@ export default function PartyClientWrapper({ party, children }: PartyClientWrapp
               </div>
             </div>
           </div>
-
-          {/* Recent Activity Timeline */}
-          {!transactionsLoading && filteredTransactions.length > 0 && (
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
-              <h3 className="text-lg font-semibold mb-4">Recent Transactions</h3>
-              <div className="space-y-3">
-                {filteredTransactions.slice(0, 10).map((txn) => (
-                  <div key={txn._id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div className="flex items-center gap-3">
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {txn.transactionNumber}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatDate(txn.transactionDate)} &middot; {txn.type}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">
-                        ₹{(txn.summary.grandTotal || 0).toFixed(2)}
-                      </p>
-                      <Badge className={getStatusBadgeClass(txn.status)}>
-                        {txn.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <RecentTransactionsCard
+            transactions={overviewTransactions}
+            currentPage={overviewPage}
+            totalPages={overviewPagination.totalPages}
+            total={overviewPagination.total}
+            isLoading={overviewLoading}
+            onPageChange={setOverviewPage}
+            onMutate={() => { loadOverviewTransactions(); loadTransactions(); }}
+            title="Recent Transactions"
+            viewAllLink={`/dashboard/parties/${party._id}?tab=transactions`}
+          />
         </div>
       )}
 
       {/* === NOTES TAB === */}
-      {activeTab === 'notes' && (
-        <div className="space-y-4">
-          {party.notes ? (
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
-              <h3 className="text-lg font-semibold mb-3">Party Notes</h3>
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {party.notes}
-              </p>
+      {activeTab === 'notes' && <NotesTabContent party={party} onRefresh={handlePartyUpdated} />}
+    </div>
+  );
+}
+
+// --- Notes Tab Component ---
+
+function NotesTabContent({ party, onRefresh }: { party: Party; onRefresh: () => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [notes, setNotes] = useState(party.notes || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const charCount = notes.length;
+  const maxChars = 2000;
+  const isOverLimit = charCount > maxChars;
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(notes.length, notes.length);
+    }
+  }, [isEditing, notes.length]);
+
+  const handleSave = async () => {
+    if (isOverLimit) {
+      toast.error(`Notes must be under ${maxChars} characters`);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/parties', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: party._id, notes: notes || null }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save notes');
+      }
+      toast.success('Notes saved successfully');
+      setIsEditing(false);
+      onRefresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save notes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setNotes(party.notes || '');
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Party Notes</h3>
+        {!isEditing && (
+          <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+            <Edit className="w-4 h-4 mr-2" />
+            {party.notes ? 'Edit Notes' : 'Add Notes'}
+          </Button>
+        )}
+      </div>
+
+      {/* Editor / Viewer */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+        {isEditing ? (
+          <div className="p-4 md:p-6">
+            <textarea
+              ref={textareaRef}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Enter notes about this party..."
+              className={`w-full min-h-[200px] p-3 text-sm rounded-lg border resize-y focus:outline-none focus:ring-2 bg-background ${
+                isOverLimit
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'border-gray-200 dark:border-gray-700 focus:ring-blue-500'
+              }`}
+            />
+            <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${isOverLimit ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                  {charCount}/{maxChars}
+                </span>
+                {isOverLimit && (
+                  <span className="text-xs text-red-500">Character limit exceeded</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleCancel} disabled={isSaving}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={isSaving || isOverLimit}>
+                  {isSaving ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Notes'
+                  )}
+                </Button>
+              </div>
             </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No notes added yet</p>
+          </div>
+        ) : notes ? (
+          <div className="p-4 md:p-6">
+            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+              {notes}
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-400">
+              <FileText className="w-3.5 h-3.5" />
+              <span>{charCount} characters</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p className="text-sm font-medium">No notes added yet</p>
+            <p className="text-xs mt-1">Click "Add Notes" to start writing</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -865,4 +762,3 @@ const partyTypeLabels: Record<string, string> = {
   supplier: 'Supplier',
   both: 'Customer & Supplier',
 };
-
