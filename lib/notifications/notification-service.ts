@@ -30,7 +30,7 @@ export interface PublishResult {
   channels: NotificationChannel[];
 }
 
-const eventTypeMap: Record<NotificationEventKey, string> = {
+const eventTypeMap: Record<NotificationEventKey, import('@/models/Notification').NotificationType> = {
   'item.low_stock': 'low_stock',
   'invoice.overdue': 'invoice_overdue',
   'subscription.expiring': 'subscription_expiry_warning',
@@ -39,7 +39,7 @@ const eventTypeMap: Record<NotificationEventKey, string> = {
   'party.inactive': 'alert',
 };
 
-const eventPriorityMap: Record<NotificationEventKey, string> = {
+const eventPriorityMap: Record<NotificationEventKey, 'low' | 'normal' | 'high' | 'critical'> = {
   'item.low_stock': 'high',
   'invoice.overdue': 'critical',
   'subscription.expiring': 'normal',

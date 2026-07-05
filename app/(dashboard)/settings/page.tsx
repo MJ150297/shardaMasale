@@ -73,6 +73,8 @@ export default function SettingsPage() {
         nextPaymentSequence: 1,
         nextSaleSequence: 1,
         autoRoundOff: true,
+        showSubItemsInInvoice: false,
+        authorisedSignature: "",
         termsAndConditions: "",
         footerText: "",
         shareMessageTemplates: { ...DEFAULT_SHARE_MESSAGE_TEMPLATES },
@@ -557,6 +559,15 @@ export default function SettingsPage() {
                     <Label htmlFor="billing.autoRoundOff">Automatically round off invoice totals</Label>
                   </div>
 
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="billing.showSubItemsInInvoice"
+                      checked={watch("billing.showSubItemsInInvoice")}
+                      onCheckedChange={(checked) => setValue("billing.showSubItemsInInvoice", checked as boolean)}
+                    />
+                    <Label htmlFor="billing.showSubItemsInInvoice">Show sub-items for compound products/services in invoice</Label>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="billing.termsAndConditions">Default Terms & Conditions</Label>
                     <Textarea
@@ -577,6 +588,48 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       This text will be displayed at the bottom of invoices (PDF & preview).
                     </p>
+                  </div>
+
+                  {/* Authorised Signature Upload */}
+                  <div className="space-y-2">
+                    <Label>Authorised Signature</Label>
+                    <div className="space-y-2">
+                      {watch("billing.authorisedSignature") ? (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={watch("billing.authorisedSignature") ?? undefined}
+                            alt="Authorised signature"
+                            className="h-16 w-auto object-contain rounded border"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setValue("billing.authorisedSignature", "")}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No signature uploaded</p>
+                      )}
+                      <Input
+                        id="billing.authorisedSignature"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="text-xs"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const dataUrl = event.target?.result as string;
+                            setValue("billing.authorisedSignature", dataUrl);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

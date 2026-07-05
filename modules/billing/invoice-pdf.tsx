@@ -352,6 +352,7 @@ interface InvoiceLineItem {
   itemHsn?: string;
   description?: string;
   taxRate?: number;
+  subItems?: InvoiceLineItem[];
 }
 
 interface TaxBreakupRow {
@@ -411,6 +412,7 @@ interface InvoiceData {
   footerText?: string | null;
   business?: BusinessInfo;
   logoDataUri?: string;
+  authorisedSignature?: string | null;
   amountInWords?: string;
 }
 
@@ -505,26 +507,44 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
             <View style={styles.itemsTableBody}>
               {/* Item Rows */}
               {lineItems.map((item, index) => (
-                <View key={index} style={styles.tableRow} wrap={false}>
-                  <Text style={styles.colNo}>{index + 1}</Text>
-                  <View style={styles.colItem}>
-                    <Text>{item.itemName}</Text>
-                    {item.description && (
-                      <Text style={{ fontSize: 7, color: '#888', marginTop: 1 }}>
-                        {item.description}
-                      </Text>
-                    )}
+                <React.Fragment key={index}>
+                  <View style={styles.tableRow} wrap={false}>
+                    <Text style={styles.colNo}>{index + 1}</Text>
+                    <View style={styles.colItem}>
+                      <Text>{item.itemName}</Text>
+                      {item.description && (
+                        <Text style={{ fontSize: 7, color: '#888', marginTop: 1 }}>
+                          {item.description}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.colHsn, { fontSize: 8 }]}>
+                      {item.hsnCode || item.itemHsn || '-'}
+                    </Text>
+                    <Text style={styles.colQty}>{Number(item.quantity).toFixed(2)}</Text>
+                    <Text style={styles.colPrice}>{fmt(item.unitPrice)}</Text>
+                    <Text style={styles.colDisc}>
+                      {(item.discountAmount || 0) > 0 ? fmt(item.discountAmount) : '-'}
+                    </Text>
+                    <Text style={styles.colAmount}>{fmt(item.lineTotal)}</Text>
                   </View>
-                  <Text style={[styles.colHsn, { fontSize: 8 }]}>
-                    {item.hsnCode || item.itemHsn || '-'}
-                  </Text>
-                  <Text style={styles.colQty}>{Number(item.quantity).toFixed(2)}</Text>
-                  <Text style={styles.colPrice}>{fmt(item.unitPrice)}</Text>
-                  <Text style={styles.colDisc}>
-                    {(item.discountAmount || 0) > 0 ? fmt(item.discountAmount) : '-'}
-                  </Text>
-                  <Text style={styles.colAmount}>{fmt(item.lineTotal)}</Text>
-                </View>
+                  {/* Sub-items for compound items — name only */}
+                  {item.subItems && item.subItems.length > 0 && item.subItems.map((subItem, subIndex) => (
+                    <View key={`sub-${subIndex}`} style={[styles.tableRow, { backgroundColor: '#f9fafb' }]} wrap={false}>
+                      <Text style={styles.colNo}></Text>
+                      <View style={styles.colItem}>
+                        <Text style={{ fontSize: 8, color: '#666', paddingLeft: 8 }}>
+                          └ {subItem.itemName}
+                        </Text>
+                      </View>
+                      <Text style={styles.colHsn}></Text>
+                      <Text style={styles.colQty}></Text>
+                      <Text style={styles.colPrice}></Text>
+                      <Text style={styles.colDisc}></Text>
+                      <Text style={styles.colAmount}></Text>
+                    </View>
+                  ))}
+                </React.Fragment>
               ))}
             </View>
 
@@ -597,28 +617,28 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
 
           {/* Tax Breakup Grid — only show when there are taxable items */}
           {taxBreakup.length > 0 && (
-          <View style={styles.taxGrid} wrap>
-            <View style={styles.taxHeader}>
-              <Text style={styles.taxColHsn}>HSN/SAC</Text>
-              <Text style={styles.taxColVal}>Taxable Value</Text>
-              <Text style={styles.taxColRate}>CGST (Rate)</Text>
-              <Text style={styles.taxColAmt}>CGST (Amt)</Text>
-              <Text style={styles.taxColRate}>SGST (Rate)</Text>
-              <Text style={styles.taxColAmt}>SGST (Amt)</Text>
-              <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>Total Tax</Text>
-            </View>
-            {taxBreakup.map((row, i) => (
-              <View key={i} style={styles.taxRow}>
-                <Text style={styles.taxColHsn}>{row.hsn || 'N/A'}</Text>
-                <Text style={styles.taxColVal}>{fmt(row.taxableValue)}</Text>
-                <Text style={styles.taxColRate}>{row.cgstRate}%</Text>
-                <Text style={styles.taxColAmt}>{fmt(row.cgstAmount)}</Text>
-                <Text style={styles.taxColRate}>{row.sgstRate}%</Text>
-                <Text style={styles.taxColAmt}>{fmt(row.sgstAmount)}</Text>
-                <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>{fmt(row.totalTax)}</Text>
+            <View style={styles.taxGrid} wrap>
+              <View style={styles.taxHeader}>
+                <Text style={styles.taxColHsn}>HSN/SAC</Text>
+                <Text style={styles.taxColVal}>Taxable Value</Text>
+                <Text style={styles.taxColRate}>CGST (Rate)</Text>
+                <Text style={styles.taxColAmt}>CGST (Amt)</Text>
+                <Text style={styles.taxColRate}>SGST (Rate)</Text>
+                <Text style={styles.taxColAmt}>SGST (Amt)</Text>
+                <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>Total Tax</Text>
               </View>
-            ))}
-          </View>
+              {taxBreakup.map((row, i) => (
+                <View key={i} style={styles.taxRow}>
+                  <Text style={styles.taxColHsn}>{row.hsn || 'N/A'}</Text>
+                  <Text style={styles.taxColVal}>{fmt(row.taxableValue)}</Text>
+                  <Text style={styles.taxColRate}>{row.cgstRate}%</Text>
+                  <Text style={styles.taxColAmt}>{fmt(row.cgstAmount)}</Text>
+                  <Text style={styles.taxColRate}>{row.sgstRate}%</Text>
+                  <Text style={styles.taxColAmt}>{fmt(row.sgstAmount)}</Text>
+                  <Text style={[styles.taxColTotal, { fontWeight: 'bold' }]}>{fmt(row.totalTax)}</Text>
+                </View>
+              ))}
+            </View>
           )}
 
           {/* Footer: Amount in Words + Terms */}
@@ -663,8 +683,16 @@ const InvoicePDF: React.FC<{ invoice: InvoiceData }> = ({ invoice }) => {
               <View style={[styles.signatureLine, { marginTop: 20 }]} />
             </View>
             <View style={styles.signatureRight}>
-              <Text style={{ color: '#888' }}>For {businessName}</Text>
-              <View style={[styles.signatureLine, { marginTop: 20 }]} />
+              {invoice.authorisedSignature ? (
+                <Image
+                  src={invoice.authorisedSignature}
+                  style={{ width: 100, height: 40, objectFit: 'contain', marginTop: 4 }}
+                />
+              ) : (
+                <View style={[styles.signatureLine, { marginTop: 20 }]}>
+                  <Text style={{ color: '#888' }}>For {businessName}</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>

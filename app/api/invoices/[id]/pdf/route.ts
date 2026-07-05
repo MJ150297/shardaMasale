@@ -53,7 +53,9 @@ export async function GET(
     const business = settings?.business;
     const billingSettings = settings?.billing;
     const defaultTerms = billingSettings?.termsAndConditions || null;
+    const showSubItems = (billingSettings as any)?.showSubItemsInInvoice === true;
     const settingsLogo = (settings?.business as any)?.logo || null;
+    const authorisedSignature = (billingSettings as any)?.authorisedSignature || null;
 
     // Build a formatted business address string
     let businessAddress = '';
@@ -88,17 +90,55 @@ export async function GET(
     }
 
     // Build enriched line items with HSN codes and descriptions
-    const enrichedLineItems = await Promise.all(transaction.lineItems.map(async (item: any) => {
+    // Optionally expand compound items into sub-items for the PDF
+    const enrichedLineItems: any[] = [];
+    const { default: Item } = await import('@/models/Item');
+
+    for (const item of transaction.lineItems) {
       let hsnCode: string | undefined;
       let description: string | undefined;
+      let subItems: any[] | undefined;
 
-      // Try to get HSN code from the Item model if item reference exists
+      // Try to get HSN code and item type from the Item model if item reference exists
       if (item.item) {
         try {
-          const { default: Item } = await import('@/models/Item');
           const itemDoc = await Item.findById(item.item).lean();
           if (itemDoc) {
             hsnCode = (itemDoc as any).hsnCode || undefined;
+
+            // If showSubItems is enabled and this is a compound item, expand its components
+            if (showSubItems && (itemDoc as any).itemType === 'compound') {
+              const components = (itemDoc as any).components || [];
+              if (components.length > 0) {
+                // Fetch all component items to get names and prices
+                const componentIds = components.map((c: any) => c.item);
+                const componentItems = await Item.find({
+                  _id: { $in: componentIds },
+                }).lean();
+
+                subItems = components.map((comp: any) => {
+                  const compItem = componentItems.find(
+                    (ci: any) => ci._id.toString() === comp.item.toString()
+                  );
+                  return {
+                    itemName: compItem ? (compItem as any).name : 'Unknown Component',
+                    quantity: comp.quantity * (item.quantity || 1),
+                    unitPrice: compItem
+                      ? ((compItem as any).pricing?.sellingPrice || 0)
+                      : 0,
+                    discountAmount: 0,
+                    lineTotal: compItem
+                      ? ((compItem as any).pricing?.sellingPrice || 0) * comp.quantity * (item.quantity || 1)
+                      : 0,
+                    hsnCode: compItem ? (compItem as any).hsnCode || undefined : undefined,
+                    description: undefined,
+                    taxRate: compItem
+                      ? ((compItem as any).saleTaxRate || (compItem as any).taxRate || 0)
+                      : 0,
+                  };
+                });
+              }
+            }
           }
         } catch {
           // Silently continue
@@ -108,7 +148,7 @@ export async function GET(
       // Use description from transaction line item if available
       description = item.description || undefined;
 
-      return {
+      enrichedLineItems.push({
         itemName: item.itemName,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -118,8 +158,9 @@ export async function GET(
         itemHsn: hsnCode,
         description,
         taxRate: item.taxRate || 0,
-      };
-    }));
+        subItems,
+      });
+    }
 
     // Compute amount in words
     const grandTotal = transaction.summary.grandTotal || 0;
@@ -131,7 +172,7 @@ export async function GET(
       dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-IN') : '',
       customer: {
         name: transaction.party?.displayName || transaction.party?.name || 'Guest Customer',
-        phone: transaction.party?.phone,
+        phone: transaction.party?.phoneNumber,
         email: transaction.party?.email,
         address: customerAddress,
       },
@@ -168,6 +209,7 @@ export async function GET(
       },
       footerText: billingSettings?.footerText || null,
       logoDataUri,
+      authorisedSignature,
       amountInWords,
     };
 

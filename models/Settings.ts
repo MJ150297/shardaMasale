@@ -53,6 +53,8 @@ export interface BillingSettings {
   nextPaymentSequence: number;
   nextSaleSequence: number;
   autoRoundOff: boolean;
+  showSubItemsInInvoice: boolean;
+  authorisedSignature?: string | null;
   termsAndConditions?: string | null;
   footerText?: string | null;
   shareMessageTemplates?: ShareMessageTemplates;
@@ -363,6 +365,14 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
             type: Boolean,
             default: true,
           },
+          showSubItemsInInvoice: {
+            type: Boolean,
+            default: false,
+          },
+          authorisedSignature: {
+            type: String,
+            default: null,
+          },
           termsAndConditions: {
             type: String,
             default: null,
@@ -433,6 +443,8 @@ const settingsSchema = new Schema<ISettings, SettingsModel>(
         nextPaymentSequence: 1,
         nextSaleSequence: 1,
         autoRoundOff: true,
+        showSubItemsInInvoice: false,
+        authorisedSignature: null,
         termsAndConditions: null,
         footerText: null,
         shareMessageTemplates: { ...DEFAULT_SHARE_MESSAGE_TEMPLATES },
