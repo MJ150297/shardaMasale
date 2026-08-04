@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS uses **node-cron** for scheduled background tasks. There are two workers that handle automated operations: invoice overdue detection and stock level monitoring.
+Sharda Masale uses **node-cron** for scheduled background tasks. There are two workers that handle automated operations: invoice overdue detection and stock level monitoring.
 
 ## Worker Files
 

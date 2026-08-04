@@ -1,7 +1,7 @@
 # Notification Service Roadmap
 
 ## Goal
-Build a maintainable notification service for GSMS that starts with a strong in-app foundation, adds email readiness, and preserves room for future WhatsApp/SMS and realtime delivery.
+Build a maintainable notification service for Sharda Masale that starts with a strong in-app foundation, adds email readiness, and preserves room for future WhatsApp/SMS and realtime delivery.
 
 ## Current repo state
 - `models/Notification.ts` stores notifications today with `type: 'low_stock' | 'system' | 'alert' | 'info'`
@@ -263,7 +263,7 @@ Track metrics for:
 10. Add optional `UserNotificationPreference.ts` later when user-level preferences are needed
 
 ## Recommendation
-For GSMS, ship Phase 1 as:
+For Sharda Masale, ship Phase 1 as:
 - centralized event publishing service
 - stronger in-app notifications
 - dedupe / priority / audit fields

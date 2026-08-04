@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS provides inventory tracking for products (not services). The system tracks stock quantities, reservations, movements, and reorder levels.
+Sharda Masale provides inventory tracking for products (not services). The system tracks stock quantities, reservations, movements, and reorder levels.
 
 ## Stock Fields
 

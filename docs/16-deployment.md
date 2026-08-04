@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS Next is a Next.js 16 application that can be deployed to various hosting platforms. This document covers environment configuration, build process, and deployment considerations.
+Sharda Masale is a Next.js 16 application that can be deployed to various hosting platforms. This document covers environment configuration, build process, and deployment considerations.
 
 ## Environment Variables
 

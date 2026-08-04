@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide covers how to add new features to GSMS by following established patterns. Each section walks through the steps needed to add a new entity or extend an existing one.
+This guide covers how to add new features to Sharda Masale by following established patterns. Each section walks through the steps needed to add a new entity or extend an existing one.
 
 ## Table of Contents
 

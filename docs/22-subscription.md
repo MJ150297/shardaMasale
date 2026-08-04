@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS uses a multi-tier subscription system to gate features and enforce usage limits. The subscription state is stored on the `User.subscription` field and resolved into a `PlanFeatures` object on every request.
+Sharda Masale uses a multi-tier subscription system to gate features and enforce usage limits. The subscription state is stored on the `User.subscription` field and resolved into a `PlanFeatures` object on every request.
 
 ## Plan Tiers
 

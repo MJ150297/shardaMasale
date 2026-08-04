@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS uses **shadcn/ui** as its component library, built on top of **Radix UI** primitives and styled with **Tailwind CSS 4**. Components are organized into three tiers:
+Sharda Masale uses **shadcn/ui** as its component library, built on top of **Radix UI** primitives and styled with **Tailwind CSS 4**. Components are organized into three tiers:
 
 1. **UI Primitives** (`components/ui/`) — Generic, reusable building blocks
 2. **Layout Components** (`components/layout/`) — Application shell and navigation

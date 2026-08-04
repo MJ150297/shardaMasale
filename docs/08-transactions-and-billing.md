@@ -2,7 +2,7 @@
 
 ## Overview
 
-The transaction system is the core of GSMS, handling all financial operations including sales, purchases, payments, and adjustments. The billing module generates invoices, PDFs, and manages settlement allocations.
+The transaction system is the core of Sharda Masale, handling all financial operations including sales, purchases, payments, and adjustments. The billing module generates invoices, PDFs, and manages settlement allocations.
 
 ## Transaction Types
 
@@ -227,7 +227,7 @@ The billing module (`modules/billing/invoice-pdf.tsx`) uses `@react-pdf/renderer
 
 ## Share Messages
 
-GSMS also generates configurable share messages for WhatsApp, Telegram, and the invoice share sheet.
+Sharda Masale also generates configurable share messages for WhatsApp, Telegram, and the invoice share sheet.
 
 ### Template Source
 
