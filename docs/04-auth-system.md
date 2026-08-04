@@ -180,6 +180,31 @@ cookies: {
 },
 ```
 
+## Sign-In Page Session Check
+
+**File:** `app/(auth)/signin/page.tsx`
+
+The sign-in page includes a defensive session check on mount. When the page loads, it calls `getSession()` from `next-auth/react`:
+
+```typescript
+useEffect(() => {
+  let cancelled = false;
+
+  getSession().then((session) => {
+    if (cancelled) return;
+    if (session?.user) {
+      router.replace('/dashboard');
+    }
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}, [router]);
+```
+
+If a valid session already exists (e.g., the PWA was relaunched or the user navigated to `/signin` manually), the user is automatically redirected to `/dashboard` instead of seeing the login form. This prevents the "flash of login" and ensures PWA users with valid session cookies are never shown the sign-in screen.
+
 ## Impersonation
 
 The system supports super admin impersonation via `/api/auth/impersonate/`. Super owners can temporarily assume the identity of an owner for debugging purposes.

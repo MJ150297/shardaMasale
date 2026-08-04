@@ -1,6 +1,6 @@
-# GSMS Next — Documentation
+# Sharda Masale — Documentation
 
-**Generic Shop Management System (GSMS)** — a multi-tenant, Next.js 16 application for managing shops, items, parties, transactions, inventory, invoices, share-message templates, and reports.
+**Sharda Masale** — a multi-tenant, Next.js 16 application for managing shops, items, parties, transactions, inventory, invoices, share-message templates, and reports. Built for a Khatima-based masala trading company serving 7 districts.
 
 ## Table of Contents
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS uses a **shop-based multi-tenancy** model. Each owner can create multiple shops, and all data (items, parties, transactions, invoices) is scoped to a specific shop. This is enforced at three levels:
+Sharda Masale uses a **shop-based multi-tenancy** model. Each owner can create multiple shops, and all data (items, parties, transactions, invoices) is scoped to a specific shop. This is enforced at three levels:
 
 1. **Database level** — Global Mongoose plugin auto-filters queries by `shopId`
 2. **API level** — Route handlers validate `activeShopId` and tag documents

@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS is a fully installable Progressive Web App, allowing shop owners to add it to their phone's home screen or desktop for a native app-like experience. The PWA provides offline caching, fast page loads, and proper mobile viewport handling — essential for shops with unreliable internet connections.
+Sharda Masale is a fully installable Progressive Web App, allowing shop owners to add it to their phone's home screen or desktop for a native app-like experience. The PWA provides offline caching, fast page loads, and proper mobile viewport handling — essential for shops with unreliable internet connections.
 
 ---
 
@@ -36,10 +36,10 @@ The manifest is generated using Next.js `MetadataRoute.Manifest` and auto-served
 
 | Field | Value | Purpose |
 |-------|-------|---------|
-| `name` | `"GSMS - Shop Management"` | Full name shown on install prompts |
-| `short_name` | `"GSMS"` | Label on home screen icon |
+| `name` | `"Sharda Masale - Shop Management"` | Full name shown on install prompts |
+| `short_name` | `"Sharda Masale"` | Label on home screen icon |
 | `id` | `"/"` | Unique app identity for update detection |
-| `start_url` | `"/"` | Entry point when launched from home screen |
+| `start_url` | `"/"` | Entry point when launched from home screen — must be `/` so the session cookie is checked and the user is redirected to `/dashboard` if already authenticated |
 | `scope` | `"/"` | Navigation scope — app can't navigate outside |
 | `display` | `"standalone"` | Runs without browser chrome (no URL bar) |
 | `display_override` | `["window-controls-overlay", "standalone"]` | Prefers desktop window controls when available |
@@ -226,7 +226,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,                    // Allow "Add to Home Screen"
     statusBarStyle: "black-translucent", // Translucent status bar
-    title: "GSMS",                    // Home screen label
+    title: "Sharda Masale",           // Home screen label
   },
 };
 ```
@@ -246,7 +246,7 @@ Adaptive theme color responds to system dark/light mode:
 1. Open `https://your-domain.com` in Chrome
 2. Tap **"Add to Home Screen"** banner or ⋮ menu → **"Install app"**
 3. Confirm installation
-4. App appears on home screen with GSMS icon
+4. App appears on home screen with Sharda Masale icon
 
 ### iOS (Safari)
 
@@ -302,6 +302,32 @@ newWorker.addEventListener("statechange", () => {
   }
 });
 ```
+
+---
+
+## Session Persistence (PWA)
+
+### Why the PWA used to ask for sign-in on every launch
+
+Previously, the manifest had `start_url: "/signin"`, which caused the PWA to always launch directly at the sign-in page. The sign-in page is a client component that never checked for an existing session cookie — so even with a valid 30-day session, the app always showed the login form.
+
+### The fix
+
+1. **`app/manifest.ts`** — Changed `start_url` and `id` from `"/signin"` to `"/"`. Now the PWA launches at the root, where `proxy.ts` checks the `__Secure-next-auth.session-token` cookie and redirects to `/dashboard` if valid, or `/signin` if not.
+
+2. **`app/(auth)/signin/page.tsx`** — Added a defensive session check on mount. If `getSession()` returns a valid session, the user is auto-redirected to `/dashboard` instead of seeing the login form.
+
+3. **`public/sw.js`** — The service worker now excludes `/signin` from the dynamic navigation cache. This prevents a stale cached sign-in page from being served on slow networks, which could show a login screen even with a valid session.
+
+### Re-install requirement
+
+Because the manifest `id` changed, browsers treat the PWA as a **new app**. Users must:
+1. Delete the existing PWA from their home screen
+2. Re-install via "Add to Home Screen"
+
+### iOS note
+
+iOS standalone PWAs have known WebKit cookie persistence quirks. If occasional logouts still occur on iOS after this fix, it may be an iOS limitation rather than an app bug.
 
 ---
 

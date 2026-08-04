@@ -2,7 +2,7 @@
 
 ## System Architecture
 
-GSMS Next is a **multi-tenant shop management system** built on the Next.js 16 App Router with MongoDB as the primary database.
+Sharda Masale is a **multi-tenant shop management system** built on the Next.js 16 App Router with MongoDB as the primary database.
 
 ```
 ┌──────────────────────────────────────────────┐

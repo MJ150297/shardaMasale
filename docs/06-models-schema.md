@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSMS uses **Mongoose 9** with TypeScript for MongoDB ODM. There are 9 models total, each in a dedicated file under `models/`.
+Sharda Masale uses **Mongoose 9** with TypeScript for MongoDB ODM. There are 9 models total, each in a dedicated file under `models/`.
 
 ## Model Relationships
 
