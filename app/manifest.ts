@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "GSMS - Shop Management",
-    short_name: "GSMS",
-    description: "Generic Shop Management System",
+    name: "Sharda Masale - Shop Management",
+    short_name: "Sharda Masale",
+    description: "Khatima based masala trading company serving 7 districts",
     id: "/signin",
     start_url: "/signin",
     scope: "/",
@@ -59,14 +59,14 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         form_factor: "wide",
-        label: "GSMS Dashboard on desktop",
+        label: "Sharda Masale Dashboard on desktop",
       },
       {
         src: "/icon-512.png",
         sizes: "512x512",
         type: "image/png",
         form_factor: "narrow",
-        label: "GSMS on mobile",
+        label: "Sharda Masale on mobile",
       },
     ],
   };

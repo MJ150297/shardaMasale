@@ -59,7 +59,7 @@ export default async function DashboardPage() {
     business?: ShareBusinessProfile;
     billing?: { footerText?: string | null; shareMessageTemplates?: ShareMessageTemplates | null };
   } | null)?.business;
-  const shopName = shopBusiness?.displayName || shopBusiness?.legalName || 'GSMS Shop Management System';
+  const shopName = shopBusiness?.displayName || shopBusiness?.legalName || 'Sharda Masale Shop Management System';
   const businessProfile: ShareBusinessProfile | null = shopBusiness
     ? {
         ...shopBusiness,

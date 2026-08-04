@@ -88,7 +88,7 @@ export default function SignInPage() {
         <div className="bg-blue-700/40 dark:bg-gray-900/95 bg:backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
           <div className="text-center">
             <h1 className="text-3xl font-bold tracking-tight text-white">
-              GSMS
+              Sharda Masale
             </h1>
             <h2 className="mt-6 text-2xl font-bold tracking-tight text-white">
               Sign in to your account

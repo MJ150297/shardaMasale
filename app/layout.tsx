@@ -16,13 +16,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "GSMS - Shop Management",
-  description: "Generic Shop Management System",
+  title: "Sharda Masale - Shop Management",
+  description: "Khatima based masala trading company serving 7 districts",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GSMS",
+    title: "Sharda Masale",
   },
 };
 

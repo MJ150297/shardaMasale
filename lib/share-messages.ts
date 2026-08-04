@@ -291,7 +291,7 @@ const KIND_META: Record<string, {
 }> = {
   invoice: {
     title: 'INVOICE',
-    intro: 'Professional invoice summary generated from GSMS.',
+    intro: 'Professional invoice summary generated from Sharda Masale.',
     partyLabel: 'Customer',
     referenceLabel: 'Invoice No.',
     secondaryReferenceLabel: 'Transaction No.',
@@ -381,7 +381,7 @@ function normalizeRenderedMessage(value: string): string {
 function resolveBusinessName(business?: ShareBusinessProfile | null): string {
   return business?.displayName?.trim()
     || business?.legalName?.trim()
-    || 'GSMS Shop Management System';
+    || 'Sharda Masale Shop Management System';
 }
 
 function formatBusinessAddress(address?: ShareAddress | null): string[] {

@@ -18,7 +18,7 @@ export default function ServiceWorkerRegistration() {
 
       toast("Update Available", {
         description:
-          "A new version of GSMS is ready. Refresh to get the latest features.",
+          "A new version of Sharda Masale is ready. Refresh to get the latest features.",
         duration: Infinity,
         action: {
           label: "Refresh",

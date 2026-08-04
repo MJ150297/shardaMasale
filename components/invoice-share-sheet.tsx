@@ -127,7 +127,7 @@ export default function InvoiceShareSheet({ invoice, children, variant = 'button
         const business = settings?.business || {};
         if (!cancelled) {
           setResolvedBusiness({
-            legalName: business.legalName || shopName || 'GSMS Shop Management System',
+            legalName: business.legalName || shopName || 'Sharda Masale Shop Management System',
             displayName: business.displayName || '',
             email: business.email || null,
             phoneNumber: business.phoneNumber || null,

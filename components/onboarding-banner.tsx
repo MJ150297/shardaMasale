@@ -29,7 +29,7 @@ export default function OnboardingBanner() {
         {/* Content */}
         <div className="flex-1 min-w-0">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            Welcome to GSMS!
+            Welcome to Sharda Masale!
           </h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             Get started by creating your first shop. A shop represents your business location where you can manage inventory, sales, purchases, and more.

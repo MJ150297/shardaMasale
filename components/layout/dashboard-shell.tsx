@@ -244,7 +244,7 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                           <Home className="size-4" />
                         </div>
                         <div className="grid flex-1 text-left text-sm leading-tight">
-                          <span className="truncate font-semibold">GSMS</span>
+                          <span className="truncate font-semibold">Sharda Masale</span>
                           <span className="truncate text-xs text-muted-foreground">
                             Shop Management
                           </span>

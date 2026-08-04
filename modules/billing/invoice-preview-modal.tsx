@@ -130,7 +130,7 @@ export default function InvoicePreviewModal({
   }, [open, activeShopId]);
 
   const businessName = business?.displayName || business?.legalName || 'BUSINESS NAME';
-  const shopName = business?.legalName || 'GSMS Shop Management System';
+  const shopName = business?.legalName || 'Sharda Masale Shop Management System';
   const businessAddress = business?.address
     ? [business.address.line1, business.address.city, business.address.state]
       .filter(Boolean)

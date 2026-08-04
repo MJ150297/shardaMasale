@@ -212,7 +212,7 @@ export default function GlobalSettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label htmlFor="platformName">Platform Name</Label>
-                <Input id="platformName" defaultValue="GSMS" />
+                <Input id="platformName" defaultValue="Sharda Masale" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="defaultTimezone">Default Timezone</Label>
