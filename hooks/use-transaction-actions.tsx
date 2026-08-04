@@ -171,8 +171,29 @@ export function useTransactionActions(options?: UseTransactionActionsOptions): {
     return (transaction as any).id || transaction._id || transaction.transactionNumber;
   }, []);
 
-  function viewTransaction(transaction: ActionableTransaction) {
-    setSelectedTransaction(transaction);
+  async function viewTransaction(transaction: ActionableTransaction) {
+    // Fetch full transaction details including metadata (settlements, payment, etc.)
+    try {
+      const transactionId = getTransactionId(transaction);
+      const res = await fetch(`/api/transactions/${transactionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const fullTransaction = data.data || data;
+        // Merge metadata fields into the transaction object for the dialog
+        const enriched = {
+          ...transaction,
+          payment: fullTransaction.payment || transaction.payment,
+          additionalCharges: fullTransaction.additionalCharges || transaction.additionalCharges,
+          invoiceSettlements: (fullTransaction.metadata as any)?.invoiceSettlements,
+          purchaseSettlements: (fullTransaction.metadata as any)?.purchaseSettlements,
+        };
+        setSelectedTransaction(enriched as any);
+      } else {
+        setSelectedTransaction(transaction);
+      }
+    } catch {
+      setSelectedTransaction(transaction);
+    }
     setViewDialogOpen(true);
   }
 

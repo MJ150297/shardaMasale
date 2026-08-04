@@ -308,7 +308,7 @@ export default function CreatePurchaseReturnDialog({ onPurchaseReturnCreated, ch
                       variant="outline"
                       role="combobox"
                       className={cn(
-                        'w-full justify-between',
+                        'w-full justify-between bg-background dark:bg-background',
                         !selectedPartyId && 'text-muted-foreground',
                       )}
                     >

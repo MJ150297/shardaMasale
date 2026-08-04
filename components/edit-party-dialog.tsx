@@ -27,8 +27,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, StickyNote, Pin, Tag as TagIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 const billingAddressSchema = z.object({
   line1: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
@@ -39,6 +40,13 @@ const billingAddressSchema = z.object({
   postalCode: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
   country: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
 }).optional().nullable();
+
+const noteSchema = z.object({
+  content: z.string().min(1).max(2000),
+  category: z.enum(['general', 'follow-up', 'important', 'payment', 'delivery']).default('general'),
+  tags: z.array(z.string().max(50)).default([]),
+  pinned: z.boolean().default(false),
+});
 
 const editPartySchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(160),
@@ -56,6 +64,7 @@ const editPartySchema = z.object({
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
+  notesList: z.array(noteSchema).default([]),
   tags: z.array(z.string()).default([]),
 });
 
@@ -69,6 +78,16 @@ interface BillingAddress {
   state: string;
   postalCode: string;
   country: string;
+}
+
+interface PartyNote {
+  _id: string;
+  content: string;
+  category: string;
+  tags: string[];
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface Party {
@@ -89,6 +108,7 @@ interface Party {
   creditLimit?: number;
   openingBalance?: number;
   notes?: string | null;
+  notesList?: PartyNote[];
   tags?: string[];
 }
 
@@ -147,6 +167,7 @@ export default function EditPartyDialog({
       creditLimit: party.creditLimit || 0,
       openingBalance: party.openingBalance || 0,
       notes: party.notes || null,
+      notesList: (party.notesList || []) as any,
       tags: party.tags || [],
     },
   });
@@ -556,24 +577,54 @@ export default function EditPartyDialog({
               </TabsContent>
 
               <TabsContent value="additional" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Any additional notes about this party"
-                          className="min-h-[120px]"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Notes Preview */}
+                <div className="space-y-2">
+                  <FormLabel className="flex items-center gap-2">
+                    <StickyNote className="w-4 h-4" />
+                    Notes
+                    {party.notesList && party.notesList.length > 0 && (
+                      <Badge variant="secondary">{party.notesList.length}</Badge>
+                    )}
+                  </FormLabel>
+                  {party.notesList && party.notesList.length > 0 ? (
+                    <div className="space-y-2">
+                      {party.notesList.slice(0, 3).map((note) => (
+                        <div key={note._id} className="border rounded-lg p-3 bg-muted/30">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">{note.category}</Badge>
+                            {note.pinned && (
+                              <Badge variant="outline" className="text-xs text-amber-600 dark:text-amber-400">
+                                <Pin className="w-2.5 h-2.5 mr-1" />Pinned
+                              </Badge>
+                            )}
+                            {note.tags.map(tag => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                <TagIcon className="w-2.5 h-2.5 mr-1" />{tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
+                            {note.content}
+                          </p>
+                        </div>
+                      ))}
+                      <Link
+                        href={`/dashboard/parties/${party._id}?tab=notes`}
+                        className="text-xs text-blue-500 hover:text-blue-600"
+                      >
+                        Manage all notes →
+                      </Link>
+                    </div>
+                  ) : party.notes ? (
+                    <div className="border rounded-lg p-3 bg-muted/30">
+                      <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">
+                        {party.notes}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">No notes added yet</p>
                   )}
-                />
+                </div>
 
                 <div className="space-y-2">
                   <FormLabel>Tags</FormLabel>

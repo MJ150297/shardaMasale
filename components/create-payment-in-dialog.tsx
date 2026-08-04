@@ -565,7 +565,7 @@ export default function CreatePaymentInDialog({
                             variant="outline"
                             role="combobox"
                             className={cn(
-                              'w-full justify-between',
+                              'w-full justify-between bg-background dark:bg-background',
                               !field.value && 'text-muted-foreground',
                             )}
                           >
@@ -589,7 +589,7 @@ export default function CreatePaymentInDialog({
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
+                      <PopoverContent className="w-full p-0 bg-background dark:bg-background">
                         <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="Search customer by name or phone..."
@@ -885,7 +885,7 @@ export default function CreatePaymentInDialog({
                     <FormLabel>Payment Method</FormLabel>
                     <Select onValueChange={(value) => field.onChange(value === 'none' ? null : value)} value={field.value || 'none'}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-background dark:bg-background">
                           <SelectValue placeholder="Select payment method" />
                         </SelectTrigger>
                       </FormControl>

@@ -75,7 +75,7 @@ export function SearchableSelect({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            'flex h-9 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap transition-colors outline-none select-none',
+            'flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm whitespace-nowrap transition-colors outline-none select-none',
             'hover:bg-accent/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
             'disabled:cursor-not-allowed disabled:opacity-50',
             !value && 'text-muted-foreground',
@@ -93,7 +93,7 @@ export function SearchableSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0 bg-white/90 dark:bg-gray-900/90"
+        className="w-[--radix-popover-trigger-width] p-0 bg-background dark:bg-background"
         align="start"
       >
         <Command className="overflow-visible">

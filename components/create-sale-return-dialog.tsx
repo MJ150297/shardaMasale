@@ -335,7 +335,7 @@ export default function CreateSaleReturnDialog({ onSaleReturnCreated, children }
                       variant="outline"
                       role="combobox"
                       className={cn(
-                        'w-full justify-between',
+                        'w-full justify-between bg-background dark:bg-background',
                         !selectedPartyId && 'text-muted-foreground',
                       )}
                     >

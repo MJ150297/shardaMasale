@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileText, ArrowUpRight, ArrowDownLeft, Tag, CreditCard, IndianRupee, ShoppingCart, CalendarDays, Package, Info, BadgeCheck, AlertCircle, Phone, Mail, Download, Printer } from 'lucide-react';
+import { FileText, ArrowUpRight, ArrowDownLeft, Tag, CreditCard, IndianRupee, ShoppingCart, CalendarDays, Package, Info, BadgeCheck, AlertCircle, Phone, Mail, Download, Printer, Banknote, Landmark, Receipt } from 'lucide-react';
 import { formatDate } from '@/lib/date-utils';
 import InvoicePreviewModal from '@/modules/billing/invoice-preview-modal';
 import { toast } from 'sonner';
@@ -31,10 +31,36 @@ export interface TransactionSummary {
   subtotal: number;
   discountTotal: number;
   taxTotal: number;
+  totalDiscountType?: 'percentage' | 'fixed' | null;
+  totalDiscountValue?: number | null;
+  totalDiscount?: number;
   roundOff: number;
   grandTotal: number;
   paidAmount: number;
   dueAmount: number;
+}
+
+export interface AdditionalCharge {
+  name: string;
+  amount: number;
+}
+
+export interface SettlementAllocation {
+  invoiceId?: string;
+  invoiceNumber?: string | null;
+  transactionId?: string | null;
+  transactionNumber?: string | null;
+  appliedAmount: number;
+  discountAmount: number;
+  settledAmount: number;
+  remainingDueAmount: number;
+}
+
+export interface PaymentDetails {
+  method?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  receivedAt?: string | Date | null;
 }
 
 export interface TransactionDialogData {
@@ -56,6 +82,8 @@ export interface TransactionDialogData {
   dueDate?: string | Date | null;
   lineItems: TransactionLineItem[];
   summary: TransactionSummary;
+  additionalCharges?: AdditionalCharge[];
+  payment?: PaymentDetails | null;
   notes?: string | null;
   tags: string[];
   createdAt: string | Date;
@@ -65,6 +93,9 @@ export interface TransactionDialogData {
     invoiceNumber: string;
     status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   } | null;
+  /** Settlement metadata for payment-in / payment-out transactions */
+  invoiceSettlements?: SettlementAllocation[];
+  purchaseSettlements?: SettlementAllocation[];
 }
 
 interface TransactionDetailDialogProps {
@@ -104,6 +135,10 @@ function getPaymentBadgeClass(status: string) {
     case 'partial': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
     default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
   }
+}
+
+function fmt(val: number | undefined | null) {
+  return `₹${(val || 0).toFixed(2)}`;
 }
 
 export default function TransactionDetailDialog({
@@ -234,13 +269,49 @@ export default function TransactionDetailDialog({
                 <IndianRupee className="h-3 w-3" />
                 Total
               </h4>
-              <p className="text-base font-bold">₹{transaction.summary.grandTotal?.toFixed(2)}</p>
+              <p className="text-base font-bold">{fmt(transaction.summary.grandTotal)}</p>
               <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                <div className="flex justify-between"><span>Paid</span><span className="text-green-600 dark:text-green-400 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Due</span><span className={(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>₹{transaction.summary.dueAmount?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Paid</span><span className="text-green-600 dark:text-green-400 font-medium">{fmt(transaction.summary.paidAmount)}</span></div>
+                <div className="flex justify-between"><span>Due</span><span className={(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-green-600 dark:text-green-400 font-medium'}>{fmt(transaction.summary.dueAmount)}</span></div>
               </div>
             </div>
           </div>
+
+          {/* Payment Details (for payment-in / payment-out) */}
+          {transaction.payment && (transaction.payment.method || transaction.payment.referenceNumber) && (
+            <div className="bg-muted/30 rounded-lg border p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5" />
+                Payment Details
+              </h4>
+              <div className="text-xs space-y-1">
+                {transaction.payment.method && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Method</span>
+                    <span className="font-medium capitalize">{transaction.payment.method}</span>
+                  </div>
+                )}
+                {transaction.payment.referenceNumber && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Reference</span>
+                    <span className="font-medium font-mono">{transaction.payment.referenceNumber}</span>
+                  </div>
+                )}
+                {transaction.payment.notes && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Notes</span>
+                    <span className="font-medium">{transaction.payment.notes}</span>
+                  </div>
+                )}
+                {transaction.payment.receivedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Received</span>
+                    <span className="font-medium">{formatDate(transaction.payment.receivedAt)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Line Items */}
           <div className="bg-muted/30 rounded-lg border overflow-hidden">
@@ -273,8 +344,8 @@ export default function TransactionDetailDialog({
                           {item.sku && <p className="text-[9px] text-muted-foreground/60 font-mono">SKU: {item.sku}</p>}
                         </td>
                         <td className="px-2 py-1.5 text-center">{Number(item.quantity).toFixed(2)}</td>
-                        <td className="px-2 py-1.5 text-right">₹{Number(item.unitPrice).toFixed(2)}</td>
-                        <td className="px-2 py-1.5 text-right font-medium">₹{Number(item.lineTotal).toFixed(2)}</td>
+                        <td className="px-2 py-1.5 text-right">{fmt(item.unitPrice)}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{fmt(item.lineTotal)}</td>
                       </tr>
                     ))
                   )}
@@ -283,12 +354,99 @@ export default function TransactionDetailDialog({
             </div>
             {/* Financial breakdown under the table on mobile */}
             <div className="border-t px-3 py-2 space-y-1 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{transaction.summary.subtotal?.toFixed(2)}</span></div>
-              {transaction.summary.discountTotal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-red-500 dark:text-red-400">-₹{transaction.summary.discountTotal?.toFixed(2)}</span></div>}
-              {transaction.summary.taxTotal > 0 && <div className="flex justify-between"><span className="text-muted-foreground">GST</span><span>₹{transaction.summary.taxTotal?.toFixed(2)}</span></div>}
-              {transaction.summary.roundOff !== 0 && <div className="flex justify-between"><span className="text-muted-foreground">Round Off</span><span>₹{transaction.summary.roundOff?.toFixed(2)}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{fmt(transaction.summary.subtotal)}</span></div>
+              {(transaction.summary.discountTotal || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span className="text-red-500 dark:text-red-400">-{fmt(transaction.summary.discountTotal)}</span></div>}
+              {(transaction.summary.totalDiscount || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Extra Disc.
+                    {transaction.summary.totalDiscountType === 'percentage' && transaction.summary.totalDiscountValue
+                      ? ` (${transaction.summary.totalDiscountValue}%)`
+                      : ''}
+                  </span>
+                  <span className="text-red-500 dark:text-red-400">-{fmt(transaction.summary.totalDiscount)}</span>
+                </div>
+              )}
+              {(transaction.additionalCharges || []).length > 0 && transaction.additionalCharges!.map((charge, i) => (
+                <div key={i} className="flex justify-between">
+                  <span className="text-muted-foreground">{charge.name}</span>
+                  <span>{fmt(charge.amount)}</span>
+                </div>
+              ))}
+              {(transaction.summary.taxTotal || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">GST</span><span>{fmt(transaction.summary.taxTotal)}</span></div>}
+              {(transaction.summary.roundOff || 0) !== 0 && <div className="flex justify-between"><span className="text-muted-foreground">Round Off</span><span>{fmt(transaction.summary.roundOff)}</span></div>}
             </div>
           </div>
+
+          {/* Invoice Settlements (Payment In) */}
+          {transaction.invoiceSettlements && transaction.invoiceSettlements.length > 0 && (
+            <div className="bg-muted/30 rounded-lg border overflow-hidden">
+              <div className="px-3 py-2 border-b bg-background/50">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Receipt className="h-3.5 w-3.5" />
+                  Invoice Settlements
+                </h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Invoice</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Applied</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Disc.</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Settled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transaction.invoiceSettlements.map((settlement, i) => (
+                      <tr key={i} className="border-b last:border-b-0">
+                        <td className="px-2 py-1.5">
+                          <span className="font-medium">{settlement.invoiceNumber || settlement.transactionNumber || '-'}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-right">{fmt(settlement.appliedAmount)}</td>
+                        <td className="px-2 py-1.5 text-right">{settlement.discountAmount > 0 ? fmt(settlement.discountAmount) : '-'}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{fmt(settlement.settledAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Purchase Settlements (Payment Out) */}
+          {transaction.purchaseSettlements && transaction.purchaseSettlements.length > 0 && (
+            <div className="bg-muted/30 rounded-lg border overflow-hidden">
+              <div className="px-3 py-2 border-b bg-background/50">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Receipt className="h-3.5 w-3.5" />
+                  Purchase Settlements
+                </h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Transaction</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Applied</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Settled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transaction.purchaseSettlements.map((settlement, i) => (
+                      <tr key={i} className="border-b last:border-b-0">
+                        <td className="px-2 py-1.5">
+                          <span className="font-medium">{settlement.transactionNumber || '-'}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-right">{fmt(settlement.appliedAmount)}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{fmt(settlement.settledAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Tags / Notes */}
           {(transaction.notes || (transaction.tags && transaction.tags.length > 0)) && (
@@ -436,14 +594,14 @@ export default function TransactionDetailDialog({
                               <td className="px-3 py-2 text-center text-sm whitespace-nowrap">
                                 {Number(item.quantity).toFixed(2)} <span className="text-xs text-muted-foreground">{item.unit}</span>
                               </td>
-                              <td className="px-3 py-2 text-right text-sm whitespace-nowrap">₹{Number(item.unitPrice).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-sm whitespace-nowrap">{fmt(item.unitPrice)}</td>
                               <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
-                                {item.discountAmount > 0 ? <span className="text-red-500 dark:text-red-400">-₹{Number(item.discountAmount).toFixed(2)}</span> : '-'}
+                                {item.discountAmount > 0 ? <span className="text-red-500 dark:text-red-400">-{fmt(item.discountAmount)}</span> : '-'}
                               </td>
                               <td className="px-3 py-2 text-right text-sm whitespace-nowrap">
                                 {item.taxRate > 0 ? <span className="text-amber-600 dark:text-amber-400">{item.taxRate}%</span> : '-'}
                               </td>
-                              <td className="px-3 py-2 text-right text-sm font-medium whitespace-nowrap">₹{Number(item.lineTotal).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-sm font-medium whitespace-nowrap">{fmt(item.lineTotal)}</td>
                             </tr>
                           ))
                         )}
@@ -452,6 +610,87 @@ export default function TransactionDetailDialog({
                   </div>
                 </div>
               </div>
+
+              {/* Settlements Section (Desktop) */}
+              {transaction.invoiceSettlements && transaction.invoiceSettlements.length > 0 && (
+                <div className="mt-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5" />
+                    Invoice Settlements
+                  </h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="border-b">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Invoice</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Applied</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Discount</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Settled</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Remaining Due</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transaction.invoiceSettlements.map((settlement, i) => (
+                          <tr key={i} className="border-b last:border-b-0 hover:bg-muted/20">
+                            <td className="px-3 py-2 text-sm font-medium">
+                              {settlement.invoiceNumber || settlement.transactionNumber || '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm">{fmt(settlement.appliedAmount)}</td>
+                            <td className="px-3 py-2 text-right text-sm">
+                              {settlement.discountAmount > 0 ? (
+                                <span className="text-red-500">{fmt(settlement.discountAmount)}</span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm font-medium">{fmt(settlement.settledAmount)}</td>
+                            <td className="px-3 py-2 text-right text-sm">
+                              {settlement.remainingDueAmount > 0 ? (
+                                <span className="text-amber-600 dark:text-amber-400">{fmt(settlement.remainingDueAmount)}</span>
+                              ) : <span className="text-green-600">Settled</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {transaction.purchaseSettlements && transaction.purchaseSettlements.length > 0 && (
+                <div className="mt-5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5" />
+                    Purchase Settlements
+                  </h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="border-b">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Transaction</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Applied</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Settled</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Remaining Due</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transaction.purchaseSettlements.map((settlement, i) => (
+                          <tr key={i} className="border-b last:border-b-0 hover:bg-muted/20">
+                            <td className="px-3 py-2 text-sm font-medium">
+                              {settlement.transactionNumber || '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm">{fmt(settlement.appliedAmount)}</td>
+                            <td className="px-3 py-2 text-right text-sm font-medium">{fmt(settlement.settledAmount)}</td>
+                            <td className="px-3 py-2 text-right text-sm">
+                              {settlement.remainingDueAmount > 0 ? (
+                                <span className="text-amber-600 dark:text-amber-400">{fmt(settlement.remainingDueAmount)}</span>
+                              ) : <span className="text-green-600">Settled</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* RIGHT COLUMN */}
@@ -477,6 +716,12 @@ export default function TransactionDetailDialog({
                      transaction.paymentStatus === 'partial' ? 'Partial' : 'Unpaid'}
                   </Badge>
                 )}
+                {transaction.invoiceId && (
+                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-3 py-1">
+                    <FileText className="h-3 w-3 mr-1 inline" />
+                    {transaction.invoiceId.invoiceNumber}
+                  </Badge>
+                )}
               </div>
 
               {/* Financial Summary */}
@@ -488,30 +733,52 @@ export default function TransactionDetailDialog({
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>₹{transaction.summary.subtotal?.toFixed(2)}</span>
+                    <span>{fmt(transaction.summary.subtotal)}</span>
                   </div>
-                  {transaction.summary.discountTotal > 0 && (
+                  {(transaction.summary.discountTotal || 0) > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Discount</span>
-                      <span className="text-red-500 dark:text-red-400">-₹{transaction.summary.discountTotal?.toFixed(2)}</span>
+                      <span className="text-muted-foreground">Line Discounts</span>
+                      <span className="text-red-500 dark:text-red-400">-{fmt(transaction.summary.discountTotal)}</span>
                     </div>
                   )}
-                  {transaction.summary.taxTotal > 0 && (
+                  {(transaction.summary.totalDiscount || 0) > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        Extra Discount
+                        {transaction.summary.totalDiscountType === 'percentage' && transaction.summary.totalDiscountValue
+                          ? ` (${transaction.summary.totalDiscountValue}%)`
+                          : ''}
+                      </span>
+                      <span className="text-red-500 dark:text-red-400">-{fmt(transaction.summary.totalDiscount)}</span>
+                    </div>
+                  )}
+                  {/* Additional Charges */}
+                  {(transaction.additionalCharges || []).length > 0 && (
+                    <>
+                      {transaction.additionalCharges!.map((charge, i) => (
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-muted-foreground">{charge.name}</span>
+                          <span>{fmt(charge.amount)}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {(transaction.summary.taxTotal || 0) > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">GST Total</span>
-                      <span>₹{transaction.summary.taxTotal?.toFixed(2)}</span>
+                      <span>{fmt(transaction.summary.taxTotal)}</span>
                     </div>
                   )}
-                  {transaction.summary.roundOff !== 0 && (
+                  {(transaction.summary.roundOff || 0) !== 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Round Off</span>
-                      <span>₹{transaction.summary.roundOff?.toFixed(2)}</span>
+                      <span>{fmt(transaction.summary.roundOff)}</span>
                     </div>
                   )}
                   <div className="border-t pt-2 mt-2">
                     <div className="flex items-center justify-between text-base font-bold">
                       <span>Grand Total</span>
-                      <span>₹{transaction.summary.grandTotal?.toFixed(2)}</span>
+                      <span>{fmt(transaction.summary.grandTotal)}</span>
                     </div>
                   </div>
                 </div>
@@ -526,12 +793,12 @@ export default function TransactionDetailDialog({
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Paid Amount</span>
-                    <span className="text-green-600 dark:text-green-400 font-medium">₹{transaction.summary.paidAmount?.toFixed(2)}</span>
+                    <span className="text-green-600 dark:text-green-400 font-medium">{fmt(transaction.summary.paidAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Due Amount</span>
                     <span className={`font-medium ${(transaction.summary.dueAmount || 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                      ₹{transaction.summary.dueAmount?.toFixed(2)}
+                      {fmt(transaction.summary.dueAmount)}
                     </span>
                   </div>
                   <div className="border-t pt-2 mt-2">
@@ -544,6 +811,42 @@ export default function TransactionDetailDialog({
                   </div>
                 </div>
               </div>
+
+              {/* Payment Details (for payment-in / payment-out) */}
+              {transaction.payment && (transaction.payment.method || transaction.payment.referenceNumber) && (
+                <div className="bg-muted/30 rounded-lg border p-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <Landmark className="h-3.5 w-3.5" />
+                    Payment Details
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    {transaction.payment.method && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Method</span>
+                        <span className="font-medium capitalize">{transaction.payment.method}</span>
+                      </div>
+                    )}
+                    {transaction.payment.referenceNumber && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Reference</span>
+                        <span className="font-medium font-mono">{transaction.payment.referenceNumber}</span>
+                      </div>
+                    )}
+                    {transaction.payment.notes && (
+                      <div className="flex items-start justify-between">
+                        <span className="text-muted-foreground">Notes</span>
+                        <span className="font-medium text-right max-w-[200px]">{transaction.payment.notes}</span>
+                      </div>
+                    )}
+                    {transaction.payment.receivedAt && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Received At</span>
+                        <span className="font-medium">{formatDate(transaction.payment.receivedAt)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Tags / Notes */}
               {(transaction.notes || (transaction.tags && transaction.tags.length > 0)) && (

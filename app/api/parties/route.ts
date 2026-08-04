@@ -15,6 +15,13 @@ const billingAddressSchema = z.object({
   country: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
 }).optional().nullable();
 
+const noteSchema = z.object({
+  content: z.string().min(1).max(2000),
+  category: z.enum(['general', 'follow-up', 'important', 'payment', 'delivery']).default('general'),
+  tags: z.array(z.string().max(50)).default([]),
+  pinned: z.boolean().default(false),
+});
+
 const createPartySchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(160),
   legalName: z.string().optional().nullable(),
@@ -31,6 +38,7 @@ const createPartySchema = z.object({
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
+  notesList: z.array(noteSchema).default([]),
   tags: z.array(z.string()).default([]),
 });
 
@@ -195,6 +203,22 @@ export async function PUT(request: Request) {
     if (updateData.name) {
       updateData.displayName = updateData.name;
       delete updateData.name;
+    }
+
+    // Backward compatibility: if old string `notes` is sent, convert to notesList
+    if (updateData.notes !== undefined && !updateData.notesList) {
+      if (updateData.notes) {
+        updateData.notesList = [{
+          content: updateData.notes,
+          category: 'general',
+          tags: [],
+          pinned: false,
+          history: [],
+        }];
+      } else {
+        updateData.notesList = [];
+      }
+      delete updateData.notes;
     }
 
     // Validate and update

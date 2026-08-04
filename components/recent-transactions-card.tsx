@@ -57,6 +57,9 @@ export interface DetailedTransactionRecord {
     subtotal?: number;
     discountTotal?: number;
     taxTotal?: number;
+    totalDiscountType?: string | null;
+    totalDiscountValue?: number | null;
+    totalDiscount?: number;
     roundOff?: number;
     grandTotal: number;
     paidAmount: number;
@@ -66,6 +69,7 @@ export interface DetailedTransactionRecord {
     method?: string | null;
     referenceNumber?: string | null;
     notes?: string | null;
+    receivedAt?: string | Date | null;
   } | null;
   notes?: string | null;
   tags?: string[];
@@ -76,6 +80,7 @@ export interface DetailedTransactionRecord {
     invoiceNumber: string;
     status: string;
   } | string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RecentTransactionsCardProps {
@@ -149,6 +154,8 @@ export default function RecentTransactionsCard({
           itemType: item.itemType as 'product' | 'service' | undefined,
         })),
         summary: fullTransaction.summary,
+        additionalCharges: fullTransaction.additionalCharges,
+        payment: fullTransaction.payment || null,
         notes: fullTransaction.notes,
         tags: fullTransaction.tags,
         createdAt: fullTransaction.createdAt,
@@ -163,6 +170,8 @@ export default function RecentTransactionsCard({
                 }
             )
           : null,
+        invoiceSettlements: (fullTransaction.metadata as any)?.invoiceSettlements || undefined,
+        purchaseSettlements: (fullTransaction.metadata as any)?.purchaseSettlements || undefined,
       };
 
       setSelectedDetailTransaction(dialogData);

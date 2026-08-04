@@ -36,6 +36,22 @@ export interface PartyContactPerson {
   email?: string | null;
 }
 
+export interface PartyNoteHistoryEntry {
+  content: string;
+  editedAt: Date;
+}
+
+export interface PartyNote {
+  _id: Types.ObjectId;
+  content: string;
+  category: string;
+  tags: string[];
+  pinned: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  history: PartyNoteHistoryEntry[];
+}
+
 export interface IParty {
   owner: Types.ObjectId;
   shopId?: Types.ObjectId | null;
@@ -58,6 +74,7 @@ export interface IParty {
   currentBalance: number;
   tags: string[];
   notes?: string | null;
+  notesList: PartyNote[];
   isArchived: boolean;
   metadata: Record<string, unknown>;
 }
@@ -110,6 +127,55 @@ const addressSchema = new Schema<PartyAddress>(
     },
   },
   { _id: false },
+);
+
+const noteHistoryEntrySchema = new Schema<PartyNoteHistoryEntry>(
+  {
+    content: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 2_000,
+    },
+    editedAt: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+  },
+  { _id: false },
+);
+
+const noteSchema = new Schema<PartyNote>(
+  {
+    content: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 2_000,
+    },
+    category: {
+      type: String,
+      enum: ["general", "follow-up", "important", "payment", "delivery"],
+      default: "general",
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    pinned: {
+      type: Boolean,
+      default: false,
+    },
+    history: {
+      type: [noteHistoryEntrySchema],
+      default: [],
+    },
+  },
+  {
+    timestamps: true,
+    _id: true,
+  },
 );
 
 const contactPersonSchema = new Schema<PartyContactPerson>(
@@ -254,6 +320,10 @@ const partySchema = new Schema<IParty, PartyModel>(
       default: null,
       trim: true,
       maxlength: 2_000,
+    },
+    notesList: {
+      type: [noteSchema],
+      default: [],
     },
     isArchived: {
       type: Boolean,

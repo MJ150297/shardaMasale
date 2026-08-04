@@ -27,8 +27,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, StickyNote, Pin, Tag as TagIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const billingAddressSchema = z.object({
   line1: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
@@ -39,6 +40,13 @@ const billingAddressSchema = z.object({
   postalCode: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
   country: z.preprocess(v => (v === null ? '' : v), z.string().default('')),
 }).optional().nullable();
+
+const noteSchema = z.object({
+  content: z.string().min(1).max(2000),
+  category: z.enum(['general', 'follow-up', 'important', 'payment', 'delivery']).default('general'),
+  tags: z.array(z.string().max(50)).default([]),
+  pinned: z.boolean().default(false),
+});
 
 const createPartySchema = z.object({
   displayName: z.string().min(1, 'Name is required').max(160),
@@ -56,9 +64,27 @@ const createPartySchema = z.object({
   creditLimit: z.coerce.number().min(0).default(0),
   openingBalance: z.coerce.number().default(0),
   notes: z.string().max(2000).optional().nullable(),
+  notesList: z.array(noteSchema).default([]),
   tags: z.array(z.string()).default([]),
 });
 type CreatePartyFormData = z.infer<typeof createPartySchema>;
+
+type NoteCategory = 'general' | 'follow-up' | 'important' | 'payment' | 'delivery';
+
+interface DraftNote {
+  content: string;
+  category: NoteCategory;
+  tags: string[];
+  pinned: boolean;
+}
+
+const NOTE_CATEGORIES = [
+  { value: 'general', label: 'General' },
+  { value: 'follow-up', label: 'Follow-up' },
+  { value: 'important', label: 'Important' },
+  { value: 'payment', label: 'Payment' },
+  { value: 'delivery', label: 'Delivery' },
+];
 
 export interface CreatedParty {
   _id: string;
@@ -114,6 +140,7 @@ function getDefaultPartyValues(defaultPartyType: 'customer' | 'supplier' | 'both
     creditLimit: 0,
     openingBalance: 0,
     notes: null,
+    notesList: [],
     tags: [],
   };
 }
@@ -129,6 +156,8 @@ export default function CreatePartyDialog({
   const [internalOpen, setInternalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [draftNotes, setDraftNotes] = useState<DraftNote[]>([]);
+  const [isNoteComposerOpen, setIsNoteComposerOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
 
   function handleOpenChange(nextOpen: boolean) {
@@ -149,6 +178,8 @@ export default function CreatePartyDialog({
 
     form.reset(getDefaultPartyValues(defaultPartyType));
     setTagInput('');
+    setDraftNotes([]);
+    setIsNoteComposerOpen(false);
   }, [defaultPartyType, form, open]);
 
   const selectedPartyType = form.watch('partyType');
@@ -216,6 +247,18 @@ export default function CreatePartyDialog({
   const removeTag = (tagToRemove: string) => {
     const currentTags = form.getValues('tags');
     form.setValue('tags', currentTags.filter(tag => tag !== tagToRemove));
+  };
+
+  const addDraftNote = (note: DraftNote) => {
+    setDraftNotes(prev => [...prev, note]);
+    form.setValue('notesList', [...form.getValues('notesList'), note]);
+    setIsNoteComposerOpen(false);
+  };
+
+  const removeDraftNote = (index: number) => {
+    setDraftNotes(prev => prev.filter((_, i) => i !== index));
+    const current = form.getValues('notesList');
+    form.setValue('notesList', current.filter((_, i) => i !== index));
   };
 
   return (
@@ -563,24 +606,73 @@ export default function CreatePartyDialog({
               </TabsContent>
 
               <TabsContent value="additional" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Any additional notes about this party"
-                          className="min-h-[120px]"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Notes Composer */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="flex items-center gap-2">
+                      <StickyNote className="w-4 h-4" />
+                      Notes
+                      {draftNotes.length > 0 && (
+                        <Badge variant="secondary">{draftNotes.length}</Badge>
+                      )}
+                    </FormLabel>
+                    {!isNoteComposerOpen && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsNoteComposerOpen(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />Add Note
+                      </Button>
+                    )}
+                  </div>
+
+                  {isNoteComposerOpen && (
+                    <DraftNoteComposer
+                      onCancel={() => setIsNoteComposerOpen(false)}
+                      onSave={addDraftNote}
+                    />
                   )}
-                />
+
+                  {draftNotes.length > 0 && (
+                    <div className="space-y-2">
+                      {draftNotes.map((note, idx) => (
+                        <div key={idx} className="flex items-start justify-between gap-2 border rounded-lg p-3 bg-muted/30">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <Badge variant="secondary" className="text-xs">
+                                {NOTE_CATEGORIES.find(c => c.value === note.category)?.label || note.category}
+                              </Badge>
+                              {note.pinned && (
+                                <Badge variant="outline" className="text-xs text-amber-600 dark:text-amber-400">
+                                  <Pin className="w-2.5 h-2.5 mr-1" />Pinned
+                                </Badge>
+                              )}
+                              {note.tags.map(tag => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  <TagIcon className="w-2.5 h-2.5 mr-1" />{tag}
+                                </Badge>
+                              ))}
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 whitespace-pre-wrap">
+                              {note.content}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-red-500 hover:text-red-600"
+                            onClick={() => removeDraftNote(idx)}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   <FormLabel>Tags</FormLabel>
@@ -635,5 +727,155 @@ export default function CreatePartyDialog({
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// --- Draft Note Composer Component ---
+
+function DraftNoteComposer({
+  onCancel,
+  onSave,
+}: {
+  onCancel: () => void;
+  onSave: (note: DraftNote) => void;
+}) {
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState<NoteCategory>('general');
+  const [tags, setTags] = useState<string[]>([]);
+  const [pinned, setPinned] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+
+  const charCount = content.length;
+  const maxChars = 2000;
+  const isOverLimit = charCount > maxChars;
+
+  const addTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags([...tags, trimmed]);
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
+
+  const handleSave = () => {
+    if (!content.trim()) {
+      toast.error('Note content is required');
+      return;
+    }
+    if (isOverLimit) {
+      toast.error(`Note must be under ${maxChars} characters`);
+      return;
+    }
+    onSave({
+      content: content.trim(),
+      category,
+      tags,
+      pinned,
+    });
+  };
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3 bg-background">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">New Note</span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <Textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Write your note... Use **bold**, *italic*, - lists, # headings for formatting"
+        className={`min-h-[100px] ${isOverLimit ? 'border-red-500 focus:ring-red-500' : ''}`}
+      />
+
+      <div className="flex items-center justify-between">
+        <span className={`text-xs ${isOverLimit ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+          {charCount}/{maxChars}
+        </span>
+        {isOverLimit && (
+          <span className="text-xs text-red-500">Character limit exceeded</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">Category</label>
+          <Select value={category} onValueChange={(v) => setCategory(v as NoteCategory)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {NOTE_CATEGORIES.map(cat => (
+                <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">Tags</label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Add a tag"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+            />
+            <Button type="button" variant="outline" size="sm" onClick={addTag}>
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {tags.map(tag => (
+                <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                  <TagIcon className="w-2.5 h-2.5" />
+                  {tag}
+                  <X
+                    className="w-3 h-3 cursor-pointer"
+                    onClick={() => removeTag(tag)}
+                  />
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="draft-note-pin"
+          checked={pinned}
+          onCheckedChange={(checked) => setPinned(checked === true)}
+        />
+        <label htmlFor="draft-note-pin" className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+          Pin this note to top
+        </label>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" size="sm" onClick={handleSave} disabled={isOverLimit || !content.trim()}>
+          Add Note
+        </Button>
+      </div>
+    </div>
   );
 }

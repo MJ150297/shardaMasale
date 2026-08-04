@@ -10,12 +10,15 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { formatDate } from '@/lib/date-utils';
 import Link from 'next/link';
 import PartyClientWrapper from './party-client';
 import {
   Mail,
   Phone,
   MapPin,
+  StickyNote,
+  ChevronRight,
 } from 'lucide-react';
 
 interface PartyPageProps {
@@ -65,6 +68,7 @@ export default async function PartyPage({ params }: PartyPageProps) {
     openingBalance: party.openingBalance,
     tags: party.tags,
     notes: party.notes,
+    notesList: party.notesList,
     // @ts-ignore - createdAt exists from timestamps
     createdAt: party.createdAt.toISOString(),
   }));
@@ -304,16 +308,47 @@ export default async function PartyPage({ params }: PartyPageProps) {
         </div>
       )}
 
-      {/* Notes */}
-      {party.notes && (
+      {/* Notes Preview */}
+      {(party.notes || (party.notesList && party.notesList.length > 0)) && (
         <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <StickyNote className="w-4 h-4" />
+              Notes
+              {party.notesList && party.notesList.length > 0 && (
+                <Badge variant="secondary">{party.notesList.length}</Badge>
+              )}
+            </CardTitle>
+            <Link
+              href={`/dashboard/parties/${party._id}?tab=notes`}
+              className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
+            >
+              View All
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
           </CardHeader>
-          <CardContent>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-              {party.notes}
-            </p>
+          <CardContent className="space-y-3">
+            {party.notesList && party.notesList.length > 0 ? (
+              // Show latest 3 notes from notesList
+              [...party.notesList]
+                .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 3)
+                .map((note: any) => (
+                  <div key={note._id.toString()} className="border-l-2 border-gray-200 dark:border-gray-700 pl-3 py-1">
+                    <p className="text-gray-700 dark:text-gray-300 text-sm line-clamp-2 whitespace-pre-wrap">
+                      {note.content}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {formatDate(note.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {note.pinned && ' • 📌 Pinned'}
+                    </p>
+                  </div>
+                ))
+            ) : party.notes ? (
+              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
+                {party.notes}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       )}
