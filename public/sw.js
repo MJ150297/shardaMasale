@@ -101,12 +101,18 @@ self.addEventListener("fetch", (event) => {
   // Always try network first for HTML pages to ensure fresh content
   // Falls back to cache when offline
   if (request.mode === "navigate") {
+    // Never cache the sign-in page — always fetch fresh so a valid
+    // session cookie is checked and the user is redirected to /dashboard.
+    const isSignInPage = url.pathname === "/signin";
+
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache the fresh response for offline fallback
-          const clone = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
+          // Cache the fresh response for offline fallback (except /signin)
+          if (!isSignInPage) {
+            const clone = response.clone();
+            caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => {

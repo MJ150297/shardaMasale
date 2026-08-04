@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { signIn, getSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -46,6 +46,23 @@ export default function SignInPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // If the user already has a valid session (e.g. PWA reopened),
+  // redirect them to the dashboard instead of showing the login form.
+  useEffect(() => {
+    let cancelled = false;
+
+    getSession().then((session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        router.replace('/dashboard');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
